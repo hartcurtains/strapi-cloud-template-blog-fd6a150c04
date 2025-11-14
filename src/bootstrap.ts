@@ -83,7 +83,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
           const { id, documentId, __type, type, ...entityData } = item;
 
           // Use Strapi's entity service
-          await strapi.entityService.create(contentType, {
+          await strapi.entityService.create(contentType as any, {
             data: entityData,
           });
 
