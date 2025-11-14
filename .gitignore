@@ -134,3 +134,13 @@ build
 *.enc
 strapi-data-backup.*
 backup.tar.gz*
+backup-unencrypted.*
+
+# Extracted backup files (we only need entities.jsonl in migrations)
+entities/
+assets/
+configuration/
+links/
+schemas/
+metadata.json
+extracted-backup/
