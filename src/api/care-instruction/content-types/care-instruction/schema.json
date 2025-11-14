@@ -1,0 +1,25 @@
+{
+  "kind": "collectionType",
+  "collectionName": "care_instructions",
+  "info": {
+    "singularName": "care-instruction",
+    "pluralName": "care-instructions",
+    "displayName": "Care Instruction"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "fabrics": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::fabric.fabric",
+      "inversedBy": "care_instructions"
+    }
+  }
+}

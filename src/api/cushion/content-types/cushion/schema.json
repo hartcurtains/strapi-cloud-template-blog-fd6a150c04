@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "cushions",
+  "info": {
+    "singularName": "cushion",
+    "pluralName": "cushions",
+    "displayName": "Cushion"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "fabrics": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::fabric.fabric",
+      "inversedBy": "cushions"
+    },
+    "cushion_type": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::cushion-type.cushion-type"
+    },
+    "pricing_rules": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::pricing-rule.pricing-rule",
+      "mappedBy": "cushions"
+    }
+  }
+}

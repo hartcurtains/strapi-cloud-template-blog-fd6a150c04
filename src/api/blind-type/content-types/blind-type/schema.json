@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "blind_types",
+  "info": {
+    "singularName": "blind-type",
+    "pluralName": "blind-types",
+    "displayName": "Blind Type"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "types": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "roller",
+        "venetian",
+        "vertical",
+        "roman"
+      ]
+    }
+  }
+}

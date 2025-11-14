@@ -1,0 +1,14 @@
+{
+  "name": "order-management",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@strapi/design-system": "5.23.6",
+    "@strapi/helper-plugin": "5.23.6"
+  },
+  "strapi": {
+    "name": "order-management",
+    "displayName": "Order Management",
+    "kind": "plugin"
+  }
+}

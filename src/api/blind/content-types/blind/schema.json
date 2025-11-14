@@ -1,0 +1,42 @@
+{
+  "kind": "collectionType",
+  "collectionName": "blinds",
+  "info": {
+    "singularName": "blind",
+    "pluralName": "blinds",
+    "displayName": "Blind"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "fabrics": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::fabric.fabric",
+      "inversedBy": "blinds"
+    },
+    "mechanisations": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::mechanisation.mechanisation",
+      "mappedBy": "blinds"
+    },
+    "blind_type": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::blind-type.blind-type"
+    },
+    "pricing_rules": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::pricing-rule.pricing-rule",
+      "mappedBy": "blinds"
+    }
+  }
+}

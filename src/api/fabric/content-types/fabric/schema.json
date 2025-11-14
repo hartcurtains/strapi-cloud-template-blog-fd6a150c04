@@ -1,0 +1,150 @@
+{
+  "kind": "collectionType",
+  "collectionName": "fabrics",
+  "info": {
+    "singularName": "fabric",
+    "pluralName": "fabrics",
+    "displayName": "Fabric"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "description": {
+      "type": "text"
+    },
+    "images": {
+      "type": "media",
+      "multiple": true,
+      "required": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "patternRepeat_cm": {
+      "type": "decimal",
+      "required": true
+    },
+    "usableWidth_cm": {
+      "type": "decimal",
+      "required": true
+    },
+    "martindale": {
+      "type": "biginteger",
+      "required": true
+    },
+    "composition": {
+      "type": "string",
+      "required": true
+    },
+    "availability": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "in_stock",
+        "out_of_stock",
+        "discontinued"
+      ]
+    },
+    "price_per_metre": {
+      "type": "decimal",
+      "required": true
+    },
+    "is_featured": {
+      "type": "boolean",
+      "required": true,
+      "default": false
+    },
+    "featured_until": {
+      "type": "datetime",
+      "conditions": {
+        "visible": {
+          "==": [
+            {
+              "var": "is_featured"
+            },
+            true
+          ]
+        }
+      }
+    },
+    "productId": {
+      "type": "string",
+      "required": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "productId",
+      "required": true
+    },
+    "pattern": {
+      "type": "string",
+      "required": true
+    },
+    "curtains": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::curtain.curtain",
+      "mappedBy": "fabrics"
+    },
+    "blinds": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::blind.blind",
+      "mappedBy": "fabrics"
+    },
+    "cushions": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::cushion.cushion",
+      "mappedBy": "fabrics"
+    },
+    "care_instructions": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::care-instruction.care-instruction",
+      "mappedBy": "fabrics"
+    },
+    "brand": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::brand.brand",
+      "inversedBy": "fabrics"
+    },
+    "orders": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::order.order",
+      "inversedBy": "fabrics"
+    },
+    "linings": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::lining.lining",
+      "inversedBy": "fabrics"
+    },
+    "trimmings": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::trimming.trimming",
+      "inversedBy": "fabrics"
+    },
+    "colours": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::colour.colour",
+      "mappedBy": "fabrics"
+    },
+    "fabric_type": {
+      "type": "string"
+    }
+  }
+}

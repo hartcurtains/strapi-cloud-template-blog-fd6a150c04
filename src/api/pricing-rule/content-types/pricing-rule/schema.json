@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "pricing_rules",
+  "info": {
+    "singularName": "pricing-rule",
+    "pluralName": "pricing-rules",
+    "displayName": "Pricing Rule"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "formula": {
+      "type": "json",
+      "required": true
+    },
+    "product_type": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "curtain",
+        "blind",
+        "cushion"
+      ]
+    },
+    "curtains": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::curtain.curtain",
+      "inversedBy": "pricing_rules"
+    },
+    "blinds": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::blind.blind",
+      "inversedBy": "pricing_rules"
+    },
+    "cushions": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::cushion.cushion",
+      "inversedBy": "pricing_rules"
+    }
+  }
+}

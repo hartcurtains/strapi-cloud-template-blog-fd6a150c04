@@ -1,0 +1,21 @@
+{
+  "kind": "collectionType",
+  "collectionName": "order_managements",
+  "info": {
+    "singularName": "order-management",
+    "pluralName": "order-managements",
+    "displayName": "Order Management",
+    "description": "Order Management operations"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    }
+  }
+}
+

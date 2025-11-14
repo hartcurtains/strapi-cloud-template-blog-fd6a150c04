@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "linings",
+  "info": {
+    "singularName": "lining",
+    "pluralName": "linings",
+    "displayName": "Lining"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "liningType": {
+      "type": "string",
+      "required": true
+    },
+    "price_per_metre": {
+      "type": "decimal",
+      "required": true
+    },
+    "colour": {
+      "type": "string",
+      "required": true
+    },
+    "fabrics": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::fabric.fabric",
+      "mappedBy": "linings"
+    }
+  }
+}

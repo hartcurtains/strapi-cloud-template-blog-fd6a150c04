@@ -1,0 +1,40 @@
+{
+  "kind": "collectionType",
+  "collectionName": "curtain_types",
+  "info": {
+    "singularName": "curtain-type",
+    "pluralName": "curtain-types",
+    "displayName": "Curtain Type"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string"
+    },
+    "price": {
+      "type": "decimal"
+    },
+    "curtains": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::curtain.curtain",
+      "mappedBy": "curtain_types"
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "fullness_multiplier": {
+      "type": "decimal"
+    }
+  }
+}

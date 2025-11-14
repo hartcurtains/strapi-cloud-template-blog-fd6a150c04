@@ -1,0 +1,14 @@
+{
+  "name": "orders-dashboard",
+  "version": "0.0.1",
+  "private": true,
+  "dependencies": {
+    "@strapi/design-system": "5.23.6",
+    "@strapi/helper-plugin": "5.23.6",
+    "@strapi/icons": "5.23.6"
+  },
+  "strapi": {
+    "name": "orders-dashboard",
+    "displayName": "Order Management"
+  }
+}

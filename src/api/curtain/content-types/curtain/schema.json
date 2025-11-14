@@ -1,0 +1,37 @@
+{
+  "kind": "collectionType",
+  "collectionName": "curtains",
+  "info": {
+    "singularName": "curtain",
+    "pluralName": "curtains",
+    "displayName": "Curtain"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "fabrics": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::fabric.fabric",
+      "inversedBy": "curtains"
+    },
+    "pricing_rules": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::pricing-rule.pricing-rule",
+      "mappedBy": "curtains"
+    },
+    "curtain_types": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::curtain-type.curtain-type",
+      "inversedBy": "curtains"
+    }
+  }
+}

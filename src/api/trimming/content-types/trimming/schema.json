@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "trimmings",
+  "info": {
+    "singularName": "trimming",
+    "pluralName": "trimmings",
+    "displayName": "Trimming"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "type": {
+      "type": "string",
+      "required": true
+    },
+    "price": {
+      "type": "decimal",
+      "required": true
+    },
+    "fabrics": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::fabric.fabric",
+      "mappedBy": "trimmings"
+    }
+  }
+}

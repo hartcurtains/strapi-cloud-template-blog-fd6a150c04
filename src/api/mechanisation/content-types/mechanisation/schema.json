@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "mechanisations",
+  "info": {
+    "singularName": "mechanisation",
+    "pluralName": "mechanisations",
+    "displayName": "Mechanisation"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "type": {
+      "type": "string",
+      "required": true
+    },
+    "price": {
+      "type": "decimal",
+      "required": true
+    },
+    "blinds": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::blind.blind",
+      "inversedBy": "mechanisations"
+    }
+  }
+}

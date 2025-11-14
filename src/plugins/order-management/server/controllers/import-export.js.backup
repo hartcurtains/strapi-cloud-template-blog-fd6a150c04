@@ -1,0 +1,499 @@
+module.exports = {
+  // Simple test endpoint
+  async test(ctx) {
+    ctx.body = { message: 'Order Management plugin is working!' };
+  },
+
+  // Bulk import products using Strapi's internal services
+  async bulkImport(ctx) {
+    try {
+      const { data: transformedDataset } = ctx.request.body;
+      
+      console.log('🔥🔥🔥 FORCE RESTART TEST - NEW CODE IS LOADED! 🔥🔥🔥');
+      console.log('🚀 NEW UPSERT LOGIC - Starting server-side bulk import...');
+      
+      const results = {
+        success: 0,
+        failed: 0,
+        errors: []
+      };
+
+      // Define content types for each product type
+      const contentTypes = {
+        fabrics: 'api::fabric.fabric',
+        curtains: 'api::curtain.curtain',
+        blinds: 'api::blind.blind',
+        cushions: 'api::cushion.cushion',
+        linings: 'api::lining.lining',
+        trimmings: 'api::trimming.trimming',
+        mechanisations: 'api::mechanisation.mechanisation',
+        brands: 'api::brand.brand'
+      };
+
+      // Phase 1: Auto-create missing brands
+      const autoCreatedBrands = new Map();
+      if (transformedDataset.fabrics) {
+        console.log('🔧 Phase 1: Auto-creating missing brands...');
+        
+        // Collect all unique brand names from fabrics
+        const brandNames = new Set();
+        transformedDataset.fabrics.forEach(fabric => {
+          if (fabric.brand_name) {
+            brandNames.add(fabric.brand_name.trim());
+          }
+        });
+        
+        // Check which brands exist in database
+        const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
+          populate: '*'
+        });
+        const existingBrandNames = new Set(existingBrands.map(b => b.name.toLowerCase().trim()));
+        
+        // Auto-create missing brands
+        for (const brandName of brandNames) {
+          const brandNameLower = brandName.toLowerCase().trim();
+          if (!existingBrandNames.has(brandNameLower)) {
+            try {
+              console.log(`🔧 Auto-creating brand: ${brandName}`);
+              const createdBrand = await strapi.entityService.create('api::brand.brand', {
+                data: {
+                  name: brandName,
+                  description: `Auto-created brand: ${brandName}`
+                }
+              });
+              autoCreatedBrands.set(brandNameLower, createdBrand.id);
+              console.log(`✅ Auto-created brand: ${brandName} (ID: ${createdBrand.id})`);
+            } catch (error) {
+              console.error(`❌ Failed to auto-create brand ${brandName}:`, error);
+              results.errors.push({
+                type: 'auto_create_error',
+                message: `Failed to auto-create brand: ${brandName}`,
+                error: error.message
+              });
+            }
+          }
+        }
+      }
+
+      // Import order: brands, linings, trimmings, mechanisations first, then fabrics, then dependent products
+      const importOrder = ['brands', 'linings', 'trimmings', 'mechanisations', 'fabrics', 'curtains', 'blinds', 'cushions'];
+
+      for (const productType of importOrder) {
+        if (!transformedDataset[productType] || transformedDataset[productType].length === 0) {
+          console.log(`⏭️ Skipping ${productType} - no data`);
+          continue;
+        }
+
+        console.log(`📤 Importing ${productType}...`);
+        const contentType = contentTypes[productType];
+        
+        for (let i = 0; i < transformedDataset[productType].length; i++) {
+          try {
+            const item = transformedDataset[productType][i];
+            
+            // Remove fields that Strapi auto-generates (causes validation errors)
+            delete item.createdAt;
+            delete item.updatedAt;
+            delete item.publishedAt;
+            delete item.id;
+            delete item.documentId;
+            
+            // Ensure required fields exist
+            if (!item.name) {
+              throw new Error('Name is required');
+            }
+            
+            // Auto-generate productId and slug for specific types only (check schema)
+            const schemasWithProductId = ['fabrics']; // Only fabrics have productId and slug fields
+            if (schemasWithProductId.includes(productType)) {
+              // Check for existing productId to prevent duplicates (for fabrics)
+              if (productType === 'fabrics' && item.productId && item.productId.trim() !== '') {
+                const existing = await strapi.entityService.findMany('api::fabric.fabric', {
+                  filters: { productId: item.productId }
+                });
+                if (existing && existing.length > 0) {
+                  console.log(`⚠️ Duplicate productId found: ${item.productId}, skipping...`);
+                  results.failed++;
+                  results.errors.push({
+                    sheet: productType,
+                    row: i + 1,
+                    data: item,
+                    error: `Duplicate productId: ${item.productId}`
+                  });
+                  continue;
+                }
+              }
+              
+              // Generate productId if missing
+              if (!item.productId || item.productId.trim() === '') {
+                const productName = item.name || 'UNKNOWN';
+                const timestamp = Date.now().toString().slice(-4);
+                const cleanName = productName.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+                const prefix = productType.toUpperCase().slice(0, 3);
+                item.productId = `${prefix}-${cleanName}-${timestamp}`;
+                console.log(`🔧 Auto-generated productId for ${productType}: ${item.productId}`);
+              }
+              
+              // Generate slug if missing (let Strapi's UID plugin handle it)
+              if (!item.slug || item.slug.trim() === '') {
+                // Don't set slug - let Strapi's UID plugin auto-generate from productId
+                console.log(`🔧 Slug will be auto-generated by Strapi UID plugin for ${productType}`);
+              }
+            }
+            
+            // Handle thumbnail_url for brands
+            if (productType === 'brands' && item.thumbnail_url) {
+              try {
+                console.log(`🖼️ Processing thumbnail URL for brand: ${item.name} - ${item.thumbnail_url}`);
+                
+                // Fetch image from URL
+                const response = await fetch(item.thumbnail_url);
+                if (!response.ok) {
+                  throw new Error(`Failed to fetch image: ${response.status}`);
+                }
+                
+                const imageBuffer = await response.buffer();
+                const fileName = `brand-${item.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}-${Date.now()}.jpg`;
+                
+                // Upload to Strapi media library
+                const uploadedFile = await strapi.plugins.upload.services.upload.upload({
+                  data: {
+                    fileInfo: {
+                      name: fileName,
+                      alternativeText: `Thumbnail for ${item.name}`,
+                      caption: `Brand thumbnail for ${item.name}`
+                    }
+                  },
+                  files: {
+                    file: {
+                      name: fileName,
+                      type: response.headers.get('content-type') || 'image/jpeg',
+                      size: imageBuffer.length,
+                      stream: () => require('stream').Readable.from(imageBuffer)
+                    }
+                  }
+                });
+                
+                if (uploadedFile && uploadedFile.length > 0) {
+                  item.thumbnail = uploadedFile[0].id;
+                  console.log(`✅ Uploaded thumbnail for brand ${item.name}: ${uploadedFile[0].id}`);
+                }
+                
+                delete item.thumbnail_url; // Remove the URL field
+              } catch (error) {
+                console.warn(`⚠️ Failed to process thumbnail for brand ${item.name}:`, error.message);
+                delete item.thumbnail_url; // Remove the URL field to avoid validation errors
+                results.errors.push({
+                  type: 'thumbnail_error',
+                  message: `Failed to process thumbnail for brand ${item.name}`,
+                  error: error.message
+                });
+              }
+            }
+            
+            // Handle brand_name to brand ID conversion for fabrics (only if not already converted by frontend)
+            if (productType === 'fabrics' && item.brand_name && !item.brand) {
+              const brandNameLower = item.brand_name.toLowerCase().trim();
+              
+              // First check auto-created brands
+              if (autoCreatedBrands.has(brandNameLower)) {
+                item.brand = autoCreatedBrands.get(brandNameLower);
+                delete item.brand_name; // Remove the name field
+                console.log(`🔗 Backend: Using auto-created brand ID for fabric: ${item.brand_name} -> ${item.brand}`);
+              } else {
+                // Check existing brands in database
+                const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
+                  filters: { name: { $containsi: item.brand_name } }
+                });
+                if (existingBrands && existingBrands.length > 0) {
+                  item.brand = existingBrands[0].id;
+                  delete item.brand_name; // Remove the name field
+                  console.log(`🔗 Backend: Using existing brand ID for fabric: ${item.brand_name} -> ${item.brand}`);
+                } else {
+                  console.warn(`⚠️ Brand not found for fabric: ${item.brand_name}`);
+                  delete item.brand_name; // Remove the name field to avoid validation errors
+                }
+              }
+            } else if (productType === 'fabrics' && item.brand) {
+              console.log(`🔗 Backend: Fabric already has brand ID: ${item.brand} (converted by frontend)`);
+            }
+            
+            console.log(`🚀 NEW UPSERT LOGIC - Importing ${productType} item ${i + 1}/${transformedDataset[productType].length}:`, item);
+            
+            // Implement UPSERT logic: update if exists and has changes, create if doesn't exist, skip if no changes
+            let upsertedItem;
+            let wasSkipped = false;
+            
+            if (productType === 'brands') {
+              // For brands, check by name
+              const existingBrand = await strapi.entityService.findMany('api::brand.brand', {
+                filters: { name: item.name },
+                populate: '*'
+              });
+              
+              if (existingBrand && existingBrand.length > 0) {
+                const existing = existingBrand[0];
+                
+                // Compare relevant fields to see if there are changes
+                const hasChanges = (
+                  (item.description !== undefined && item.description !== existing.description) ||
+                  (item.thumbnail !== undefined && item.thumbnail !== existing.thumbnail)
+                );
+                
+                if (hasChanges) {
+                  // Update existing brand
+                  upsertedItem = await strapi.entityService.update('api::brand.brand', existing.id, {
+                    data: item
+                  });
+                  console.log(`🔄 Updated existing brand: ${item.name}`);
+                } else {
+                  // Skip - no changes needed
+                  console.log(`⏭️ Skipped brand (no changes): ${item.name}`);
+                  wasSkipped = true;
+                }
+              } else {
+                // Create new brand
+                upsertedItem = await strapi.entityService.create('api::brand.brand', {
+                  data: item
+                });
+                console.log(`➕ Created new brand: ${item.name}`);
+              }
+            } else if (productType === 'fabrics') {
+              // For fabrics, check by productId
+              const existingFabric = await strapi.entityService.findMany('api::fabric.fabric', {
+                filters: { productId: item.productId },
+                populate: '*'
+              });
+              
+              if (existingFabric && existingFabric.length > 0) {
+                const existing = existingFabric[0];
+                
+                // Compare relevant fields to see if there are changes
+                const hasChanges = (
+                  (item.name !== undefined && item.name !== existing.name) ||
+                  (item.description !== undefined && item.description !== existing.description) ||
+                  (item.brand !== undefined && item.brand !== existing.brand?.id) ||
+                  (item.colour !== undefined && item.colour !== existing.colour) ||
+                  (item.pattern !== undefined && item.pattern !== existing.pattern) ||
+                  (item.composition !== undefined && item.composition !== existing.composition) ||
+                  (item.price_per_metre !== undefined && item.price_per_metre !== existing.price_per_metre) ||
+                  (item.availability !== undefined && item.availability !== existing.availability) ||
+                  (item.is_featured !== undefined && item.is_featured !== existing.is_featured) ||
+                  (item.featured_until !== undefined && item.featured_until !== existing.featured_until) ||
+                  (item.patternRepeat_cm !== undefined && item.patternRepeat_cm !== existing.patternRepeat_cm) ||
+                  (item.usableWidth_cm !== undefined && item.usableWidth_cm !== existing.usableWidth_cm) ||
+                  (item.martindale !== undefined && item.martindale !== existing.martindale)
+                );
+                
+                if (hasChanges) {
+                  // Update existing fabric
+                  upsertedItem = await strapi.entityService.update('api::fabric.fabric', existing.id, {
+                    data: item
+                  });
+                  console.log(`🔄 Updated existing fabric: ${item.name} (${item.productId})`);
+                } else {
+                  // Skip - no changes needed
+                  console.log(`⏭️ Skipped fabric (no changes): ${item.name} (${item.productId})`);
+                  wasSkipped = true;
+                }
+              } else {
+                // Create new fabric
+                upsertedItem = await strapi.entityService.create('api::fabric.fabric', {
+                  data: item
+                });
+                console.log(`➕ Created new fabric: ${item.name} (${item.productId})`);
+              }
+            } else {
+              // For other types, use name as unique identifier
+              const existingItem = await strapi.entityService.findMany(contentType, {
+                filters: { name: item.name },
+                populate: '*'
+              });
+              
+              if (existingItem && existingItem.length > 0) {
+                const existing = existingItem[0];
+                
+                // Compare relevant fields to see if there are changes
+                const hasChanges = (
+                  (item.description !== undefined && item.description !== existing.description) ||
+                  (item.price_per_metre !== undefined && item.price_per_metre !== existing.price_per_metre) ||
+                  (item.availability !== undefined && item.availability !== existing.availability) ||
+                  (item.type !== undefined && item.type !== existing.type) ||
+                  (item.liningType !== undefined && item.liningType !== existing.liningType) ||
+                  (item.product_type !== undefined && item.product_type !== existing.product_type) ||
+                  (item.formula !== undefined && JSON.stringify(item.formula) !== JSON.stringify(existing.formula))
+                );
+                
+                if (hasChanges) {
+                  // Update existing item
+                  upsertedItem = await strapi.entityService.update(contentType, existing.id, {
+                    data: item
+                  });
+                  console.log(`🔄 Updated existing ${productType}: ${item.name}`);
+                } else {
+                  // Skip - no changes needed
+                  console.log(`⏭️ Skipped ${productType} (no changes): ${item.name}`);
+                  wasSkipped = true;
+                }
+              } else {
+                // Create new item
+                upsertedItem = await strapi.entityService.create(contentType, {
+                  data: item
+                });
+                console.log(`➕ Created new ${productType}: ${item.name}`);
+              }
+            }
+
+            if (wasSkipped) {
+              console.log(`✅ ${productType} item ${i + 1} skipped (no changes needed)`);
+            } else {
+              console.log(`✅ ${productType} item ${i + 1} upserted successfully:`, upsertedItem);
+            }
+            results.success++;
+          } catch (error) {
+            console.error(`❌ ${productType} item ${i + 1} failed:`, error);
+            results.failed++;
+            results.errors.push({
+              sheet: productType,
+              row: i + 1,
+              data: transformedDataset[productType][i],
+              error: error.message
+            });
+          }
+        }
+      }
+
+      console.log('📤 Server-side bulk import completed:', results);
+      ctx.body = results;
+    } catch (error) {
+      console.error('❌ Server-side bulk import error:', error);
+      ctx.status = 500;
+      ctx.body = { error: error.message };
+    }
+  },
+
+  // Bulk export products using Strapi's internal services
+  async bulkExport(ctx) {
+    try {
+      const { selectedProductsByType } = ctx.request.body;
+      
+      console.log('📤 Starting server-side bulk export...');
+      
+      const contentTypes = {
+        fabrics: 'api::fabric.fabric',
+        curtains: 'api::curtain.curtain',
+        blinds: 'api::blind.blind',
+        cushions: 'api::cushion.cushion',
+        linings: 'api::lining.lining',
+        trimmings: 'api::trimming.trimming',
+        mechanisations: 'api::mechanisation.mechanisation',
+        brands: 'api::brand.brand'
+      };
+
+      const allProducts = {};
+
+      // Fetch all products for each type
+      for (const [productType, contentType] of Object.entries(contentTypes)) {
+        try {
+          let products;
+          
+          if (selectedProductsByType && selectedProductsByType[productType] && selectedProductsByType[productType].length > 0) {
+            // Export only selected products
+            const selectedIds = selectedProductsByType[productType];
+            products = await strapi.entityService.findMany(contentType, {
+              filters: { id: { $in: selectedIds } },
+              populate: '*'
+            });
+          } else {
+            // Export all products
+            products = await strapi.entityService.findMany(contentType, {
+              populate: '*'
+            });
+          }
+          
+          allProducts[productType] = products || [];
+          console.log(`📦 Fetched ${products?.length || 0} ${productType} for export`);
+        } catch (error) {
+          console.error(`❌ Error fetching ${productType}:`, error);
+          allProducts[productType] = [];
+        }
+      }
+
+      ctx.body = allProducts;
+    } catch (error) {
+      console.error('❌ Server-side bulk export error:', error);
+      ctx.status = 500;
+      ctx.body = { error: error.message };
+    }
+  },
+
+  // Get relation data for validation
+  async getRelationData(ctx) {
+    try {
+      console.log('📊 Fetching relation data for validation...');
+      
+      const contentTypes = {
+        fabrics: 'api::fabric.fabric',
+        curtains: 'api::curtain.curtain',
+        blinds: 'api::blind.blind',
+        cushions: 'api::cushion.cushion',
+        linings: 'api::lining.lining',
+        trimmings: 'api::trimming.trimming',
+        mechanisations: 'api::mechanisation.mechanisation',
+        brands: 'api::brand.brand',
+        'curtain-types': 'api::curtain-type.curtain-type',
+        'blind-types': 'api::blind-type.blind-type',
+        'cushion-types': 'api::cushion-type.cushion-type'
+      };
+
+      const relationData = {};
+
+      // Fetch all relation data
+      for (const [type, contentType] of Object.entries(contentTypes)) {
+        try {
+          const items = await strapi.entityService.findMany(contentType, {
+            populate: '*'
+          });
+          
+          // Create lookup maps for validation
+          relationData[type] = {
+            byId: {},
+            byName: {},
+            byType: {} // for linings, trimmings, mechanisations
+          };
+          
+          if (items) {
+            items.forEach(item => {
+              relationData[type].byId[item.id] = item;
+              
+              if (item.name) {
+                relationData[type].byName[item.name] = item;
+              }
+              
+              // Special handling for types that use 'type' field
+              if (item.type) {
+                relationData[type].byType[item.type] = item;
+              }
+              
+              // Special handling for linings that use 'liningType' field
+              if (item.liningType) {
+                relationData[type].byType[item.liningType] = item;
+              }
+            });
+          }
+          
+          console.log(`📊 Built lookup for ${type}: ${items?.length || 0} items`);
+        } catch (error) {
+          console.error(`❌ Error fetching ${type}:`, error);
+          relationData[type] = { byId: {}, byName: {}, byType: {} };
+        }
+      }
+
+      ctx.body = relationData;
+    } catch (error) {
+      console.error('❌ Error fetching relation data:', error);
+      ctx.status = 500;
+      ctx.body = { error: error.message };
+    }
+  }
+};

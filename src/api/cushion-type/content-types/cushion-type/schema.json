@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "cushion_types",
+  "info": {
+    "singularName": "cushion-type",
+    "pluralName": "cushion-types",
+    "displayName": "Cushion Type"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "types": {
+      "type": "enumeration",
+      "enum": [
+        "square",
+        "rectangular",
+        "round",
+        "oval"
+      ]
+    }
+  }
+}
