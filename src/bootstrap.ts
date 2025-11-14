@@ -5,11 +5,12 @@
  * Only runs once (checks for a flag file).
  */
 
+import type { Core } from '@strapi/strapi';
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-export default async ({ strapi }) => {
+export default async ({ strapi }: { strapi: Core.Strapi }) => {
   // Only run in production (Strapi Cloud)
   if (process.env.NODE_ENV !== 'production') {
     console.log('⏭️  Skipping data import (not in production)');
