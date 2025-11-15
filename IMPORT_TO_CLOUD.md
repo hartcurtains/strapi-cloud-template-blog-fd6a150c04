@@ -52,3 +52,4 @@ If you want to use `strapi transfer` command:
 - All relationships between content will be preserved
 
 
+

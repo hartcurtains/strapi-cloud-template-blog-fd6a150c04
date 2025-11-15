@@ -11,6 +11,9 @@ import path from 'path';
 import readline from 'readline';
 
 export default async ({ strapi }: { strapi: Core.Strapi }) => {
+  // Wait a bit for Strapi to be fully ready
+  await new Promise(resolve => setTimeout(resolve, 2000));
+  
   // Only run in production (Strapi Cloud)
   if (process.env.NODE_ENV !== 'production') {
     console.log('⏭️  Skipping data import (not in production)');
