@@ -568,6 +568,37 @@ export interface ApiColourColour extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCurtainPoleCurtainPole extends Struct.CollectionTypeSchema {
+  collectionName: 'curtain_poles';
+  info: {
+    displayName: 'Curtain Pole';
+    pluralName: 'curtain-poles';
+    singularName: 'curtain-pole';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    curtains: Schema.Attribute.Relation<'manyToMany', 'api::curtain.curtain'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::curtain-pole.curtain-pole'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String;
+    price: Schema.Attribute.Decimal;
+    publishedAt: Schema.Attribute.DateTime;
+    thumbnail: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCurtainTypeCurtainType extends Struct.CollectionTypeSchema {
   collectionName: 'curtain_types';
   info: {
@@ -614,6 +645,10 @@ export interface ApiCurtainCurtain extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    curtain_poles: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::curtain-pole.curtain-pole'
+    >;
     curtain_types: Schema.Attribute.Relation<
       'manyToMany',
       'api::curtain-type.curtain-type'
@@ -795,6 +830,7 @@ export interface ApiLiningLining extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     price_per_metre: Schema.Attribute.Decimal & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
+    thumbnail: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1492,6 +1528,7 @@ declare module '@strapi/strapi' {
       'api::brand.brand': ApiBrandBrand;
       'api::care-instruction.care-instruction': ApiCareInstructionCareInstruction;
       'api::colour.colour': ApiColourColour;
+      'api::curtain-pole.curtain-pole': ApiCurtainPoleCurtainPole;
       'api::curtain-type.curtain-type': ApiCurtainTypeCurtainType;
       'api::curtain.curtain': ApiCurtainCurtain;
       'api::cushion-type.cushion-type': ApiCushionTypeCushionType;

@@ -28,6 +28,16 @@
       "relation": "manyToMany",
       "target": "api::fabric.fabric",
       "mappedBy": "linings"
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
     }
   }
 }

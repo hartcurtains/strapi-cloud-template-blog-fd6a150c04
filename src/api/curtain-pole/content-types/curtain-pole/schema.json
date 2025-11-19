@@ -1,0 +1,37 @@
+{
+  "kind": "collectionType",
+  "collectionName": "curtain_poles",
+  "info": {
+    "singularName": "curtain-pole",
+    "pluralName": "curtain-poles",
+    "displayName": "Curtain Pole"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string"
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "curtains": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::curtain.curtain",
+      "inversedBy": "curtain_poles"
+    },
+    "price": {
+      "type": "decimal"
+    }
+  }
+}
