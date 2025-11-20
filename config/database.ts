@@ -57,6 +57,10 @@ export default ({ env }) => {
       acquireConnectionTimeout: env.int('DATABASE_CONNECTION_TIMEOUT', 60000),
     },
     // Disable automatic migrations - database schema should be managed manually
-    autoMigrate: env.bool('DATABASE_AUTO_MIGRATE', false),
+    // This prevents Strapi from running any database scripts on startup
+    settings: {
+      runMigrations: false,
+      autoMigrate: false,
+    },
   };
 };
