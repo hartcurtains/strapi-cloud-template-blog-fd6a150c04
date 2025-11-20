@@ -97,3 +97,4 @@ npm run develop
 - If the table doesn't exist, the script will create it automatically
 - Make sure you're using a database user with appropriate permissions, or run the script as a superuser
 
+
