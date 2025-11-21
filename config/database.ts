@@ -50,17 +50,28 @@ export default ({ env }) => {
     },
   };
 
-  return {
+  const config: any = {
     connection: {
       client,
       ...connections[client],
       acquireConnectionTimeout: env.int('DATABASE_CONNECTION_TIMEOUT', 60000),
     },
-    // Disable automatic migrations - database schema should be managed manually
-    // This prevents Strapi from running any database scripts on startup
-    settings: {
+  };
+
+  // Disable automatic migrations - database schema should be managed manually
+  // This prevents Strapi from running any database scripts on startup
+  // Try multiple ways to disable migrations for Strapi Cloud compatibility
+  if (env.bool('DATABASE_AUTO_MIGRATE', false) === false) {
+    config.settings = {
       runMigrations: false,
       autoMigrate: false,
-    },
-  };
+    };
+    // Also set at connection level for some Strapi versions
+    config.connection.settings = {
+      runMigrations: false,
+      autoMigrate: false,
+    };
+  }
+
+  return config;
 };

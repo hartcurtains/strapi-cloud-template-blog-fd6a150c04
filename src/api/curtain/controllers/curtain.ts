@@ -7,9 +7,12 @@ import { factories } from '@strapi/strapi'
 interface PopulateQuery {
   fabrics?: {
     populate?: {
-      brand?: boolean;
-      linings?: boolean;
-      trimmings?: boolean;
+      brand?: boolean | {
+        populate?: {
+          thumbnail?: boolean;
+        };
+      };
+      images?: boolean;
     };
   };
   curtain_types?: boolean | {
@@ -29,7 +32,7 @@ export default factories.createCoreController('api::curtain.curtain', ({ strapi 
       // Get the populate query from the request
       const populateQuery = (sanitizedQueryParams.populate || {}) as PopulateQuery;
       
-      // Ensure nested populate for fabrics.linings and fabrics.trimmings
+      // Populate valid relations only - fabrics don't have linings/trimmings relations
       // Remove invalid keys like 'curtain_type' (singular) - only use 'curtain_types' (plural)
       let finalPopulate: any = {};
       
@@ -48,8 +51,7 @@ export default factories.createCoreController('api::curtain.curtain', ({ strapi 
           fabrics: {
             populate: {
               brand: populateQuery.fabrics?.populate?.brand !== undefined ? populateQuery.fabrics.populate.brand : true,
-              linings: populateQuery.fabrics?.populate?.linings !== undefined ? populateQuery.fabrics.populate.linings : true,
-              trimmings: populateQuery.fabrics?.populate?.trimmings !== undefined ? populateQuery.fabrics.populate.trimmings : true,
+              images: populateQuery.fabrics?.populate?.images !== undefined ? populateQuery.fabrics.populate.images : true,
             }
           },
           curtain_types: populateQuery.curtain_types || true,
@@ -60,8 +62,7 @@ export default factories.createCoreController('api::curtain.curtain', ({ strapi 
           fabrics: {
             populate: {
               brand: true,
-              linings: true,
-              trimmings: true
+              images: true
             }
           },
           curtain_types: true,
@@ -88,7 +89,7 @@ export default factories.createCoreController('api::curtain.curtain', ({ strapi 
       
       const populateQuery = (sanitizedQueryParams.populate || {}) as PopulateQuery;
       
-      // Ensure nested populate for fabrics.linings and fabrics.trimmings
+      // Populate valid relations only - fabrics don't have linings/trimmings relations
       // Remove invalid keys like 'curtain_type' (singular) - only use 'curtain_types' (plural)
       let finalPopulate: any = {};
       
@@ -107,8 +108,7 @@ export default factories.createCoreController('api::curtain.curtain', ({ strapi 
           fabrics: {
             populate: {
               brand: populateQuery.fabrics?.populate?.brand !== undefined ? populateQuery.fabrics.populate.brand : true,
-              linings: populateQuery.fabrics?.populate?.linings !== undefined ? populateQuery.fabrics.populate.linings : true,
-              trimmings: populateQuery.fabrics?.populate?.trimmings !== undefined ? populateQuery.fabrics.populate.trimmings : true,
+              images: populateQuery.fabrics?.populate?.images !== undefined ? populateQuery.fabrics.populate.images : true,
             }
           },
           curtain_types: populateQuery.curtain_types || true,
@@ -119,8 +119,7 @@ export default factories.createCoreController('api::curtain.curtain', ({ strapi 
           fabrics: {
             populate: {
               brand: true,
-              linings: true,
-              trimmings: true
+              images: true
             }
           },
           curtain_types: true,

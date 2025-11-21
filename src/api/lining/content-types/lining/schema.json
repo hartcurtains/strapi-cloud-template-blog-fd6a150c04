@@ -23,12 +23,6 @@
       "type": "string",
       "required": true
     },
-    "fabrics": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::fabric.fabric",
-      "mappedBy": "linings"
-    },
     "thumbnail": {
       "type": "media",
       "multiple": false,

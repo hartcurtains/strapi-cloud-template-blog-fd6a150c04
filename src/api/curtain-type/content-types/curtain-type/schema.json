@@ -17,12 +17,6 @@
     "price": {
       "type": "decimal"
     },
-    "curtains": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::curtain.curtain",
-      "mappedBy": "curtain_types"
-    },
     "thumbnail": {
       "type": "media",
       "multiple": false,
@@ -35,6 +29,12 @@
     },
     "fullness_multiplier": {
       "type": "decimal"
+    },
+    "curtains": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::curtain.curtain",
+      "inversedBy": "curtain_types"
     }
   }
 }

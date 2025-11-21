@@ -30,14 +30,7 @@
     "curtain_types": {
       "type": "relation",
       "relation": "manyToMany",
-      "target": "api::curtain-type.curtain-type",
-      "inversedBy": "curtains"
-    },
-    "curtain_poles": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::curtain-pole.curtain-pole",
-      "mappedBy": "curtains"
+      "target": "api::curtain-type.curtain-type"
     }
   }
 }

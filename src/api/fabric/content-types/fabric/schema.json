@@ -125,18 +125,6 @@
       "target": "api::order.order",
       "inversedBy": "fabrics"
     },
-    "linings": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::lining.lining",
-      "inversedBy": "fabrics"
-    },
-    "trimmings": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::trimming.trimming",
-      "inversedBy": "fabrics"
-    },
     "colours": {
       "type": "relation",
       "relation": "manyToMany",

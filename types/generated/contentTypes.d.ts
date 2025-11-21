@@ -582,7 +582,6 @@ export interface ApiCurtainPoleCurtainPole extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    curtains: Schema.Attribute.Relation<'manyToMany', 'api::curtain.curtain'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -645,10 +644,6 @@ export interface ApiCurtainCurtain extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    curtain_poles: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::curtain-pole.curtain-pole'
-    >;
     curtain_types: Schema.Attribute.Relation<
       'manyToMany',
       'api::curtain-type.curtain-type'
@@ -778,7 +773,6 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
     is_featured: Schema.Attribute.Boolean &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<false>;
-    linings: Schema.Attribute.Relation<'manyToMany', 'api::lining.lining'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -794,10 +788,6 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
     productId: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
     slug: Schema.Attribute.UID<'productId'> & Schema.Attribute.Required;
-    trimmings: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::trimming.trimming'
-    >;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -820,7 +810,6 @@ export interface ApiLiningLining extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    fabrics: Schema.Attribute.Relation<'manyToMany', 'api::fabric.fabric'>;
     liningType: Schema.Attribute.String & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -997,7 +986,6 @@ export interface ApiTrimmingTrimming extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    fabrics: Schema.Attribute.Relation<'manyToMany', 'api::fabric.fabric'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1481,6 +1469,8 @@ export interface PluginUsersPermissionsUser
       Schema.Attribute.SetMinMaxLength<{
         minLength: 6;
       }>;
+    firstname: Schema.Attribute.String;
+    lastname: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -1500,6 +1490,7 @@ export interface PluginUsersPermissionsUser
       'manyToOne',
       'plugin::users-permissions.role'
     >;
+    title: Schema.Attribute.String;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

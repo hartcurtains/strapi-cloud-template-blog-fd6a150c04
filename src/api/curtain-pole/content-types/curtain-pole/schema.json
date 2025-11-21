@@ -24,12 +24,6 @@
         "audios"
       ]
     },
-    "curtains": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::curtain.curtain",
-      "inversedBy": "curtain_poles"
-    },
     "price": {
       "type": "decimal"
     }
