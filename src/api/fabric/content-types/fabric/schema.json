@@ -39,7 +39,7 @@
     },
     "martindale": {
       "type": "biginteger",
-      "required": true
+      "required": false
     },
     "composition": {
       "type": "string",

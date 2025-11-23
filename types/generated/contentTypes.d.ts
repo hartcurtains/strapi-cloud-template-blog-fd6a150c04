@@ -779,7 +779,7 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
       'api::fabric.fabric'
     > &
       Schema.Attribute.Private;
-    martindale: Schema.Attribute.BigInteger & Schema.Attribute.Required;
+    martindale: Schema.Attribute.BigInteger;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     orders: Schema.Attribute.Relation<'manyToMany', 'api::order.order'>;
     pattern: Schema.Attribute.String & Schema.Attribute.Required;
