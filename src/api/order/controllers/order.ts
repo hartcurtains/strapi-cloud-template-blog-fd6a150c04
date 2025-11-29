@@ -42,7 +42,7 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       const orders = await strapi.entityService.findMany("api::order.order", {
         where: whereClause,
         populate: {
-          user: true,
+          
         },
         sort: { createdAt: 'desc' },
       });
@@ -62,7 +62,7 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       const { id } = ctx.params;
       const order = await strapi.entityService.findOne("api::order.order", id, {
         populate: {
-          user: true,
+          
         },
       });
       
@@ -95,7 +95,7 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       const order = await strapi.entityService.create("api::order.order", {
         data: orderData,
         populate: {
-          user: true,
+          
           // Removed blinds, curtains, cushions relations as they were deleted from schema
         },
       });
@@ -125,7 +125,7 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       const order = await strapi.entityService.update("api::order.order", id, {
         data: updateData,  // ✅ Now correctly passing just the data
         populate: {
-          user: true,
+          
         },
       });
       
