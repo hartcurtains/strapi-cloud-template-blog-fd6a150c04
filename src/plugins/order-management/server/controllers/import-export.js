@@ -46,7 +46,8 @@ module.exports = {
       // Phase 1: Auto-create missing brands
       const autoCreatedBrands = new Map();
       if (transformedDataset.fabrics) {
-        console.log('🔧 Phase 1: Auto-creating missing brands...');
+        console.log('🔧 [CLOUD] Phase 1: Auto-creating missing brands...');
+        console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
         
         // Collect all unique brand names from fabrics
         const brandNames = new Set();
@@ -55,9 +56,10 @@ module.exports = {
             brandNames.add(fabric.brand_name.trim());
           }
         });
-        console.log(`📋 Phase 1: Found ${brandNames.size} unique brand names: ${Array.from(brandNames).slice(0, 5).join(', ')}${brandNames.size > 5 ? '...' : ''}`);
+        console.log(`📋 [CLOUD] Phase 1: Found ${brandNames.size} unique brand names: ${Array.from(brandNames).slice(0, 5).join(', ')}${brandNames.size > 5 ? '...' : ''}`);
         
         // Check which brands exist in database
+        console.log('🔧 [CLOUD] Checking existing brands in database...');
         const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
           populate: '*'
         });
@@ -75,22 +77,37 @@ module.exports = {
           const brandNameLower = brandName.toLowerCase().trim();
           if (!existingBrandNames.has(brandNameLower)) {
             try {
-              console.log(`🔧 Auto-creating brand: ${brandName}`);
+              console.log(`🔧 [CLOUD] Auto-creating brand: ${brandName}`);
+              console.log(`🔧 [CLOUD] Using entityService.create for api::brand.brand`);
               const createdBrand = await strapi.entityService.create('api::brand.brand', {
                 data: {
                   name: brandName,
                   description: `Auto-created brand: ${brandName}`
                 }
               });
+              if (!createdBrand || !createdBrand.id) {
+                throw new Error(`Brand creation returned invalid result: ${JSON.stringify(createdBrand)}`);
+              }
               autoCreatedBrands.set(brandNameLower, createdBrand.id);
-              console.log(`✅ Auto-created brand: ${brandName} (ID: ${createdBrand.id})`);
+              console.log(`✅ [CLOUD] Auto-created brand: ${brandName} (ID: ${createdBrand.id})`);
             } catch (error) {
-              console.error(`❌ Failed to auto-create brand ${brandName}:`, error);
+              const errorDetails = {
+                message: error.message,
+                stack: error.stack,
+                name: error.name,
+                code: error.code,
+                status: error.status
+              };
+              console.error(`❌ [CLOUD] Failed to auto-create brand ${brandName}:`, errorDetails);
+              console.error(`❌ [CLOUD] Full error object:`, error);
               results.errors.push({
                 type: 'auto_create_error',
+                sheet: 'fabrics',
                 message: `Failed to auto-create brand: ${brandName}`,
-                error: error.message
+                error: error.message || String(error),
+                details: errorDetails
               });
+              results.failed++;
             }
           }
         }
@@ -99,7 +116,8 @@ module.exports = {
       // Phase 2: Auto-create missing care instructions
       const autoCreatedCareInstructions = new Map();
       if (transformedDataset.fabrics) {
-        console.log('🔧 Phase 2: Auto-creating missing care instructions...');
+        console.log('🔧 [CLOUD] Phase 2: Auto-creating missing care instructions...');
+        console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
         
         // Collect all unique care instruction names from fabrics
         const careInstructionNames = new Set();
@@ -120,7 +138,10 @@ module.exports = {
           });
         }
         
+        console.log(`📋 [CLOUD] Phase 2: Found ${careInstructionNames.size} unique care instruction names`);
+        
         // Check which care instructions exist in database
+        console.log('🔧 [CLOUD] Checking existing care instructions in database...');
         const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
           populate: '*'
         });
@@ -138,22 +159,37 @@ module.exports = {
           const careNameLower = careName.toLowerCase().trim();
           if (!existingCareInstructionNames.has(careNameLower)) {
             try {
-              console.log(`🔧 Auto-creating care instruction: ${careName}`);
+              console.log(`🔧 [CLOUD] Auto-creating care instruction: ${careName}`);
+              console.log(`🔧 [CLOUD] Using entityService.create for api::care-instruction.care-instruction`);
               const createdCare = await strapi.entityService.create('api::care-instruction.care-instruction', {
                 data: {
                   name: careName,
                   description: `Auto-created care instruction: ${careName}`
                 }
               });
+              if (!createdCare || !createdCare.id) {
+                throw new Error(`Care instruction creation returned invalid result: ${JSON.stringify(createdCare)}`);
+              }
               autoCreatedCareInstructions.set(careNameLower, createdCare.id);
-              console.log(`✅ Auto-created care instruction: ${careName} (ID: ${createdCare.id})`);
+              console.log(`✅ [CLOUD] Auto-created care instruction: ${careName} (ID: ${createdCare.id})`);
             } catch (error) {
-              console.error(`❌ Failed to auto-create care instruction ${careName}:`, error);
+              const errorDetails = {
+                message: error.message,
+                stack: error.stack,
+                name: error.name,
+                code: error.code,
+                status: error.status
+              };
+              console.error(`❌ [CLOUD] Failed to auto-create care instruction ${careName}:`, errorDetails);
+              console.error(`❌ [CLOUD] Full error object:`, error);
               results.errors.push({
                 type: 'auto_create_error',
+                sheet: 'fabrics',
                 message: `Failed to auto-create care instruction: ${careName}`,
-                error: error.message
+                error: error.message || String(error),
+                details: errorDetails
               });
+              results.failed++;
             }
           }
         }
@@ -262,33 +298,53 @@ module.exports = {
               const brandNameLower = item.brand_name.toLowerCase().trim();
               const originalBrandName = item.brand_name; // Store before deletion
               
-              console.log(`🔍 Looking up brand "${originalBrandName}" (normalized: "${brandNameLower}") for fabric "${item.name}"`);
-              console.log(`🔍 Brand map has ${autoCreatedBrands.size} entries. Keys: ${Array.from(autoCreatedBrands.keys()).slice(0, 5).join(', ')}...`);
+              console.log(`🔍 [CLOUD] Looking up brand "${originalBrandName}" (normalized: "${brandNameLower}") for fabric "${item.name}"`);
+              console.log(`🔍 [CLOUD] Brand map has ${autoCreatedBrands.size} entries. Keys: ${Array.from(autoCreatedBrands.keys()).slice(0, 5).join(', ')}...`);
               
               // First check auto-created brands map (includes all existing + newly created)
               if (autoCreatedBrands.has(brandNameLower)) {
                 item.brand = autoCreatedBrands.get(brandNameLower);
                 delete item.brand_name; // Remove the name field
-                console.log(`✅ Backend: Found brand in map for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
+                console.log(`✅ [CLOUD] Found brand in map for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
               } else {
                 // Fallback: Check existing brands in database (shouldn't happen if map is populated correctly)
-                console.log(`⚠️ Brand "${originalBrandName}" not in map, checking database...`);
-                const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
-                  filters: { name: { $containsi: originalBrandName } }
-                });
-                if (existingBrands && existingBrands.length > 0) {
-                  item.brand = existingBrands[0].id;
-                  // Add to map for future lookups
-                  autoCreatedBrands.set(brandNameLower, existingBrands[0].id);
-                  delete item.brand_name; // Remove the name field
-                  console.log(`✅ Backend: Found brand in database for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
-                } else {
-                  console.warn(`❌ Brand "${originalBrandName}" not found for fabric "${item.name}"`);
-                  delete item.brand_name; // Remove the name field to avoid validation errors
+                console.log(`⚠️ [CLOUD] Brand "${originalBrandName}" not in map, checking database...`);
+                try {
+                  const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
+                    filters: { name: { $containsi: originalBrandName } }
+                  });
+                  if (existingBrands && existingBrands.length > 0) {
+                    item.brand = existingBrands[0].id;
+                    // Add to map for future lookups
+                    autoCreatedBrands.set(brandNameLower, existingBrands[0].id);
+                    delete item.brand_name; // Remove the name field
+                    console.log(`✅ [CLOUD] Found brand in database for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
+                  } else {
+                    console.warn(`❌ [CLOUD] Brand "${originalBrandName}" not found for fabric "${item.name}" - fabric will be created without brand`);
+                    console.warn(`❌ [CLOUD] This may indicate the brand auto-creation failed. Check errors array.`);
+                    delete item.brand_name; // Remove the name field to avoid validation errors
+                    results.errors.push({
+                      type: 'missing_relation',
+                      sheet: 'fabrics',
+                      row: i + 1,
+                      message: `Brand "${originalBrandName}" not found for fabric "${item.name}"`,
+                      fabricName: item.name
+                    });
+                  }
+                } catch (error) {
+                  console.error(`❌ [CLOUD] Error looking up brand "${originalBrandName}":`, error);
+                  delete item.brand_name;
+                  results.errors.push({
+                    type: 'relation_lookup_error',
+                    sheet: 'fabrics',
+                    row: i + 1,
+                    message: `Error looking up brand "${originalBrandName}" for fabric "${item.name}"`,
+                    error: error.message
+                  });
                 }
               }
             } else if (productType === 'fabrics' && item.brand) {
-              console.log(`🔗 Backend: Fabric "${item.name}" already has brand ID: ${item.brand} (converted by frontend)`);
+              console.log(`🔗 [CLOUD] Fabric "${item.name}" already has brand ID: ${item.brand} (converted by frontend)`);
             }
             
             // Handle care_instruction_names to care_instructions ID conversion for fabrics
@@ -296,8 +352,8 @@ module.exports = {
               const careNames = item.care_instruction_names.split(',').map(n => n.trim()).filter(n => n);
               const careInstructionIds = [];
               
-              console.log(`🔍 Looking up care instructions "${item.care_instruction_names}" for fabric "${item.name}"`);
-              console.log(`🔍 Care instruction map has ${autoCreatedCareInstructions.size} entries. Keys: ${Array.from(autoCreatedCareInstructions.keys()).slice(0, 5).join(', ')}...`);
+              console.log(`🔍 [CLOUD] Looking up care instructions "${item.care_instruction_names}" for fabric "${item.name}"`);
+              console.log(`🔍 [CLOUD] Care instruction map has ${autoCreatedCareInstructions.size} entries. Keys: ${Array.from(autoCreatedCareInstructions.keys()).slice(0, 5).join(', ')}...`);
               
               for (const careName of careNames) {
                 const careNameLower = careName.toLowerCase().trim();
@@ -306,30 +362,48 @@ module.exports = {
                 if (autoCreatedCareInstructions.has(careNameLower)) {
                   const careId = autoCreatedCareInstructions.get(careNameLower);
                   careInstructionIds.push(careId);
-                  console.log(`✅ Backend: Found care instruction in map for fabric "${item.name}": "${careName}" -> ID ${careId}`);
+                  console.log(`✅ [CLOUD] Found care instruction in map for fabric "${item.name}": "${careName}" -> ID ${careId}`);
                 } else {
                   // Fallback: Check existing care instructions in database
-                  console.log(`⚠️ Care instruction "${careName}" not in map, checking database...`);
-                  const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
-                    filters: { name: { $containsi: careName } }
-                  });
-                  if (existingCareInstructions && existingCareInstructions.length > 0) {
-                    const careId = existingCareInstructions[0].id;
-                    careInstructionIds.push(careId);
-                    // Add to map for future lookups
-                    autoCreatedCareInstructions.set(careNameLower, careId);
-                    console.log(`✅ Backend: Found care instruction in database for fabric "${item.name}": "${careName}" -> ID ${careId}`);
-                  } else {
-                    console.warn(`❌ Care instruction "${careName}" not found for fabric "${item.name}"`);
+                  console.log(`⚠️ [CLOUD] Care instruction "${careName}" not in map, checking database...`);
+                  try {
+                    const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
+                      filters: { name: { $containsi: careName } }
+                    });
+                    if (existingCareInstructions && existingCareInstructions.length > 0) {
+                      const careId = existingCareInstructions[0].id;
+                      careInstructionIds.push(careId);
+                      // Add to map for future lookups
+                      autoCreatedCareInstructions.set(careNameLower, careId);
+                      console.log(`✅ [CLOUD] Found care instruction in database for fabric "${item.name}": "${careName}" -> ID ${careId}`);
+                    } else {
+                      console.warn(`❌ [CLOUD] Care instruction "${careName}" not found for fabric "${item.name}" - may indicate auto-creation failed`);
+                      results.errors.push({
+                        type: 'missing_relation',
+                        sheet: 'fabrics',
+                        row: i + 1,
+                        message: `Care instruction "${careName}" not found for fabric "${item.name}"`,
+                        fabricName: item.name
+                      });
+                    }
+                  } catch (error) {
+                    console.error(`❌ [CLOUD] Error looking up care instruction "${careName}":`, error);
+                    results.errors.push({
+                      type: 'relation_lookup_error',
+                      sheet: 'fabrics',
+                      row: i + 1,
+                      message: `Error looking up care instruction "${careName}" for fabric "${item.name}"`,
+                      error: error.message
+                    });
                   }
                 }
               }
               
               if (careInstructionIds.length > 0) {
                 item.care_instructions = careInstructionIds;
-                console.log(`✅ Backend: Linked ${careInstructionIds.length} care instruction(s) to fabric "${item.name}"`);
+                console.log(`✅ [CLOUD] Linked ${careInstructionIds.length} care instruction(s) to fabric "${item.name}"`);
               } else {
-                console.warn(`⚠️ No care instructions linked to fabric "${item.name}"`);
+                console.warn(`⚠️ [CLOUD] No care instructions linked to fabric "${item.name}" - check errors array for details`);
               }
               delete item.care_instruction_names; // Remove the name field
             }
@@ -517,13 +591,52 @@ module.exports = {
         }
       }
 
-      console.log('📤 Server-side bulk import completed:', results);
-      console.log('🎯 RETURNING NEW RESULT STRUCTURE:', results);
+      console.log('📤 [CLOUD] Server-side bulk import completed:', results);
+      console.log('🎯 [CLOUD] RETURNING NEW RESULT STRUCTURE:', {
+        created: results.created,
+        updated: results.updated,
+        skipped: results.skipped,
+        failed: results.failed,
+        errorCount: results.errors.length,
+        errors: results.errors.slice(0, 5) // Log first 5 errors
+      });
+      
+      // Ensure errors array is always present and properly formatted
+      if (!results.errors) {
+        results.errors = [];
+      }
+      
+      // Log summary of auto-creation phase
+      const autoCreateErrors = results.errors.filter(e => e.type === 'auto_create_error');
+      if (autoCreateErrors.length > 0) {
+        console.warn(`⚠️ [CLOUD] ${autoCreateErrors.length} auto-creation errors occurred. This may affect relations.`);
+        console.warn(`⚠️ [CLOUD] Auto-creation errors:`, autoCreateErrors.map(e => e.message).join(', '));
+      }
+      
       ctx.body = results;
     } catch (error) {
-      console.error('❌ Server-side bulk import error:', error);
+      const errorDetails = {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      };
+      console.error('❌ [CLOUD] Server-side bulk import error:', errorDetails);
+      console.error('❌ [CLOUD] Full error object:', error);
       ctx.status = 500;
-      ctx.body = { error: error.message };
+      ctx.body = { 
+        error: error.message,
+        details: errorDetails,
+        created: 0,
+        updated: 0,
+        skipped: 0,
+        failed: 0,
+        errors: [{
+          type: 'fatal_error',
+          message: error.message,
+          error: error.message,
+          details: errorDetails
+        }]
+      };
     }
   },
 
