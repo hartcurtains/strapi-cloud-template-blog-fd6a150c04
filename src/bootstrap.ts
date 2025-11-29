@@ -82,12 +82,22 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
 
       for (const item of items) {
         try {
-          // Remove internal fields
-          const { id, documentId, __type, type, ...entityData } = item;
+          // Extract data from item.data (entities.jsonl structure: {type, id, data: {...}})
+          const entityData = item.data || item;
+          
+          // Remove internal fields that shouldn't be imported
+          const { id, documentId, __type, type, createdAt, updatedAt, publishedAt, locale, ...cleanData } = entityData;
+
+          // Validate required fields - skip if name is null/undefined (required for most content types)
+          if (cleanData.name === null || cleanData.name === undefined) {
+            totalFailed++;
+            console.error(`\n❌ Skipping ${contentType} with null/undefined name (id: ${item.id || 'unknown'})`);
+            continue;
+          }
 
           // Use Strapi's entity service
           await strapi.entityService.create(contentType as any, {
-            data: entityData,
+            data: cleanData,
           });
 
           totalImported++;
@@ -96,7 +106,8 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
           }
         } catch (error: any) {
           totalFailed++;
-          console.error(`\n❌ Error importing ${contentType}:`, error.message);
+          const itemId = item.id || item.data?.id || 'unknown';
+          console.error(`\n❌ Error importing ${contentType} (id: ${itemId}):`, error.message);
         }
       }
 

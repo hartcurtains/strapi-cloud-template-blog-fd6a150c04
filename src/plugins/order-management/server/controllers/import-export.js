@@ -776,10 +776,39 @@ module.exports = {
       console.log('🔍 [CLOUD] Final check - results.autoCreationSummary value:', results.autoCreationSummary);
       console.log('🔍 [CLOUD] Final check - typeof results.autoCreationSummary:', typeof results.autoCreationSummary);
       
-      ctx.body = results;
+      // Ensure autoCreationSummary is always present in response
+      if (!results.autoCreationSummary) {
+        console.warn('⚠️ [CLOUD] autoCreationSummary missing, creating default');
+        results.autoCreationSummary = {
+          brandsCreated: 0,
+          brandsFailed: 0,
+          careInstructionsCreated: 0,
+          careInstructionsFailed: 0,
+          totalBrandsInMap: 0,
+          totalCareInstructionsInMap: 0
+        };
+      }
+      
+      // Explicitly set response body with all required fields
+      ctx.body = {
+        created: results.created || 0,
+        updated: results.updated || 0,
+        skipped: results.skipped || 0,
+        failed: results.failed || 0,
+        errors: results.errors || [],
+        autoCreationSummary: results.autoCreationSummary
+      };
       
       // Log what was actually sent
       console.log('📤 [CLOUD] Response sent. ctx.body has autoCreationSummary:', 'autoCreationSummary' in ctx.body);
+      console.log('📤 [CLOUD] Response structure:', {
+        hasCreated: 'created' in ctx.body,
+        hasUpdated: 'updated' in ctx.body,
+        hasSkipped: 'skipped' in ctx.body,
+        hasFailed: 'failed' in ctx.body,
+        hasErrors: 'errors' in ctx.body,
+        hasAutoCreationSummary: 'autoCreationSummary' in ctx.body
+      });
     } catch (error) {
       const errorDetails = {
         message: error.message,
@@ -801,7 +830,15 @@ module.exports = {
           message: error.message,
           error: error.message,
           details: errorDetails
-        }]
+        }],
+        autoCreationSummary: {
+          brandsCreated: 0,
+          brandsFailed: 0,
+          careInstructionsCreated: 0,
+          careInstructionsFailed: 0,
+          totalBrandsInMap: 0,
+          totalCareInstructionsInMap: 0
+        }
       };
     }
   },

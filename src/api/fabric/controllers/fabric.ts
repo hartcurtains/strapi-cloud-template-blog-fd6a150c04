@@ -103,18 +103,26 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
     if (rawQueryPagination) {
       sanitizedQuery.pagination = {
         page: rawQueryPagination.page ? parseInt(String(rawQueryPagination.page)) : (sanitizedPagination?.page || 1),
-        pageSize: rawQueryPagination.pageSize ? parseInt(String(rawQueryPagination.pageSize)) : (sanitizedPagination?.pageSize || 50)        
+        pageSize: rawQueryPagination.pageSize ? parseInt(String(rawQueryPagination.pageSize)) : (sanitizedPagination?.pageSize || 200)        
       } as { page: number; pageSize: number }
     } else {
-      // Default to 50 items per page if no pagination specified
-      sanitizedQuery.pagination = (sanitizedPagination || { page: 1, pageSize: 50 }) as { page: number; pageSize: number }
+      // Default to 200 items per page if no pagination specified (increased to handle larger datasets like 121+ fabrics)
+      // If sanitizedQuery already has pagination with a smaller pageSize, increase it
+      const defaultPageSize = 200;
+      sanitizedQuery.pagination = (sanitizedPagination || { page: 1, pageSize: defaultPageSize }) as { page: number; pageSize: number }
       const pagination = sanitizedQuery.pagination as { page: number; pageSize: number }
-      if (!pagination.pageSize || pagination.pageSize < 50) {
-        pagination.pageSize = 50
+      // Ensure minimum pageSize of 200 for better data retrieval (covers most use cases)
+      if (!pagination.pageSize || pagination.pageSize < defaultPageSize) {
+        pagination.pageSize = defaultPageSize
       }
     }
     
     const { results, pagination } = await strapi.entityService.findPage('api::fabric.fabric', sanitizedQuery)
+    
+    // If we got fewer results than the pageSize and there might be more, log a warning
+    if (results.length < pagination.pageSize && pagination.total > pagination.pageSize) {
+      console.log(`[Fabric Controller] Retrieved ${results.length} fabrics, but total is ${pagination.total}. Consider using pagination[pageSize]=${pagination.total} to get all items.`)
+    }
     
     return this.transformResponse(results, { pagination })
   },
