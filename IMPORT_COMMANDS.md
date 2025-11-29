@@ -42,3 +42,4 @@ The import returns:
 - All relations (brands, care instructions) are automatically created/linked
 
 
+

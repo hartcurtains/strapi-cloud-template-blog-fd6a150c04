@@ -20,6 +20,8 @@ module.exports = {
       console.log('📦 [CLOUD] Request body keys:', ctx.request.body ? Object.keys(ctx.request.body) : 'NO BODY');
       console.log('📦 [CLOUD] Dataset keys:', transformedDataset ? Object.keys(transformedDataset) : 'NO DATA');
       console.log('📦 [CLOUD] Fabrics count:', transformedDataset?.fabrics?.length || 0);
+      console.log('📦 [CLOUD] Has fabrics array?', Array.isArray(transformedDataset?.fabrics));
+      console.log('📦 [CLOUD] transformedDataset.fabrics truthy?', !!transformedDataset?.fabrics);
       
       // Log sample fabric data to verify structure
       if (transformedDataset?.fabrics && transformedDataset.fabrics.length > 0) {
@@ -29,8 +31,13 @@ module.exports = {
           brand_name: sampleFabric.brand_name,
           care_instruction_names: sampleFabric.care_instruction_names,
           hasBrand: !!sampleFabric.brand,
-          hasCareInstructions: !!sampleFabric.care_instructions
+          hasCareInstructions: !!sampleFabric.care_instructions,
+          allKeys: Object.keys(sampleFabric)
         });
+        console.log('📦 [CLOUD] Sample fabric full object (first 500 chars):', JSON.stringify(sampleFabric).substring(0, 500));
+      } else {
+        console.warn('⚠️ [CLOUD] WARNING: No fabrics found in transformedDataset!');
+        console.warn('⚠️ [CLOUD] transformedDataset:', JSON.stringify(transformedDataset, null, 2).substring(0, 1000));
       }
       
       console.log('🔧 [CLOUD] Strapi instance available:', !!strapi);
@@ -69,7 +76,11 @@ module.exports = {
 
       // Phase 1: Auto-create missing brands
       const autoCreatedBrands = new Map();
-      if (transformedDataset.fabrics) {
+      console.log('🔍 [CLOUD] Phase 1 Check: transformedDataset.fabrics exists?', !!transformedDataset.fabrics);
+      console.log('🔍 [CLOUD] Phase 1 Check: transformedDataset.fabrics is array?', Array.isArray(transformedDataset.fabrics));
+      console.log('🔍 [CLOUD] Phase 1 Check: transformedDataset.fabrics length?', transformedDataset.fabrics?.length);
+      
+      if (transformedDataset.fabrics && Array.isArray(transformedDataset.fabrics) && transformedDataset.fabrics.length > 0) {
         console.log('🔧 [CLOUD] Phase 1: Auto-creating missing brands...');
         console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
         
@@ -164,11 +175,18 @@ module.exports = {
           }
         }
         console.log(`📊 [CLOUD] Phase 1 Summary: ${brandsCreated} brands created, ${brandsFailed} failed, ${autoCreatedBrands.size} total in map`);
+      } else {
+        console.warn('⚠️ [CLOUD] Phase 1: SKIPPED - No fabrics array or empty array');
+        console.warn('⚠️ [CLOUD] Phase 1: transformedDataset.fabrics =', transformedDataset.fabrics);
       }
 
       // Phase 2: Auto-create missing care instructions
       const autoCreatedCareInstructions = new Map();
-      if (transformedDataset.fabrics) {
+      console.log('🔍 [CLOUD] Phase 2 Check: transformedDataset.fabrics exists?', !!transformedDataset.fabrics);
+      console.log('🔍 [CLOUD] Phase 2 Check: transformedDataset.fabrics is array?', Array.isArray(transformedDataset.fabrics));
+      console.log('🔍 [CLOUD] Phase 2 Check: transformedDataset.fabrics length?', transformedDataset.fabrics?.length);
+      
+      if (transformedDataset.fabrics && Array.isArray(transformedDataset.fabrics) && transformedDataset.fabrics.length > 0) {
         console.log('🔧 [CLOUD] Phase 2: Auto-creating missing care instructions...');
         console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
         
@@ -666,15 +684,17 @@ module.exports = {
         }
       }
 
-      // Add auto-creation summary to results
+      // Add auto-creation summary to results - ALWAYS create it, even if phases didn't run
       const autoCreateSummary = {
         brandsCreated: brandsCreated || 0,
         brandsFailed: brandsFailed || 0,
         careInstructionsCreated: careInstructionsCreated || 0,
         careInstructionsFailed: careInstructionsFailed || 0,
-        totalBrandsInMap: autoCreatedBrands.size,
-        totalCareInstructionsInMap: autoCreatedCareInstructions.size
+        totalBrandsInMap: (autoCreatedBrands && autoCreatedBrands.size) || 0,
+        totalCareInstructionsInMap: (autoCreatedCareInstructions && autoCreatedCareInstructions.size) || 0
       };
+      
+      // Explicitly set the summary on results object
       results.autoCreationSummary = autoCreateSummary;
       
       console.log('═══════════════════════════════════════════════════════════');
@@ -695,6 +715,17 @@ module.exports = {
         autoCreationSummary: autoCreateSummary,
         errors: results.errors.slice(0, 5) // Log first 5 errors
       });
+      
+      // Verify autoCreationSummary is on results before sending
+      if (!results.autoCreationSummary) {
+        console.error('❌ [CLOUD] CRITICAL: autoCreationSummary is missing from results object!');
+        console.error('❌ [CLOUD] Results object keys:', Object.keys(results));
+        // Force add it again
+        results.autoCreationSummary = autoCreateSummary;
+      } else {
+        console.log('✅ [CLOUD] Verified: autoCreationSummary is present in results object');
+        console.log('✅ [CLOUD] autoCreationSummary value:', JSON.stringify(results.autoCreationSummary));
+      }
       
       // Ensure errors array is always present and properly formatted
       if (!results.errors) {
@@ -740,7 +771,15 @@ module.exports = {
         console.log(`   - Unique care instructions found: ${careInstructionNames?.size || 0}`);
       }
       
+      // Final verification before sending response
+      console.log('🔍 [CLOUD] Final check - results object has autoCreationSummary:', 'autoCreationSummary' in results);
+      console.log('🔍 [CLOUD] Final check - results.autoCreationSummary value:', results.autoCreationSummary);
+      console.log('🔍 [CLOUD] Final check - typeof results.autoCreationSummary:', typeof results.autoCreationSummary);
+      
       ctx.body = results;
+      
+      // Log what was actually sent
+      console.log('📤 [CLOUD] Response sent. ctx.body has autoCreationSummary:', 'autoCreationSummary' in ctx.body);
     } catch (error) {
       const errorDetails = {
         message: error.message,
