@@ -1341,6 +1341,22 @@ export default function ProductManagementPage() {
         });
       }
       
+      // Fetch care instructions
+      const careInstructionsResponse = await fetch('/api/care-instructions?populate=*', {
+        headers: getAuthHeaders()
+      });
+      if (careInstructionsResponse.ok) {
+        const careInstructionsData = await careInstructionsResponse.json();
+        relationData.care_instructions = {
+          byName: {},
+          byId: {}
+        };
+        careInstructionsData.data.forEach(careInstruction => {
+          relationData.care_instructions.byName[careInstruction.name] = { id: careInstruction.id, name: careInstruction.name };
+          relationData.care_instructions.byId[careInstruction.id] = { id: careInstruction.id, name: careInstruction.name };
+        });
+      }
+      
       console.log('📊 Successfully fetched relation data:', Object.keys(relationData));
       return relationData;
       
