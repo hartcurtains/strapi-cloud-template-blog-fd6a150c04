@@ -31,12 +31,6 @@
       "type": "relation",
       "relation": "oneToOne",
       "target": "api::blind-type.blind-type"
-    },
-    "pricing_rules": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::pricing-rule.pricing-rule",
-      "mappedBy": "blinds"
     }
   }
 }

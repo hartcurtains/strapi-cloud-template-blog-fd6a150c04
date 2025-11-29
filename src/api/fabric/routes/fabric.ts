@@ -46,5 +46,13 @@ export default {
         auth: false, // Allow admin access for deleting
       },
     },
+    {
+      method: 'POST',
+      path: '/fabrics/import',
+      handler: 'fabric.importFabrics',
+      config: {
+        auth: false, // Allow admin access for importing
+      },
+    },
   ],
 };

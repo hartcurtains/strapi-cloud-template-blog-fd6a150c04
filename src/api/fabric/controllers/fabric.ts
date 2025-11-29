@@ -8,6 +8,19 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
   async find(ctx) {
     // Always populate brand and care_instructions
     const { query } = ctx
+    
+    // Check if we want all fabrics BEFORE sanitization (getAll=true or very large pageSize >= 1000)
+    // Check raw query pagination first
+    const rawQueryPagination = query.pagination as { page?: number | string; pageSize?: number | string } | undefined
+    const rawPageSize = rawQueryPagination?.pageSize ? parseInt(String(rawQueryPagination.pageSize)) : undefined
+    const wantsAllFabrics = rawPageSize && rawPageSize >= 1000 // Large pageSize indicates getAll
+    
+    console.log('[Fabric Controller] Raw query pagination:', {
+      rawQueryPagination,
+      rawPageSize,
+      wantsAllFabrics
+    })
+    
     const populateQuery = (typeof query.populate === 'object' && query.populate !== null && !Array.isArray(query.populate)) 
       ? (query.populate as Record<string, any>) 
       : {}
@@ -27,6 +40,79 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
     
     const sanitizedQuery = await this.sanitizeQuery(ctx)
     sanitizedQuery.populate = populate
+    
+    // Also check sanitized query pagination as fallback
+    const sanitizedPagination = sanitizedQuery.pagination as { page?: number; pageSize?: number } | undefined
+    const sanitizedPageSize = sanitizedPagination?.pageSize
+    const finalWantsAllFabrics = wantsAllFabrics || (sanitizedPageSize && sanitizedPageSize >= 1000)
+    
+    console.log('[Fabric Controller] After sanitization:', {
+      sanitizedPagination,
+      sanitizedPageSize,
+      finalWantsAllFabrics
+    })
+    
+    if (finalWantsAllFabrics) {
+      // Use findMany to bypass pagination limits and get ALL fabrics
+      // Build a clean query for findMany - use '*' for populate to get everything
+      const findManyQuery: any = {
+        populate: '*', // Use '*' to populate all relations (findMany doesn't support complex populate structures)
+        filters: sanitizedQuery.filters || {},
+        sort: sanitizedQuery.sort || ['name:asc']
+      }
+      
+      console.log('[Fabric Controller] Using findMany to fetch ALL fabrics (bypassing pagination)')
+      console.log('[Fabric Controller] findMany query:', {
+        populate: findManyQuery.populate,
+        hasFilters: !!findManyQuery.filters,
+        hasSort: !!findManyQuery.sort,
+        filterKeys: Object.keys(findManyQuery.filters || {})
+      })
+      
+      try {
+        const allResults = await strapi.entityService.findMany('api::fabric.fabric', findManyQuery)
+        console.log('[Fabric Controller] findMany returned', allResults.length, 'fabrics')
+        
+        // Return all results with pagination metadata indicating all items
+        return this.transformResponse(allResults, { 
+          pagination: {
+            page: 1,
+            pageSize: allResults.length,
+            pageCount: 1,
+            total: allResults.length
+          }
+        })
+      } catch (error: any) {
+        console.error('[Fabric Controller] findMany error:', {
+          message: error?.message,
+          stack: error?.stack?.substring(0, 500),
+          errorType: error?.constructor?.name
+        })
+        // Fall back to regular pagination if findMany fails
+        console.log('[Fabric Controller] Falling back to regular pagination due to findMany error')
+        // Restore pagination for fallback
+        sanitizedQuery.pagination = {
+          page: 1,
+          pageSize: 10000 // Use the large pageSize that was requested
+        }
+        // Continue to normal pagination logic below
+      }
+    }
+    
+    // Normal pagination logic for regular requests
+    if (rawQueryPagination) {
+      sanitizedQuery.pagination = {
+        page: rawQueryPagination.page ? parseInt(String(rawQueryPagination.page)) : (sanitizedPagination?.page || 1),
+        pageSize: rawQueryPagination.pageSize ? parseInt(String(rawQueryPagination.pageSize)) : (sanitizedPagination?.pageSize || 50)        
+      } as { page: number; pageSize: number }
+    } else {
+      // Default to 50 items per page if no pagination specified
+      sanitizedQuery.pagination = (sanitizedPagination || { page: 1, pageSize: 50 }) as { page: number; pageSize: number }
+      const pagination = sanitizedQuery.pagination as { page: number; pageSize: number }
+      if (!pagination.pageSize || pagination.pageSize < 50) {
+        pagination.pageSize = 50
+      }
+    }
     
     const { results, pagination } = await strapi.entityService.findPage('api::fabric.fabric', sanitizedQuery)
     
@@ -64,5 +150,208 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
     }
     
     return this.transformResponse(entity)
+  },
+
+  async importFabrics(ctx) {
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      
+      const jsonPath = path.join(process.cwd(), 'fixed-fabrics-import.json');
+      
+      if (!fs.existsSync(jsonPath)) {
+        return ctx.badRequest('fixed-fabrics-import.json not found!');
+      }
+
+      const jsonData = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+      const fabrics = jsonData.fabrics || [];
+
+      console.log(`📦 Found ${fabrics.length} fabrics to import`);
+
+      // Fix pattern if patternRepeat_cm = 0
+      fabrics.forEach((fabric: any) => {
+        if (fabric.patternRepeat_cm === 0) {
+          fabric.pattern = 'Plain';
+        }
+      });
+
+      // Step 1: Get or create brands
+      const brandMap = new Map<string, number>();
+      const brandNames = fabrics.map((f: any) => f.brand_name as string).filter((name): name is string => Boolean(name));
+      const uniqueBrands = [...new Set<string>(brandNames)];
+      
+      console.log(`🏷️  Processing ${uniqueBrands.length} brands...`);
+      for (const brandName of uniqueBrands) {
+        try {
+          // Try to find existing brand
+          let brands = await strapi.entityService.findMany('api::brand.brand', {
+            filters: { name: brandName },
+            limit: 1,
+          });
+
+          let brand;
+          if (!brands || brands.length === 0) {
+            // Create new brand
+            brand = await strapi.entityService.create('api::brand.brand', {
+              data: {
+                name: brandName,
+                publishedAt: new Date(),
+              },
+            });
+            console.log(`  ✅ Created brand: ${brandName}`);
+          } else {
+            brand = brands[0];
+            console.log(`  ✓ Found existing brand: ${brandName}`);
+          }
+          
+          brandMap.set(brandName, brand.id);
+        } catch (error: any) {
+          console.error(`  ❌ Error processing brand ${brandName}:`, error.message);
+        }
+      }
+
+      // Step 2: Get or create care instructions
+      const careInstructionMap = new Map<string, number>();
+      const allCareInstructions = new Set<string>();
+      
+      fabrics.forEach((fabric: any) => {
+        if (fabric.care_instruction_names) {
+          // Split by comma and trim
+          const instructions = fabric.care_instruction_names
+            .split(',')
+            .map((i: string) => i.trim())
+            .filter(Boolean);
+          instructions.forEach((inst: string) => allCareInstructions.add(inst));
+        }
+      });
+
+      console.log(`🧼 Processing ${allCareInstructions.size} care instructions...`);
+      for (const careName of allCareInstructions) {
+        try {
+          // Try to find existing care instruction
+          let careInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
+            filters: { name: careName },
+            limit: 1,
+          });
+
+          let careInstruction;
+          if (!careInstructions || careInstructions.length === 0) {
+            // Create new care instruction
+            careInstruction = await strapi.entityService.create('api::care-instruction.care-instruction', {
+              data: {
+                name: careName,
+                publishedAt: new Date(),
+              },
+            });
+            console.log(`  ✅ Created care instruction: ${careName}`);
+          } else {
+            careInstruction = careInstructions[0];
+            console.log(`  ✓ Found existing care instruction: ${careName}`);
+          }
+          
+          careInstructionMap.set(careName, careInstruction.id);
+        } catch (error: any) {
+          console.error(`  ❌ Error processing care instruction ${careName}:`, error.message);
+        }
+      }
+
+      // Step 3: Import fabrics
+      console.log(`🧵 Importing ${fabrics.length} fabrics...`);
+      let imported = 0;
+      let updated = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const fabricData of fabrics) {
+        try {
+          // Check if fabric already exists by productId
+          const existing = await strapi.entityService.findMany('api::fabric.fabric', {
+            filters: { productId: fabricData.productId },
+            limit: 1,
+          });
+
+          // Prepare fabric data
+          const fabricPayload: any = {
+            name: fabricData.name,
+            productId: fabricData.productId,
+            pattern: fabricData.pattern || 'Plain',
+            composition: fabricData.composition,
+            price_per_metre: fabricData.price_per_metre,
+            patternRepeat_cm: fabricData.patternRepeat_cm || 0,
+            usableWidth_cm: fabricData.usableWidth_cm,
+            availability: fabricData.availability || 'in_stock',
+            description: fabricData.description || '',
+            martindale: fabricData.martindale,
+            is_featured: false,
+            is_curtain: false,
+            publishedAt: new Date(),
+          };
+
+          // Add brand relation
+          if (fabricData.brand_name && brandMap.has(fabricData.brand_name)) {
+            fabricPayload.brand = brandMap.get(fabricData.brand_name);
+          }
+
+          // Add care instructions relations
+          if (fabricData.care_instruction_names) {
+            const careNames = fabricData.care_instruction_names
+              .split(',')
+              .map((i: string) => i.trim())
+              .filter(Boolean);
+            
+            const careIds = careNames
+              .map((name: string) => careInstructionMap.get(name))
+              .filter(Boolean);
+            
+            if (careIds.length > 0) {
+              fabricPayload.care_instructions = careIds;
+            }
+          }
+
+          if (existing && existing.length > 0) {
+            // Update existing fabric
+            await strapi.entityService.update('api::fabric.fabric', existing[0].id, {
+              data: fabricPayload,
+            });
+            updated++;
+          } else {
+            // Create new fabric
+            await strapi.entityService.create('api::fabric.fabric', {
+              data: fabricPayload,
+            });
+            imported++;
+          }
+
+          if ((imported + updated) % 10 === 0) {
+            process.stdout.write('.');
+          }
+        } catch (error: any) {
+          failed++;
+          const errorMsg = `Error importing fabric ${fabricData.productId}: ${error.message}`;
+          errors.push(errorMsg);
+          console.error(`\n❌ ${errorMsg}`);
+        }
+      }
+
+      const summary = {
+        created: imported,
+        updated: updated,
+        failed: failed,
+        total: fabrics.length,
+        errors: errors.slice(0, 10), // Limit errors in response
+      };
+
+      console.log(`\n\n📊 Import Summary:`, summary);
+      console.log('✅ Fabric import complete!');
+
+      return ctx.body = {
+        success: true,
+        message: 'Fabric import completed',
+        ...summary,
+      };
+    } catch (error: any) {
+      console.error('❌ Import error:', error);
+      return ctx.internalServerError(`Import failed: ${error.message}`);
+    }
   },
 }));

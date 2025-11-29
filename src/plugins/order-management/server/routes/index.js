@@ -36,5 +36,14 @@ module.exports = {
         middlewares: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/parse-pdf',
+      handler: 'import-export.parsePDF',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

@@ -7,23 +7,20 @@ module.exports = {
   // Bulk import products using Strapi's internal services
   async bulkImport(ctx) {
     try {
-      // TEST: Return immediately with new structure to verify new code is running
-      ctx.body = { 
-        created: 999, 
-        updated: 888, 
-        skipped: 777, 
-        failed: 666, 
-        errors: [],
-        message: "NEW CODE IS RUNNING!"
-      };
-      return;
-      
       const { data: transformedDataset } = ctx.request.body;
       
-      console.log('🔥🔥🔥 FORCE RESTART TEST - NEW CODE IS LOADED! 🔥🔥🔥');
+      const TIMESTAMP = Date.now();
+      console.log('\n\n');
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('🔥🔥🔥 NEW CODE VERSION 2.0 - TIMESTAMP:', TIMESTAMP, '🔥🔥🔥');
+      console.log('🔥🔥🔥 BRAND & CARE INSTRUCTION FIX - FORCE RELOAD 🔥🔥🔥');
+      console.log('═══════════════════════════════════════════════════════════');
       console.log('🚀 NEW UPSERT LOGIC - Starting server-side bulk import...');
       console.log('🎯 NEW RESULT STRUCTURE: {created, updated, skipped, failed}');
-      console.log('🆕 THIS IS DEFINITELY THE NEW CODE RUNNING!');
+      console.log('📦 Dataset keys:', transformedDataset ? Object.keys(transformedDataset) : 'NO DATA');
+      console.log('📦 Fabrics count:', transformedDataset?.fabrics?.length || 0);
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('\n\n');
       
       const results = {
         created: 0,
@@ -42,7 +39,8 @@ module.exports = {
         linings: 'api::lining.lining',
         trimmings: 'api::trimming.trimming',
         mechanisations: 'api::mechanisation.mechanisation',
-        brands: 'api::brand.brand'
+        brands: 'api::brand.brand',
+        care_instructions: 'api::care-instruction.care-instruction'
       };
 
       // Phase 1: Auto-create missing brands
@@ -57,12 +55,20 @@ module.exports = {
             brandNames.add(fabric.brand_name.trim());
           }
         });
+        console.log(`📋 Phase 1: Found ${brandNames.size} unique brand names: ${Array.from(brandNames).slice(0, 5).join(', ')}${brandNames.size > 5 ? '...' : ''}`);
         
         // Check which brands exist in database
         const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
           populate: '*'
         });
         const existingBrandNames = new Set(existingBrands.map(b => b.name.toLowerCase().trim()));
+        
+        // Add existing brands to the map for quick lookup
+        existingBrands.forEach(brand => {
+          const brandNameLower = brand.name.toLowerCase().trim();
+          autoCreatedBrands.set(brandNameLower, brand.id);
+        });
+        console.log(`📋 Phase 1: Populated brand map with ${existingBrands.length} existing brands. Map now has ${autoCreatedBrands.size} entries.`);
         
         // Auto-create missing brands
         for (const brandName of brandNames) {
@@ -90,8 +96,71 @@ module.exports = {
         }
       }
 
-      // Import order: brands, linings, trimmings, mechanisations first, then fabrics, then dependent products
-      const importOrder = ['brands', 'linings', 'trimmings', 'mechanisations', 'fabrics', 'curtains', 'blinds', 'cushions'];
+      // Phase 2: Auto-create missing care instructions
+      const autoCreatedCareInstructions = new Map();
+      if (transformedDataset.fabrics) {
+        console.log('🔧 Phase 2: Auto-creating missing care instructions...');
+        
+        // Collect all unique care instruction names from fabrics
+        const careInstructionNames = new Set();
+        transformedDataset.fabrics.forEach(fabric => {
+          if (fabric.care_instruction_names) {
+            // Split comma-separated names
+            const names = fabric.care_instruction_names.split(',').map(n => n.trim()).filter(n => n);
+            names.forEach(name => careInstructionNames.add(name));
+          }
+        });
+        
+        // Also check if there's a care_instructions sheet in the import
+        if (transformedDataset.care_instructions) {
+          transformedDataset.care_instructions.forEach(ci => {
+            if (ci.name) {
+              careInstructionNames.add(ci.name.trim());
+            }
+          });
+        }
+        
+        // Check which care instructions exist in database
+        const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
+          populate: '*'
+        });
+        const existingCareInstructionNames = new Set(existingCareInstructions.map(ci => ci.name.toLowerCase().trim()));
+        
+        // Add existing care instructions to the map for quick lookup
+        existingCareInstructions.forEach(ci => {
+          const careNameLower = ci.name.toLowerCase().trim();
+          autoCreatedCareInstructions.set(careNameLower, ci.id);
+        });
+        console.log(`📋 Phase 2: Populated care instruction map with ${existingCareInstructions.length} existing care instructions. Map now has ${autoCreatedCareInstructions.size} entries.`);
+        
+        // Auto-create missing care instructions
+        for (const careName of careInstructionNames) {
+          const careNameLower = careName.toLowerCase().trim();
+          if (!existingCareInstructionNames.has(careNameLower)) {
+            try {
+              console.log(`🔧 Auto-creating care instruction: ${careName}`);
+              const createdCare = await strapi.entityService.create('api::care-instruction.care-instruction', {
+                data: {
+                  name: careName,
+                  description: `Auto-created care instruction: ${careName}`
+                }
+              });
+              autoCreatedCareInstructions.set(careNameLower, createdCare.id);
+              console.log(`✅ Auto-created care instruction: ${careName} (ID: ${createdCare.id})`);
+            } catch (error) {
+              console.error(`❌ Failed to auto-create care instruction ${careName}:`, error);
+              results.errors.push({
+                type: 'auto_create_error',
+                message: `Failed to auto-create care instruction: ${careName}`,
+                error: error.message
+              });
+            }
+          }
+        }
+      }
+
+      // Import order: brands, linings, trimmings, mechanisations, care_instructions first, then fabrics, then dependent products
+      const importOrder = ['brands', 'linings', 'trimmings', 'mechanisations', 'care_instructions', 'fabrics', 'curtains', 'blinds', 'cushions'];
 
       for (const productType of importOrder) {
         if (!transformedDataset[productType] || transformedDataset[productType].length === 0) {
@@ -191,28 +260,78 @@ module.exports = {
             // Handle brand_name to brand ID conversion for fabrics (only if not already converted by frontend)
             if (productType === 'fabrics' && item.brand_name && !item.brand) {
               const brandNameLower = item.brand_name.toLowerCase().trim();
+              const originalBrandName = item.brand_name; // Store before deletion
               
-              // First check auto-created brands
+              console.log(`🔍 Looking up brand "${originalBrandName}" (normalized: "${brandNameLower}") for fabric "${item.name}"`);
+              console.log(`🔍 Brand map has ${autoCreatedBrands.size} entries. Keys: ${Array.from(autoCreatedBrands.keys()).slice(0, 5).join(', ')}...`);
+              
+              // First check auto-created brands map (includes all existing + newly created)
               if (autoCreatedBrands.has(brandNameLower)) {
                 item.brand = autoCreatedBrands.get(brandNameLower);
                 delete item.brand_name; // Remove the name field
-                console.log(`🔗 Backend: Using auto-created brand ID for fabric: ${item.brand_name} -> ${item.brand}`);
+                console.log(`✅ Backend: Found brand in map for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
               } else {
-                // Check existing brands in database
+                // Fallback: Check existing brands in database (shouldn't happen if map is populated correctly)
+                console.log(`⚠️ Brand "${originalBrandName}" not in map, checking database...`);
                 const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
-                  filters: { name: { $containsi: item.brand_name } }
+                  filters: { name: { $containsi: originalBrandName } }
                 });
                 if (existingBrands && existingBrands.length > 0) {
                   item.brand = existingBrands[0].id;
+                  // Add to map for future lookups
+                  autoCreatedBrands.set(brandNameLower, existingBrands[0].id);
                   delete item.brand_name; // Remove the name field
-                  console.log(`🔗 Backend: Using existing brand ID for fabric: ${item.brand_name} -> ${item.brand}`);
+                  console.log(`✅ Backend: Found brand in database for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
                 } else {
-                  console.warn(`⚠️ Brand not found for fabric: ${item.brand_name}`);
+                  console.warn(`❌ Brand "${originalBrandName}" not found for fabric "${item.name}"`);
                   delete item.brand_name; // Remove the name field to avoid validation errors
                 }
               }
             } else if (productType === 'fabrics' && item.brand) {
-              console.log(`🔗 Backend: Fabric already has brand ID: ${item.brand} (converted by frontend)`);
+              console.log(`🔗 Backend: Fabric "${item.name}" already has brand ID: ${item.brand} (converted by frontend)`);
+            }
+            
+            // Handle care_instruction_names to care_instructions ID conversion for fabrics
+            if (productType === 'fabrics' && item.care_instruction_names && !item.care_instructions) {
+              const careNames = item.care_instruction_names.split(',').map(n => n.trim()).filter(n => n);
+              const careInstructionIds = [];
+              
+              console.log(`🔍 Looking up care instructions "${item.care_instruction_names}" for fabric "${item.name}"`);
+              console.log(`🔍 Care instruction map has ${autoCreatedCareInstructions.size} entries. Keys: ${Array.from(autoCreatedCareInstructions.keys()).slice(0, 5).join(', ')}...`);
+              
+              for (const careName of careNames) {
+                const careNameLower = careName.toLowerCase().trim();
+                
+                // First check auto-created care instructions map (includes all existing + newly created)
+                if (autoCreatedCareInstructions.has(careNameLower)) {
+                  const careId = autoCreatedCareInstructions.get(careNameLower);
+                  careInstructionIds.push(careId);
+                  console.log(`✅ Backend: Found care instruction in map for fabric "${item.name}": "${careName}" -> ID ${careId}`);
+                } else {
+                  // Fallback: Check existing care instructions in database
+                  console.log(`⚠️ Care instruction "${careName}" not in map, checking database...`);
+                  const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
+                    filters: { name: { $containsi: careName } }
+                  });
+                  if (existingCareInstructions && existingCareInstructions.length > 0) {
+                    const careId = existingCareInstructions[0].id;
+                    careInstructionIds.push(careId);
+                    // Add to map for future lookups
+                    autoCreatedCareInstructions.set(careNameLower, careId);
+                    console.log(`✅ Backend: Found care instruction in database for fabric "${item.name}": "${careName}" -> ID ${careId}`);
+                  } else {
+                    console.warn(`❌ Care instruction "${careName}" not found for fabric "${item.name}"`);
+                  }
+                }
+              }
+              
+              if (careInstructionIds.length > 0) {
+                item.care_instructions = careInstructionIds;
+                console.log(`✅ Backend: Linked ${careInstructionIds.length} care instruction(s) to fabric "${item.name}"`);
+              } else {
+                console.warn(`⚠️ No care instructions linked to fabric "${item.name}"`);
+              }
+              delete item.care_instruction_names; // Remove the name field
             }
             
             console.log(`🚀 NEW UPSERT LOGIC - Importing ${productType} item ${i + 1}/${transformedDataset[productType].length}:`, item);
@@ -270,13 +389,34 @@ module.exports = {
               
               const existingFabric = await strapi.entityService.findMany('api::fabric.fabric', {
                 filters: { productId: item.productId },
-                populate: '*'
+                populate: {
+                  brand: true,
+                  care_instructions: true,
+                  curtains: true,
+                  blinds: true,
+                  cushions: true
+                }
               });
               
               if (existingFabric && existingFabric.length > 0) {
                 const existing = existingFabric[0];
                 
                 // Compare relevant fields to see if there are changes
+                // Helper to compare care instruction arrays
+                const compareCareInstructions = (newCares, existingCares) => {
+                  if (!newCares && (!existingCares || existingCares.length === 0)) return false;
+                  if (!newCares || newCares.length === 0) return existingCares && existingCares.length > 0;
+                  if (!existingCares || existingCares.length === 0) return newCares && newCares.length > 0;
+                  
+                  const newIds = Array.isArray(newCares) ? newCares.map(id => String(id)).sort() : [];
+                  const existingIds = Array.isArray(existingCares) 
+                    ? existingCares.map(ci => String(ci.id || ci)).sort() 
+                    : [];
+                  
+                  if (newIds.length !== existingIds.length) return true;
+                  return !newIds.every((id, idx) => id === existingIds[idx]);
+                };
+                
                 const hasChanges = (
                   (item.name !== undefined && item.name !== existing.name) ||
                   (item.description !== undefined && item.description !== existing.description) ||
@@ -290,7 +430,8 @@ module.exports = {
                   (item.featured_until !== undefined && item.featured_until !== existing.featured_until) ||
                   (item.patternRepeat_cm !== undefined && item.patternRepeat_cm !== existing.patternRepeat_cm) ||
                   (item.usableWidth_cm !== undefined && item.usableWidth_cm !== existing.usableWidth_cm) ||
-                  (item.martindale !== undefined && item.martindale !== existing.martindale)
+                  (item.martindale !== undefined && item.martindale !== existing.martindale) ||
+                  (item.care_instructions !== undefined && compareCareInstructions(item.care_instructions, existing.care_instructions))
                 );
                 
                 if (hasChanges) {
@@ -509,5 +650,355 @@ module.exports = {
       ctx.status = 500;
       ctx.body = { error: error.message };
     }
+  },
+
+  // Parse PDF file and extract structured data
+  async parsePDF(ctx) {
+    try {
+      console.log('📄 Starting PDF parsing...');
+      console.log('📄 Request method:', ctx.request.method);
+      console.log('📄 Request path:', ctx.request.path);
+      console.log('📄 Request headers:', ctx.request.headers);
+      console.log('📄 Request body keys:', Object.keys(ctx.request.body || {}));
+      console.log('📄 Request files:', ctx.request.files ? Object.keys(ctx.request.files) : 'no files');
+      
+      // Get uploaded file from multipart form data
+      // Strapi uses koa-body, files can be in different locations
+      const files = ctx.request.files || ctx.request.body?.files;
+      const file = files?.file || files?.['files.file'] || ctx.request.body?.file;
+      
+      if (!file) {
+        ctx.status = 400;
+        ctx.body = { error: 'No PDF file provided' };
+        return;
+      }
+
+      console.log(`📄 PDF file received:`, {
+        name: file.name || file.originalname,
+        size: file.size,
+        type: file.type || file.mimetype,
+        path: file.path || file.filepath
+      });
+
+      // Check file type
+      const fileName = (file.name || file.originalname || '').toLowerCase();
+      const fileType = (file.type || file.mimetype || '').toLowerCase();
+      if (!fileType.includes('pdf') && !fileName.endsWith('.pdf')) {
+        ctx.status = 400;
+        ctx.body = { error: 'File must be a PDF' };
+        return;
+      }
+
+      // Read PDF file
+      const fs = require('fs');
+      const path = require('path');
+      const pdfParse = require('pdf-parse');
+      
+      let pdfBuffer;
+      
+      // Try different ways to get the file buffer
+      if (file.buffer) {
+        // File is already in memory as buffer
+        pdfBuffer = file.buffer;
+      } else if (file.path || file.filepath) {
+        // File is on disk, read it
+        const filePath = file.path || file.filepath;
+        pdfBuffer = fs.readFileSync(filePath);
+        
+        // Clean up temporary file after reading
+        try {
+          fs.unlinkSync(filePath);
+        } catch (err) {
+          console.warn('⚠️ Could not delete temporary PDF file:', err);
+        }
+      } else if (file.stream) {
+        // File is a stream, convert to buffer
+        const chunks = [];
+        for await (const chunk of file.stream) {
+          chunks.push(chunk);
+        }
+        pdfBuffer = Buffer.concat(chunks);
+      } else {
+        throw new Error('Could not read PDF file - no buffer, path, or stream available');
+      }
+      
+      const pdfData = await pdfParse(pdfBuffer);
+      
+      console.log(`📄 PDF parsed: ${pdfData.numpages} pages, ${pdfData.text.length} characters`);
+
+      // Extract text content
+      const text = pdfData.text;
+      
+      // Parse structured data from PDF text
+      // This is a basic parser - you may need to customize based on your PDF structure
+      const parsedData = parsePDFText(text);
+      
+      console.log(`📄 Extracted data:`, Object.keys(parsedData).map(key => `${key}: ${parsedData[key].length} items`).join(', '));
+
+      ctx.body = {
+        success: true,
+        data: parsedData,
+        message: `Successfully parsed PDF: ${pdfData.numpages} pages`
+      };
+    } catch (error) {
+      console.error('❌ Error parsing PDF:', error);
+      ctx.status = 500;
+      ctx.body = { error: error.message || 'Failed to parse PDF' };
+    }
   }
 };
+
+/**
+ * Parse PDF text and extract structured data
+ * This function attempts to extract table data and map it to fabric schema
+ */
+function parsePDFText(text) {
+  const result = {
+    fabrics: [],
+    care_instructions: []
+  };
+
+  // Split text into lines
+  const lines = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+  
+  // Try to identify table structure
+  // Look for patterns that might indicate table headers
+  let headerLineIndex = -1;
+  const possibleHeaders = ['product', 'name', 'code', 'price', 'composition', 'pattern', 'width', 'care'];
+  
+  for (let i = 0; i < Math.min(20, lines.length); i++) {
+    const lineLower = lines[i].toLowerCase();
+    const headerMatches = possibleHeaders.filter(header => lineLower.includes(header));
+    if (headerMatches.length >= 3) {
+      headerLineIndex = i;
+      break;
+    }
+  }
+
+  // If we found headers, try to parse as table
+  if (headerLineIndex >= 0) {
+    console.log(`📄 Found potential table headers at line ${headerLineIndex + 1}`);
+    
+    // Extract header row
+    const headerLine = lines[headerLineIndex];
+    const headers = headerLine.split(/\s{2,}|\t/).map(h => h.trim().toLowerCase());
+    
+    console.log(`📄 Detected headers:`, headers);
+    
+    // Parse data rows (next 100 rows or until end)
+    const dataStartIndex = headerLineIndex + 1;
+    const dataEndIndex = Math.min(dataStartIndex + 100, lines.length);
+    
+    for (let i = dataStartIndex; i < dataEndIndex; i++) {
+      const line = lines[i];
+      
+      // Skip empty lines or lines that look like headers
+      if (line.length < 10 || possibleHeaders.some(h => line.toLowerCase().includes(h))) {
+        continue;
+      }
+      
+      // Try to split by multiple spaces or tabs
+      const values = line.split(/\s{2,}|\t/).map(v => v.trim()).filter(v => v.length > 0);
+      
+      if (values.length >= 3) {
+        // Map values to fabric object
+        const fabric = mapPDFRowToFabric(values, headers);
+        if (fabric && fabric.name) {
+          result.fabrics.push(fabric);
+        }
+      }
+    }
+  } else {
+    // No clear table structure - try to extract data using patterns
+    console.log('📄 No clear table structure found, attempting pattern-based extraction...');
+    
+    // Look for product codes, prices, etc.
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Look for price patterns (e.g., £25.50, $30.00, 25.50)
+      const priceMatch = line.match(/(?:£|\$|€)?\s*(\d+\.?\d*)/);
+      // Look for product codes (alphanumeric codes)
+      const codeMatch = line.match(/\b([A-Z]{2,}\d{2,}|\d{2,}[A-Z]{2,})\b/);
+      // Look for dimensions (e.g., 140cm, 20cm)
+      const dimensionMatch = line.match(/(\d+)\s*cm/gi);
+      
+      if (priceMatch || codeMatch) {
+        const fabric = {
+          name: line.substring(0, 50).trim() || `Product ${result.fabrics.length + 1}`,
+          productId: codeMatch ? codeMatch[1] : `FAB-${Date.now()}-${result.fabrics.length + 1}`,
+          price_per_metre: priceMatch ? parseFloat(priceMatch[1]) : null,
+          patternRepeat_cm: null,
+          usableWidth_cm: dimensionMatch && dimensionMatch.length > 0 ? parseFloat(dimensionMatch[0]) : null,
+          composition: extractComposition(line),
+          pattern: extractPattern(line),
+          availability: 'in_stock',
+          is_featured: false
+        };
+        
+        // Extract care instructions if mentioned
+        const careText = extractCareInstructions(line);
+        if (careText) {
+          result.care_instructions.push({
+            name: careText
+          });
+        }
+        
+        result.fabrics.push(fabric);
+      }
+    }
+  }
+
+  // Remove duplicates based on productId
+  const uniqueFabrics = [];
+  const seenIds = new Set();
+  result.fabrics.forEach(fabric => {
+    if (fabric.productId && !seenIds.has(fabric.productId)) {
+      seenIds.add(fabric.productId);
+      uniqueFabrics.push(fabric);
+    } else if (!fabric.productId) {
+      // Generate unique ID for fabrics without one
+      const uniqueId = `FAB-${Date.now()}-${uniqueFabrics.length + 1}`;
+      fabric.productId = uniqueId;
+      uniqueFabrics.push(fabric);
+    }
+  });
+  result.fabrics = uniqueFabrics;
+
+  // Remove duplicate care instructions
+  const uniqueCareInstructions = [];
+  const seenCare = new Set();
+  result.care_instructions.forEach(ci => {
+    if (!seenCare.has(ci.name.toLowerCase())) {
+      seenCare.add(ci.name.toLowerCase());
+      uniqueCareInstructions.push(ci);
+    }
+  });
+  result.care_instructions = uniqueCareInstructions;
+
+  return result;
+}
+
+/**
+ * Map PDF row values to fabric object based on headers
+ */
+function mapPDFRowToFabric(values, headers) {
+  const fabric = {
+    availability: 'in_stock',
+    is_featured: false
+  };
+
+  headers.forEach((header, index) => {
+    const value = values[index] || '';
+    
+    if (header.includes('name') || header.includes('product') || header.includes('description')) {
+      fabric.name = value || fabric.name || 'Unknown Product';
+    } else if (header.includes('code') || header.includes('id') || header.includes('sku')) {
+      fabric.productId = value || `FAB-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+    } else if (header.includes('price') || header.includes('cost')) {
+      const price = parseFloat(value.replace(/[£$€,]/g, ''));
+      if (!isNaN(price)) {
+        fabric.price_per_metre = price;
+      }
+    } else if (header.includes('width') || header.includes('usable')) {
+      const width = parseFloat(value.replace(/[cm]/gi, ''));
+      if (!isNaN(width)) {
+        fabric.usableWidth_cm = width;
+      }
+    } else if (header.includes('repeat') || header.includes('pattern repeat')) {
+      const repeat = parseFloat(value.replace(/[cm]/gi, ''));
+      if (!isNaN(repeat)) {
+        fabric.patternRepeat_cm = repeat;
+      }
+    } else if (header.includes('composition') || header.includes('material')) {
+      fabric.composition = value;
+    } else if (header.includes('pattern')) {
+      fabric.pattern = value;
+    } else if (header.includes('martindale') || header.includes('durability')) {
+      const martindale = parseInt(value);
+      if (!isNaN(martindale)) {
+        fabric.martindale = martindale;
+      }
+    } else if (header.includes('care') || header.includes('washing')) {
+      // This will be handled separately for care instructions
+    }
+  });
+
+  // Ensure required fields have defaults
+  if (!fabric.name) {
+    fabric.name = values[0] || 'Unknown Product';
+  }
+  if (!fabric.productId) {
+    fabric.productId = `FAB-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+  }
+  if (!fabric.composition) {
+    fabric.composition = extractComposition(values.join(' '));
+  }
+  if (!fabric.pattern) {
+    fabric.pattern = extractPattern(values.join(' ')) || 'Solid';
+  }
+  if (fabric.price_per_metre === undefined || fabric.price_per_metre === null) {
+    // Try to extract price from all values
+    const priceMatch = values.join(' ').match(/(?:£|\$|€)?\s*(\d+\.?\d*)/);
+    if (priceMatch) {
+      fabric.price_per_metre = parseFloat(priceMatch[1]);
+    }
+  }
+
+  return fabric;
+}
+
+/**
+ * Extract composition from text
+ */
+function extractComposition(text) {
+  const compositionPatterns = [
+    /(\d+%?\s*(?:cotton|polyester|linen|silk|wool|viscose|acrylic|nylon|blend))/gi,
+    /(100%\s*(?:cotton|polyester|linen|silk|wool|viscose|acrylic|nylon))/gi
+  ];
+  
+  for (const pattern of compositionPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[0].trim();
+    }
+  }
+  
+  return 'Unknown';
+}
+
+/**
+ * Extract pattern from text
+ */
+function extractPattern(text) {
+  const patternKeywords = ['solid', 'striped', 'floral', 'geometric', 'abstract', 'plain', 'check', 'plaid'];
+  const textLower = text.toLowerCase();
+  
+  for (const keyword of patternKeywords) {
+    if (textLower.includes(keyword)) {
+      return keyword.charAt(0).toUpperCase() + keyword.slice(1);
+    }
+  }
+  
+  return 'Solid';
+}
+
+/**
+ * Extract care instructions from text
+ */
+function extractCareInstructions(text) {
+  const careKeywords = [
+    'machine wash', 'hand wash', 'dry clean', 'do not bleach',
+    'tumble dry', 'line dry', 'iron', 'steam', 'delicate'
+  ];
+  
+  const textLower = text.toLowerCase();
+  for (const keyword of careKeywords) {
+    if (textLower.includes(keyword)) {
+      return keyword.charAt(0).toUpperCase() + keyword.slice(1);
+    }
+  }
+  
+  return null;
+}
+

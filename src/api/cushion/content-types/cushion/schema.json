@@ -25,12 +25,6 @@
       "type": "relation",
       "relation": "oneToOne",
       "target": "api::cushion-type.cushion-type"
-    },
-    "pricing_rules": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::pricing-rule.pricing-rule",
-      "mappedBy": "cushions"
     }
   }
 }

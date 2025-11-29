@@ -89,12 +89,6 @@
       "type": "string",
       "required": true
     },
-    "curtains": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::curtain.curtain",
-      "mappedBy": "fabrics"
-    },
     "blinds": {
       "type": "relation",
       "relation": "manyToMany",
@@ -131,8 +125,16 @@
       "target": "api::colour.colour",
       "mappedBy": "fabrics"
     },
-    "fabric_type": {
-      "type": "string"
+    "is_curtain": {
+      "type": "boolean",
+      "required": true,
+      "default": false
+    },
+    "pricing_rules": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::pricing-rule.pricing-rule",
+      "inversedBy": "fabrics"
     }
   }
 }

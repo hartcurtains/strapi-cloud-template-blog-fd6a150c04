@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import ImageUploader from '../components/ImageUploader';
 import excelHelper from '../utils/excelHelper';
+import pdfHelper from '../utils/pdfHelper';
 import { 
   Scissors, Blinds, Sofa, Tag, Layers, Palette, Settings, PackageSearch, 
   Plus, Download, Upload, FileText, Edit, Trash2, CheckSquare, Loader2, 
-  PackageX, X, FileSpreadsheet, CheckCircle, Lightbulb, Heart 
+  PackageX, X, FileSpreadsheet, CheckCircle, Lightbulb, Heart, File 
 } from 'lucide-react';
+
+// Add spinner animation style
+const spinnerStyle = `
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+`;
 
 export default function ProductManagementPage() {
   const [activeTab, setActiveTab] = useState('fabrics');
@@ -24,6 +33,9 @@ export default function ProductManagementPage() {
   const [showTemplateDropdown, setShowTemplateDropdown] = useState(false);
   const [importPreviewModal, setImportPreviewModal] = useState(false);
   const [importValidation, setImportValidation] = useState(null);
+  const [importMode, setImportMode] = useState('file'); // 'file' or 'json'
+  const [jsonInput, setJsonInput] = useState('');
+  const [jsonError, setJsonError] = useState(null);
 
   // Product types configuration
   const productTypes = {
@@ -1115,13 +1127,84 @@ export default function ProductManagementPage() {
 
   const handleImportFile = async (file) => {
     try {
-      // Try multi-sheet import first
-      const data = await excelHelper.importFromMultiSheetExcel(file);
+      setImporting(true);
+      
+      // Check file type
+      const fileName = file.name.toLowerCase();
+      const isPDF = fileName.endsWith('.pdf') || file.type === 'application/pdf';
+      const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || 
+                     file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+                     file.type === 'application/vnd.ms-excel';
+
+      let data;
+      if (isPDF) {
+        // Parse PDF file (client-side)
+        console.log('📄 Parsing PDF file...');
+        data = await pdfHelper.parsePDF(file);
+        console.log('📄 PDF parsed successfully:', data);
+      } else if (isExcel) {
+        // Parse Excel file
+        console.log('📊 Parsing Excel file...');
+        data = await excelHelper.importFromMultiSheetExcel(file);
+        console.log('📊 Excel parsed successfully:', data);
+      } else {
+        throw new Error('Unsupported file type. Please upload a PDF or Excel file.');
+      }
+
       setImportFile(file);
       setImportPreview(data);
+      setImporting(false);
     } catch (error) {
       console.error('Error importing file:', error);
-      alert('Failed to import Excel file. Please check the format.');
+      setImporting(false);
+      alert(`Failed to import file: ${error.message || 'Please check the file format.'}`);
+    }
+  };
+
+  const handlePasteJSON = () => {
+    try {
+      setJsonError(null);
+      setImporting(true);
+
+      if (!jsonInput || jsonInput.trim() === '') {
+        throw new Error('Please paste JSON data');
+      }
+
+      // Parse JSON string
+      let data;
+      try {
+        data = JSON.parse(jsonInput.trim());
+      } catch (parseError) {
+        throw new Error(`Invalid JSON: ${parseError.message}`);
+      }
+
+      // Validate structure - should be an object (multi-sheet format) or array (single-sheet format)
+      if (typeof data !== 'object' || data === null) {
+        throw new Error('JSON must be an object or array');
+      }
+
+      // If it's an array, wrap it in an object with the current tab name
+      if (Array.isArray(data)) {
+        const wrapped = {};
+        wrapped[activeTab] = data;
+        data = wrapped;
+      }
+
+      // Validate that it has at least one valid sheet
+      const validSheets = Object.keys(data).filter(key => Array.isArray(data[key]));
+      if (validSheets.length === 0) {
+        throw new Error('JSON must contain at least one array of items');
+      }
+
+      console.log('📋 JSON parsed successfully:', Object.keys(data).map(key => `${key}: ${data[key].length} items`).join(', '));
+
+      setImportPreview(data);
+      setImportFile(null); // Clear file since we're using JSON
+      setImporting(false);
+    } catch (error) {
+      console.error('Error parsing JSON:', error);
+      setJsonError(error.message);
+      setImporting(false);
     }
   };
 
@@ -1364,6 +1447,9 @@ export default function ProductManagementPage() {
       setImportFile(null);
       setImportPreview(null);
       setImportValidation(null);
+      setImportMode('file');
+      setJsonInput('');
+      setJsonError(null);
       
     } catch (error) {
       console.error('Error during bulk import:', error);
@@ -1377,10 +1463,15 @@ export default function ProductManagementPage() {
     setIsImportModalOpen(false);
     setImportFile(null);
     setImportPreview(null);
+    setImportMode('file');
+    setJsonInput('');
+    setJsonError(null);
   };
 
   return (
-    <div style={{
+    <>
+      <style>{spinnerStyle}</style>
+      <div style={{
       padding: '32px',
       background: '#ffffff',
       minHeight: '100vh',
@@ -1661,7 +1752,7 @@ export default function ProductManagementPage() {
               }}
             >
               <Upload size={16} />
-              Import from Excel
+              Import Products
             </button>
             
             <div style={{ position: 'relative', display: 'inline-block' }} data-template-dropdown>
@@ -2537,7 +2628,7 @@ export default function ProductManagementPage() {
                 gap: '8px'
               }}>
                 <Upload size={24} />
-                Import Products from Excel
+                Import Products
               </h3>
                 <button
                   onClick={closeImportModal}
@@ -2555,6 +2646,69 @@ export default function ProductManagementPage() {
                 >
                   <X size={24} />
                 </button>
+            </div>
+
+            {/* Import Mode Tabs */}
+            <div style={{
+              display: 'flex',
+              gap: '0',
+              marginBottom: '24px',
+              borderBottom: '2px solid #e5e7eb',
+              background: '#f9fafb',
+              borderRadius: '8px 8px 0 0',
+              padding: '4px'
+            }}>
+              <button
+                onClick={() => {
+                  setImportMode('file');
+                  setJsonInput('');
+                  setJsonError(null);
+                  setImportPreview(null);
+                }}
+                style={{
+                  background: importMode === 'file' ? 'white' : 'transparent',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '12px 24px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: importMode === 'file' ? '#8b5cf6' : '#6b7280',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: importMode === 'file' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Upload size={16} />
+                Upload File
+              </button>
+              <button
+                onClick={() => {
+                  setImportMode('json');
+                  setImportFile(null);
+                  setImportPreview(null);
+                }}
+                style={{
+                  background: importMode === 'json' ? 'white' : 'transparent',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '12px 24px',
+                  fontSize: '14px',
+                  fontWeight: '600',
+                  color: importMode === 'json' ? '#8b5cf6' : '#6b7280',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                  boxShadow: importMode === 'json' ? '0 2px 4px rgba(0,0,0,0.1)' : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <FileText size={16} />
+                Paste JSON
+              </button>
             </div>
 
             {/* Import Instructions */}
@@ -2578,32 +2732,160 @@ export default function ProductManagementPage() {
                   fontWeight: '600',
                   color: '#0c4a6e'
                 }}>
-                  How to Import Products
+                  {importMode === 'file' ? 'How to Import Products' : 'How to Paste JSON'}
                 </h4>
               </div>
               <div style={{ fontSize: '13px', color: '#0c4a6e', lineHeight: '1.5' }}>
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Step 1:</strong> Download a template using the "Download Template" button above
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Step 2:</strong> Fill the template with your product data (brand names, fabric names, etc.)
-                </div>
-                <div style={{ marginBottom: '8px' }}>
-                  <strong>Step 3:</strong> Upload your filled template here
-                </div>
-                <div style={{ 
-                  background: '#dbeafe', 
-                  padding: '8px', 
-                  borderRadius: '4px',
-                  fontSize: '12px',
-                  marginTop: '8px'
-                }}>
-                  💡 <strong>Tip:</strong> You can export existing products first to see the exact format, then modify and re-import
-                </div>
+                {importMode === 'file' ? (
+                  <>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Step 1:</strong> Download a template using the "Download Template" button above
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Step 2:</strong> Fill the template with your product data (brand names, fabric names, etc.)
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Step 3:</strong> Upload your filled template here
+                    </div>
+                    <div style={{ 
+                      background: '#dbeafe', 
+                      padding: '8px', 
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      marginTop: '8px'
+                    }}>
+                      💡 <strong>Tip:</strong> You can export existing products first to see the exact format, then modify and re-import
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Step 1:</strong> Convert your PDF to JSON using the script: <code>node scripts/pdf-to-json.js</code>
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Step 2:</strong> Copy the JSON output from the script
+                    </div>
+                    <div style={{ marginBottom: '8px' }}>
+                      <strong>Step 3:</strong> Paste the JSON data below and click "Parse JSON"
+                    </div>
+                    <div style={{ 
+                      background: '#dbeafe', 
+                      padding: '8px', 
+                      borderRadius: '4px',
+                      fontSize: '12px',
+                      marginTop: '8px'
+                    }}>
+                      💡 <strong>Tip:</strong> JSON format should match Excel import format: <code>{'{"fabrics": [...], "care_instructions": [...]}'}</code>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
             {!importPreview ? (
+              importMode === 'json' ? (
+                <div>
+                  <div style={{
+                    border: '2px dashed #d1d5db',
+                    borderRadius: '12px',
+                    padding: '24px',
+                    background: '#f9fafb',
+                    marginBottom: '16px'
+                  }}>
+                    <label style={{
+                      display: 'block',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      color: '#374151',
+                      marginBottom: '8px'
+                    }}>
+                      Paste JSON Data
+                    </label>
+                    <textarea
+                      value={jsonInput}
+                      onChange={(e) => {
+                        setJsonInput(e.target.value);
+                        setJsonError(null);
+                      }}
+                      placeholder='Paste your JSON data here...'
+                      style={{
+                        width: '100%',
+                        minHeight: '300px',
+                        padding: '12px',
+                        border: jsonError ? '2px solid #ef4444' : '1px solid #d1d5db',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontFamily: 'monospace',
+                        resize: 'vertical',
+                        background: '#ffffff'
+                      }}
+                    />
+                    {jsonError && (
+                      <div style={{
+                        marginTop: '8px',
+                        padding: '8px',
+                        background: '#fee2e2',
+                        border: '1px solid #ef4444',
+                        borderRadius: '4px',
+                        color: '#991b1b',
+                        fontSize: '12px'
+                      }}>
+                        ❌ {jsonError}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{
+                    display: 'flex',
+                    gap: '12px',
+                    justifyContent: 'flex-end'
+                  }}>
+                    <button
+                      onClick={closeImportModal}
+                      style={{
+                        background: '#6b7280',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '12px 24px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handlePasteJSON}
+                      disabled={importing || !jsonInput.trim()}
+                      style={{
+                        background: importing || !jsonInput.trim() ? '#9ca3af' : '#059669',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '12px',
+                        padding: '12px 24px',
+                        fontSize: '14px',
+                        fontWeight: '600',
+                        cursor: importing || !jsonInput.trim() ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px'
+                      }}
+                    >
+                      {importing ? (
+                        <>
+                          <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                          Parsing...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle size={16} />
+                          Parse JSON
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
               <div>
                 <div style={{
                   border: '2px dashed #d1d5db',
@@ -2617,33 +2899,49 @@ export default function ProductManagementPage() {
                     <FileSpreadsheet size={32} />
                   </div>
                   <div style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
-                    Select Excel file to import
+                    Select file to import
                   </div>
                   <div style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
-                    Supports .xlsx files with product data
+                    Supports .xlsx, .xls, and .pdf files with product data
                   </div>
                   <input
                     type="file"
-                    accept=".xlsx,.xls"
-                    onChange={(e) => handleImportFile(e.target.files[0])}
+                    accept=".xlsx,.xls,.pdf"
+                    onChange={(e) => {
+                      if (e.target.files[0]) {
+                        handleImportFile(e.target.files[0]);
+                      }
+                    }}
+                    disabled={importing}
                     style={{ display: 'none' }}
-                    id="excel-import"
+                    id="file-import"
                   />
                   <label
-                    htmlFor="excel-import"
+                    htmlFor="file-import"
                     style={{
-                      background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
+                      background: importing ? '#9ca3af' : 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)',
                       color: 'white',
                       border: 'none',
                       borderRadius: '12px',
                       padding: '12px 24px',
                       fontSize: '14px',
                       fontWeight: '600',
-                      cursor: 'pointer',
-                      display: 'inline-block'
+                      cursor: importing ? 'not-allowed' : 'pointer',
+                      display: 'inline-block',
+                      opacity: importing ? 0.6 : 1
                     }}
                   >
-                    Choose Excel File
+                    {importing ? (
+                      <>
+                        <Loader2 size={16} style={{ display: 'inline', marginRight: '8px', animation: 'spin 1s linear infinite' }} />
+                        Parsing...
+                      </>
+                    ) : (
+                      <>
+                        <File size={16} style={{ display: 'inline', marginRight: '8px' }} />
+                        Choose File (Excel or PDF)
+                      </>
+                    )}
                   </label>
                 </div>
 
@@ -2658,13 +2956,16 @@ export default function ProductManagementPage() {
                     Import Tips:
                   </div>
                   <ul style={{ fontSize: '12px', color: '#92400e', margin: '0', paddingLeft: '16px' }}>
-                    <li>Download the template first to see the correct format</li>
-                    <li>Ensure all required fields are filled</li>
+                    <li><strong>For Excel:</strong> Download the template first to see the correct format</li>
+                    <li><strong>For PDF:</strong> Ensure the PDF contains structured tables with product data</li>
+                    <li>Ensure all required fields are filled (name, productId, price, etc.)</li>
                     <li>Use proper data types (numbers for prices, etc.)</li>
                     <li>Check availability values: in_stock, out_of_stock, discontinued</li>
+                    <li>PDF parsing will attempt to extract data from tables automatically</li>
                   </ul>
                 </div>
               </div>
+              )
             ) : (
               <div>
                 <div style={{
@@ -3112,5 +3413,6 @@ export default function ProductManagementPage() {
         </div>
       )}
     </div>
+    </>
   );
 }

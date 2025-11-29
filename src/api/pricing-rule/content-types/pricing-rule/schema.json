@@ -28,23 +28,11 @@
         "cushion"
       ]
     },
-    "curtains": {
+    "fabrics": {
       "type": "relation",
       "relation": "manyToMany",
-      "target": "api::curtain.curtain",
-      "inversedBy": "pricing_rules"
-    },
-    "blinds": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::blind.blind",
-      "inversedBy": "pricing_rules"
-    },
-    "cushions": {
-      "type": "relation",
-      "relation": "manyToMany",
-      "target": "api::cushion.cushion",
-      "inversedBy": "pricing_rules"
+      "target": "api::fabric.fabric",
+      "mappedBy": "pricing_rules"
     }
   }
 }

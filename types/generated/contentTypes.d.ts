@@ -469,10 +469,6 @@ export interface ApiBlindBlind extends Struct.CollectionTypeSchema {
       'api::mechanisation.mechanisation'
     >;
     name: Schema.Attribute.String & Schema.Attribute.Required;
-    pricing_rules: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::pricing-rule.pricing-rule'
-    >;
     publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -524,6 +520,7 @@ export interface ApiCareInstructionCareInstruction
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     fabrics: Schema.Attribute.Relation<'manyToMany', 'api::fabric.fabric'>;
+    icon: Schema.Attribute.Media<'images' | 'files'>;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -612,7 +609,6 @@ export interface ApiCurtainTypeCurtainType extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    curtains: Schema.Attribute.Relation<'manyToMany', 'api::curtain.curtain'>;
     fullness_multiplier: Schema.Attribute.Decimal;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -624,43 +620,6 @@ export interface ApiCurtainTypeCurtainType extends Struct.CollectionTypeSchema {
     price: Schema.Attribute.Decimal;
     publishedAt: Schema.Attribute.DateTime;
     thumbnail: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-  };
-}
-
-export interface ApiCurtainCurtain extends Struct.CollectionTypeSchema {
-  collectionName: 'curtains';
-  info: {
-    displayName: 'Curtain';
-    pluralName: 'curtains';
-    singularName: 'curtain';
-  };
-  options: {
-    draftAndPublish: true;
-  };
-  attributes: {
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    curtain_types: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::curtain-type.curtain-type'
-    >;
-    fabrics: Schema.Attribute.Relation<'manyToMany', 'api::fabric.fabric'>;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<
-      'oneToMany',
-      'api::curtain.curtain'
-    > &
-      Schema.Attribute.Private;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
-    pricing_rules: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::pricing-rule.pricing-rule'
-    >;
-    publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -724,10 +683,6 @@ export interface ApiCushionCushion extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
-    pricing_rules: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::pricing-rule.pricing-rule'
-    >;
     publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -761,15 +716,16 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    curtains: Schema.Attribute.Relation<'manyToMany', 'api::curtain.curtain'>;
     cushions: Schema.Attribute.Relation<'manyToMany', 'api::cushion.cushion'>;
     description: Schema.Attribute.Text;
-    fabric_type: Schema.Attribute.String;
     featured_until: Schema.Attribute.DateTime;
     images: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',
       true
     >;
+    is_curtain: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<false>;
     is_featured: Schema.Attribute.Boolean &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<false>;
@@ -785,6 +741,10 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
     pattern: Schema.Attribute.String & Schema.Attribute.Required;
     patternRepeat_cm: Schema.Attribute.Decimal & Schema.Attribute.Required;
     price_per_metre: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    pricing_rules: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::pricing-rule.pricing-rule'
+    >;
     productId: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
     slug: Schema.Attribute.UID<'productId'> & Schema.Attribute.Required;
@@ -947,12 +907,10 @@ export interface ApiPricingRulePricingRule extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
-    blinds: Schema.Attribute.Relation<'manyToMany', 'api::blind.blind'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    curtains: Schema.Attribute.Relation<'manyToMany', 'api::curtain.curtain'>;
-    cushions: Schema.Attribute.Relation<'manyToMany', 'api::cushion.cushion'>;
+    fabrics: Schema.Attribute.Relation<'manyToMany', 'api::fabric.fabric'>;
     formula: Schema.Attribute.JSON & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -1521,7 +1479,6 @@ declare module '@strapi/strapi' {
       'api::colour.colour': ApiColourColour;
       'api::curtain-pole.curtain-pole': ApiCurtainPoleCurtainPole;
       'api::curtain-type.curtain-type': ApiCurtainTypeCurtainType;
-      'api::curtain.curtain': ApiCurtainCurtain;
       'api::cushion-type.cushion-type': ApiCushionTypeCushionType;
       'api::cushion.cushion': ApiCushionCushion;
       'api::fabric.fabric': ApiFabricFabric;

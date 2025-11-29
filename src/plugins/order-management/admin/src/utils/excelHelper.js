@@ -1406,7 +1406,7 @@ export const excelHelper = {
     const info = [];
     
     const productSchemas = {
-      fabrics: ['name', 'brand_name', 'colour', 'pattern', 'composition', 'price_per_metre', 'patternRepeat_cm', 'usableWidth_cm', 'martindale', 'availability'],
+      fabrics: ['name', 'brand_name', 'composition', 'price_per_metre'],
       curtains: ['name'],
       blinds: ['name'],
       cushions: ['name'],
@@ -1769,6 +1769,33 @@ export const excelHelper = {
               cushion_names: row.cushion_names?.toString().trim(),
               care_instruction_names: row.care_instruction_names?.toString().trim()
             };
+
+            const requiredDefaults = {
+              colour: 'Unknown',
+              pattern: 'Solid',
+              patternRepeat_cm: 0,
+              usableWidth_cm: 0,
+              availability: 'in_stock'
+            };
+
+            Object.entries(requiredDefaults).forEach(([key, value]) => {
+              if (
+                transformedFabric[key] === undefined ||
+                transformedFabric[key] === null ||
+                transformedFabric[key] === '' ||
+                (typeof transformedFabric[key] === 'number' && Number.isNaN(transformedFabric[key]))
+              ) {
+                transformedFabric[key] = value;
+              }
+            });
+
+            if (
+              transformedFabric.martindale === undefined ||
+              transformedFabric.martindale === null ||
+              Number.isNaN(transformedFabric.martindale)
+            ) {
+              transformedFabric.martindale = null;
+            }
 
             console.log(`🔗 Frontend: Passing relation names for fabric "${row.name}":`, {
               brand_name: transformedFabric.brand_name,

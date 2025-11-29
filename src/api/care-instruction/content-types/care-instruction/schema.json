@@ -15,6 +15,15 @@
       "type": "string",
       "required": true
     },
+    "icon": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": [
+        "images",
+        "files"
+      ]
+    },
     "fabrics": {
       "type": "relation",
       "relation": "manyToMany",
