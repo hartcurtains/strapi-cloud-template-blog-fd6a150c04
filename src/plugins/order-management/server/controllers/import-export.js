@@ -12,13 +12,15 @@ module.exports = {
       const TIMESTAMP = Date.now();
       console.log('\n\n');
       console.log('═══════════════════════════════════════════════════════════');
-      console.log('🔥🔥🔥 NEW CODE VERSION 2.0 - TIMESTAMP:', TIMESTAMP, '🔥🔥🔥');
-      console.log('🔥🔥🔥 BRAND & CARE INSTRUCTION FIX - FORCE RELOAD 🔥🔥🔥');
+      console.log('🔥🔥🔥 [CLOUD] NEW CODE VERSION 3.0 - TIMESTAMP:', TIMESTAMP, '🔥🔥🔥');
+      console.log('🔥🔥🔥 [CLOUD] ENHANCED AUTO-CREATION WITH LOGGING 🔥🔥🔥');
       console.log('═══════════════════════════════════════════════════════════');
-      console.log('🚀 NEW UPSERT LOGIC - Starting server-side bulk import...');
-      console.log('🎯 NEW RESULT STRUCTURE: {created, updated, skipped, failed}');
-      console.log('📦 Dataset keys:', transformedDataset ? Object.keys(transformedDataset) : 'NO DATA');
-      console.log('📦 Fabrics count:', transformedDataset?.fabrics?.length || 0);
+      console.log('🚀 [CLOUD] Starting server-side bulk import...');
+      console.log('🎯 [CLOUD] NEW RESULT STRUCTURE: {created, updated, skipped, failed}');
+      console.log('📦 [CLOUD] Dataset keys:', transformedDataset ? Object.keys(transformedDataset) : 'NO DATA');
+      console.log('📦 [CLOUD] Fabrics count:', transformedDataset?.fabrics?.length || 0);
+      console.log('🔧 [CLOUD] Strapi instance available:', !!strapi);
+      console.log('🔧 [CLOUD] EntityService available:', !!strapi?.entityService);
       console.log('═══════════════════════════════════════════════════════════');
       console.log('\n\n');
       
@@ -43,6 +45,14 @@ module.exports = {
         care_instructions: 'api::care-instruction.care-instruction'
       };
 
+      // Track auto-creation stats
+      let brandsCreated = 0;
+      let brandsFailed = 0;
+      let careInstructionsCreated = 0;
+      let careInstructionsFailed = 0;
+      let brandNames = null;
+      let careInstructionNames = null;
+
       // Phase 1: Auto-create missing brands
       const autoCreatedBrands = new Map();
       if (transformedDataset.fabrics) {
@@ -50,7 +60,7 @@ module.exports = {
         console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
         
         // Collect all unique brand names from fabrics
-        const brandNames = new Set();
+        brandNames = new Set();
         transformedDataset.fabrics.forEach(fabric => {
           if (fabric.brand_name) {
             brandNames.add(fabric.brand_name.trim());
@@ -60,17 +70,25 @@ module.exports = {
         
         // Check which brands exist in database
         console.log('🔧 [CLOUD] Checking existing brands in database...');
-        const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
-          populate: '*'
-        });
-        const existingBrandNames = new Set(existingBrands.map(b => b.name.toLowerCase().trim()));
-        
-        // Add existing brands to the map for quick lookup
-        existingBrands.forEach(brand => {
-          const brandNameLower = brand.name.toLowerCase().trim();
-          autoCreatedBrands.set(brandNameLower, brand.id);
-        });
-        console.log(`📋 Phase 1: Populated brand map with ${existingBrands.length} existing brands. Map now has ${autoCreatedBrands.size} entries.`);
+        let existingBrands = [];
+        let existingBrandNames = new Set();
+        try {
+          existingBrands = await strapi.entityService.findMany('api::brand.brand', {
+            populate: '*'
+          });
+          existingBrandNames = new Set(existingBrands.map(b => b.name.toLowerCase().trim()));
+          
+          // Add existing brands to the map for quick lookup
+          existingBrands.forEach(brand => {
+            const brandNameLower = brand.name.toLowerCase().trim();
+            autoCreatedBrands.set(brandNameLower, brand.id);
+          });
+          console.log(`📋 [CLOUD] Phase 1: Populated brand map with ${existingBrands.length} existing brands. Map now has ${autoCreatedBrands.size} entries.`);
+        } catch (error) {
+          console.warn(`⚠️ [CLOUD] Error fetching existing brands (will continue with auto-creation):`, error.message);
+          console.warn(`⚠️ [CLOUD] This is OK - we'll create all brands as new if they don't exist`);
+        }
+        console.log(`📋 [CLOUD] Phase 1: About to auto-create ${brandNames.size - existingBrandNames.size} missing brands`);
         
         // Auto-create missing brands
         for (const brandName of brandNames) {
@@ -89,8 +107,10 @@ module.exports = {
                 throw new Error(`Brand creation returned invalid result: ${JSON.stringify(createdBrand)}`);
               }
               autoCreatedBrands.set(brandNameLower, createdBrand.id);
+              brandsCreated++;
               console.log(`✅ [CLOUD] Auto-created brand: ${brandName} (ID: ${createdBrand.id})`);
             } catch (error) {
+              brandsFailed++;
               const errorDetails = {
                 message: error.message,
                 stack: error.stack,
@@ -111,6 +131,7 @@ module.exports = {
             }
           }
         }
+        console.log(`📊 [CLOUD] Phase 1 Summary: ${brandsCreated} brands created, ${brandsFailed} failed, ${autoCreatedBrands.size} total in map`);
       }
 
       // Phase 2: Auto-create missing care instructions
@@ -120,7 +141,7 @@ module.exports = {
         console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
         
         // Collect all unique care instruction names from fabrics
-        const careInstructionNames = new Set();
+        careInstructionNames = new Set();
         transformedDataset.fabrics.forEach(fabric => {
           if (fabric.care_instruction_names) {
             // Split comma-separated names
@@ -142,17 +163,25 @@ module.exports = {
         
         // Check which care instructions exist in database
         console.log('🔧 [CLOUD] Checking existing care instructions in database...');
-        const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
-          populate: '*'
-        });
-        const existingCareInstructionNames = new Set(existingCareInstructions.map(ci => ci.name.toLowerCase().trim()));
-        
-        // Add existing care instructions to the map for quick lookup
-        existingCareInstructions.forEach(ci => {
-          const careNameLower = ci.name.toLowerCase().trim();
-          autoCreatedCareInstructions.set(careNameLower, ci.id);
-        });
-        console.log(`📋 Phase 2: Populated care instruction map with ${existingCareInstructions.length} existing care instructions. Map now has ${autoCreatedCareInstructions.size} entries.`);
+        let existingCareInstructions = [];
+        let existingCareInstructionNames = new Set();
+        try {
+          existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction', {
+            populate: '*'
+          });
+          existingCareInstructionNames = new Set(existingCareInstructions.map(ci => ci.name.toLowerCase().trim()));
+          
+          // Add existing care instructions to the map for quick lookup
+          existingCareInstructions.forEach(ci => {
+            const careNameLower = ci.name.toLowerCase().trim();
+            autoCreatedCareInstructions.set(careNameLower, ci.id);
+          });
+          console.log(`📋 [CLOUD] Phase 2: Populated care instruction map with ${existingCareInstructions.length} existing care instructions. Map now has ${autoCreatedCareInstructions.size} entries.`);
+        } catch (error) {
+          console.warn(`⚠️ [CLOUD] Error fetching existing care instructions (will continue with auto-creation):`, error.message);
+          console.warn(`⚠️ [CLOUD] This is OK - we'll create all care instructions as new if they don't exist`);
+        }
+        console.log(`📋 [CLOUD] Phase 2: About to auto-create ${careInstructionNames.size - existingCareInstructionNames.size} missing care instructions`);
         
         // Auto-create missing care instructions
         for (const careName of careInstructionNames) {
@@ -171,8 +200,10 @@ module.exports = {
                 throw new Error(`Care instruction creation returned invalid result: ${JSON.stringify(createdCare)}`);
               }
               autoCreatedCareInstructions.set(careNameLower, createdCare.id);
+              careInstructionsCreated++;
               console.log(`✅ [CLOUD] Auto-created care instruction: ${careName} (ID: ${createdCare.id})`);
             } catch (error) {
+              careInstructionsFailed++;
               const errorDetails = {
                 message: error.message,
                 stack: error.stack,
@@ -193,6 +224,9 @@ module.exports = {
             }
           }
         }
+        console.log(`📊 [CLOUD] Phase 2 Summary: ${careInstructionsCreated} care instructions created, ${careInstructionsFailed} failed, ${autoCreatedCareInstructions.size} total in map`);
+      } else {
+        console.log('⚠️ [CLOUD] Phase 2: Skipped - no fabrics in dataset');
       }
 
       // Import order: brands, linings, trimmings, mechanisations, care_instructions first, then fabrics, then dependent products
@@ -591,6 +625,25 @@ module.exports = {
         }
       }
 
+      // Add auto-creation summary to results
+      const autoCreateSummary = {
+        brandsCreated: brandsCreated || 0,
+        brandsFailed: brandsFailed || 0,
+        careInstructionsCreated: careInstructionsCreated || 0,
+        careInstructionsFailed: careInstructionsFailed || 0,
+        totalBrandsInMap: autoCreatedBrands.size,
+        totalCareInstructionsInMap: autoCreatedCareInstructions.size
+      };
+      results.autoCreationSummary = autoCreateSummary;
+      
+      console.log('═══════════════════════════════════════════════════════════');
+      console.log('📊 [CLOUD] AUTO-CREATION SUMMARY:');
+      console.log(`   Brands: ${autoCreateSummary.brandsCreated} created, ${autoCreateSummary.brandsFailed} failed`);
+      console.log(`   Care Instructions: ${autoCreateSummary.careInstructionsCreated} created, ${autoCreateSummary.careInstructionsFailed} failed`);
+      console.log(`   Total brands in map: ${autoCreateSummary.totalBrandsInMap}`);
+      console.log(`   Total care instructions in map: ${autoCreateSummary.totalCareInstructionsInMap}`);
+      console.log('═══════════════════════════════════════════════════════════');
+      
       console.log('📤 [CLOUD] Server-side bulk import completed:', results);
       console.log('🎯 [CLOUD] RETURNING NEW RESULT STRUCTURE:', {
         created: results.created,
@@ -598,6 +651,7 @@ module.exports = {
         skipped: results.skipped,
         failed: results.failed,
         errorCount: results.errors.length,
+        autoCreationSummary: autoCreateSummary,
         errors: results.errors.slice(0, 5) // Log first 5 errors
       });
       
@@ -611,6 +665,16 @@ module.exports = {
       if (autoCreateErrors.length > 0) {
         console.warn(`⚠️ [CLOUD] ${autoCreateErrors.length} auto-creation errors occurred. This may affect relations.`);
         console.warn(`⚠️ [CLOUD] Auto-creation errors:`, autoCreateErrors.map(e => e.message).join(', '));
+      }
+      
+      // Warn if auto-creation didn't run
+      if (autoCreateSummary.brandsCreated === 0 && autoCreateSummary.brandsFailed === 0 && brandNames && brandNames.size > 0) {
+        console.error(`❌ [CLOUD] WARNING: No brands were created or failed! This suggests the auto-creation loop did not run.`);
+        console.error(`❌ [CLOUD] Brand names found: ${Array.from(brandNames).join(', ')}`);
+      }
+      if (autoCreateSummary.careInstructionsCreated === 0 && autoCreateSummary.careInstructionsFailed === 0 && careInstructionNames && careInstructionNames.size > 0) {
+        console.error(`❌ [CLOUD] WARNING: No care instructions were created or failed! This suggests the auto-creation loop did not run.`);
+        console.error(`❌ [CLOUD] Care instruction names found: ${Array.from(careInstructionNames).join(', ')}`);
       }
       
       ctx.body = results;
