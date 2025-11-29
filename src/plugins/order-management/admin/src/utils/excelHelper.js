@@ -2002,7 +2002,35 @@ export const excelHelper = {
         console.error('❌ Failed to parse import response:', responseText);
         throw new Error('Server returned invalid JSON response. Check server logs for details.');
       }
-      console.log('📤 Server-side bulk import completed:', results);
+      
+      console.log('📤 [FRONTEND] Server-side bulk import completed:', results);
+      
+      // Log auto-creation summary if available
+      if (results.autoCreationSummary) {
+        console.log('📊 [FRONTEND] AUTO-CREATION SUMMARY FROM BACKEND:');
+        console.log(`   Brands: ${results.autoCreationSummary.brandsCreated} created, ${results.autoCreationSummary.brandsFailed} failed`);
+        console.log(`   Care Instructions: ${results.autoCreationSummary.careInstructionsCreated} created, ${results.autoCreationSummary.careInstructionsFailed} failed`);
+        console.log(`   Total brands in map: ${results.autoCreationSummary.totalBrandsInMap}`);
+        console.log(`   Total care instructions in map: ${results.autoCreationSummary.totalCareInstructionsInMap}`);
+        
+        if (results.autoCreationSummary.brandsCreated === 0 && results.autoCreationSummary.brandsFailed === 0) {
+          console.warn('⚠️ [FRONTEND] WARNING: No brands were created or failed! Check backend logs.');
+        }
+        if (results.autoCreationSummary.careInstructionsCreated === 0 && results.autoCreationSummary.careInstructionsFailed === 0) {
+          console.warn('⚠️ [FRONTEND] WARNING: No care instructions were created or failed! Check backend logs.');
+        }
+      } else {
+        console.warn('⚠️ [FRONTEND] WARNING: No autoCreationSummary in response! Backend code may not be deployed yet.');
+      }
+      
+      // Log errors related to auto-creation
+      if (results.errors && results.errors.length > 0) {
+        const autoCreateErrors = results.errors.filter(e => e.type === 'auto_create_error' || e.type === 'missing_relation');
+        if (autoCreateErrors.length > 0) {
+          console.error('❌ [FRONTEND] Auto-creation errors:', autoCreateErrors);
+        }
+      }
+      
       return results;
     } catch (error) {
       console.error('❌ Server-side bulk import error:', error);

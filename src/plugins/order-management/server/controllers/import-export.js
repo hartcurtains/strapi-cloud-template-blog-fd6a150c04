@@ -17,8 +17,22 @@ module.exports = {
       console.log('═══════════════════════════════════════════════════════════');
       console.log('🚀 [CLOUD] Starting server-side bulk import...');
       console.log('🎯 [CLOUD] NEW RESULT STRUCTURE: {created, updated, skipped, failed}');
+      console.log('📦 [CLOUD] Request body keys:', ctx.request.body ? Object.keys(ctx.request.body) : 'NO BODY');
       console.log('📦 [CLOUD] Dataset keys:', transformedDataset ? Object.keys(transformedDataset) : 'NO DATA');
       console.log('📦 [CLOUD] Fabrics count:', transformedDataset?.fabrics?.length || 0);
+      
+      // Log sample fabric data to verify structure
+      if (transformedDataset?.fabrics && transformedDataset.fabrics.length > 0) {
+        const sampleFabric = transformedDataset.fabrics[0];
+        console.log('📦 [CLOUD] Sample fabric data:', {
+          name: sampleFabric.name,
+          brand_name: sampleFabric.brand_name,
+          care_instruction_names: sampleFabric.care_instruction_names,
+          hasBrand: !!sampleFabric.brand,
+          hasCareInstructions: !!sampleFabric.care_instructions
+        });
+      }
+      
       console.log('🔧 [CLOUD] Strapi instance available:', !!strapi);
       console.log('🔧 [CLOUD] EntityService available:', !!strapi?.entityService);
       console.log('═══════════════════════════════════════════════════════════');
