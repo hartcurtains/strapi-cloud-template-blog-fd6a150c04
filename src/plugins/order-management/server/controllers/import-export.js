@@ -73,14 +73,32 @@ module.exports = {
         console.log('🔧 [CLOUD] Phase 1: Auto-creating missing brands...');
         console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
         
+        // Validate fabrics data structure
+        if (!Array.isArray(transformedDataset.fabrics)) {
+          throw new Error('Invalid data structure: fabrics must be an array');
+        }
+        
         // Collect all unique brand names from fabrics
         brandNames = new Set();
-        transformedDataset.fabrics.forEach(fabric => {
+        transformedDataset.fabrics.forEach((fabric, index) => {
+          if (!fabric || typeof fabric !== 'object') {
+            console.warn(`⚠️ [CLOUD] Invalid fabric at index ${index}:`, fabric);
+            return;
+          }
           if (fabric.brand_name) {
-            brandNames.add(fabric.brand_name.trim());
+            const brandName = fabric.brand_name.toString().trim();
+            if (brandName) {
+              brandNames.add(brandName);
+            }
           }
         });
         console.log(`📋 [CLOUD] Phase 1: Found ${brandNames.size} unique brand names: ${Array.from(brandNames).slice(0, 5).join(', ')}${brandNames.size > 5 ? '...' : ''}`);
+        
+        // Validate that we found brand names if fabrics exist
+        if (transformedDataset.fabrics.length > 0 && brandNames.size === 0) {
+          console.warn(`⚠️ [CLOUD] WARNING: Found ${transformedDataset.fabrics.length} fabrics but no brand_name fields. This may indicate a data structure issue.`);
+          console.warn(`⚠️ [CLOUD] Sample fabric structure:`, JSON.stringify(transformedDataset.fabrics[0], null, 2));
+        }
         
         // Check which brands exist in database
         console.log('🔧 [CLOUD] Checking existing brands in database...');
@@ -156,13 +174,22 @@ module.exports = {
         
         // Collect all unique care instruction names from fabrics
         careInstructionNames = new Set();
-        transformedDataset.fabrics.forEach(fabric => {
+        transformedDataset.fabrics.forEach((fabric, index) => {
+          if (!fabric || typeof fabric !== 'object') {
+            console.warn(`⚠️ [CLOUD] Invalid fabric at index ${index} during care instruction collection:`, fabric);
+            return;
+          }
           if (fabric.care_instruction_names) {
             // Split comma-separated names
-            const names = fabric.care_instruction_names.split(',').map(n => n.trim()).filter(n => n);
+            const names = fabric.care_instruction_names.toString().split(',').map(n => n.trim()).filter(n => n);
             names.forEach(name => careInstructionNames.add(name));
           }
         });
+        
+        // Validate that we found care instruction names if fabrics exist
+        if (transformedDataset.fabrics.length > 0 && careInstructionNames.size === 0) {
+          console.warn(`⚠️ [CLOUD] WARNING: Found ${transformedDataset.fabrics.length} fabrics but no care_instruction_names fields. This may indicate a data structure issue.`);
+        }
         
         // Also check if there's a care_instructions sheet in the import
         if (transformedDataset.care_instructions) {
@@ -685,10 +712,32 @@ module.exports = {
       if (autoCreateSummary.brandsCreated === 0 && autoCreateSummary.brandsFailed === 0 && brandNames && brandNames.size > 0) {
         console.error(`❌ [CLOUD] WARNING: No brands were created or failed! This suggests the auto-creation loop did not run.`);
         console.error(`❌ [CLOUD] Brand names found: ${Array.from(brandNames).join(', ')}`);
+        results.errors.push({
+          type: 'auto_creation_warning',
+          message: `No brands were created despite finding ${brandNames.size} unique brand names. Check logs for details.`,
+          brandNames: Array.from(brandNames)
+        });
       }
       if (autoCreateSummary.careInstructionsCreated === 0 && autoCreateSummary.careInstructionsFailed === 0 && careInstructionNames && careInstructionNames.size > 0) {
         console.error(`❌ [CLOUD] WARNING: No care instructions were created or failed! This suggests the auto-creation loop did not run.`);
         console.error(`❌ [CLOUD] Care instruction names found: ${Array.from(careInstructionNames).join(', ')}`);
+        results.errors.push({
+          type: 'auto_creation_warning',
+          message: `No care instructions were created despite finding ${careInstructionNames.size} unique care instruction names. Check logs for details.`,
+          careInstructionNames: Array.from(careInstructionNames)
+        });
+      }
+      
+      // Add validation summary to help debug issues
+      if (transformedDataset.fabrics && transformedDataset.fabrics.length > 0) {
+        const fabricsWithBrands = transformedDataset.fabrics.filter(f => f.brand_name).length;
+        const fabricsWithCareInstructions = transformedDataset.fabrics.filter(f => f.care_instruction_names).length;
+        console.log(`📊 [CLOUD] Data validation summary:`);
+        console.log(`   - Total fabrics: ${transformedDataset.fabrics.length}`);
+        console.log(`   - Fabrics with brand_name: ${fabricsWithBrands}`);
+        console.log(`   - Fabrics with care_instruction_names: ${fabricsWithCareInstructions}`);
+        console.log(`   - Unique brands found: ${brandNames?.size || 0}`);
+        console.log(`   - Unique care instructions found: ${careInstructionNames?.size || 0}`);
       }
       
       ctx.body = results;
