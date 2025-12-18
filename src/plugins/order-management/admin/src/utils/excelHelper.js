@@ -1982,10 +1982,6 @@ export const excelHelper = {
   bulkImportMultiSheet: async (transformedDataset, getAuthHeaders) => {
     console.log('📤 Starting multi-sheet bulk import via server endpoint...');
     
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/5adf3c9d-72bb-4b7d-b1f1-1e1be4e8b0b9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'excelHelper.js:bulkImportMultiSheet',message:'Sending to server',data:{datasetKeys:Object.keys(transformedDataset),fabricsCount:transformedDataset?.fabrics?.length||0,firstFabricBrandName:transformedDataset?.fabrics?.[0]?.brand_name||'NONE',sampleFabric:transformedDataset?.fabrics?.[0]?JSON.stringify(transformedDataset.fabrics[0]).substring(0,300):'NONE'},timestamp:Date.now(),sessionId:'debug-session',hypothesisId:'E'})}).catch(()=>{});
-    // #endregion
-    
     try {
       const response = await fetch('/api/order-management/import', {
         method: 'POST',
