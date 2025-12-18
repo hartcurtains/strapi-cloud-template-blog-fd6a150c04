@@ -24,7 +24,15 @@ export default factories.createCoreController('api::order-management.order-manag
         updated: 0,
         skipped: 0,
         failed: 0,
-        errors: []
+        errors: [],
+        autoCreationSummary: {
+          brandsCreated: 0,
+          brandsFailed: 0,
+          careInstructionsCreated: 0,
+          careInstructionsFailed: 0,
+          totalBrandsInMap: 0,
+          totalCareInstructionsInMap: 0
+        }
       };
 
       // Define content types for each product type
@@ -80,11 +88,14 @@ export default factories.createCoreController('api::order-management.order-manag
                 }
               });
               console.log(`✅ Auto-created brand: "${brandName}" (ID: ${createdBrand.id})`);
+              results.autoCreationSummary.brandsCreated++;
             } else {
               console.log(`⏭️ Brand already exists: "${brandName}" (ID: ${existingBrands[0].id})`);
             }
+            results.autoCreationSummary.totalBrandsInMap++;
           } catch (error: any) {
             console.error(`❌ Failed to auto-create brand "${brandName}":`, error.message);
+            results.autoCreationSummary.brandsFailed++;
             results.errors.push({
               type: 'auto_create_error',
               sheet: 'brands',
@@ -110,11 +121,14 @@ export default factories.createCoreController('api::order-management.order-manag
                 }
               });
               console.log(`✅ Auto-created care instruction: "${careName}" (ID: ${createdCareInstruction.id})`);
+              results.autoCreationSummary.careInstructionsCreated++;
             } else {
               console.log(`⏭️ Care instruction already exists: "${careName}" (ID: ${existingCareInstructions[0].id})`);
             }
+            results.autoCreationSummary.totalCareInstructionsInMap++;
           } catch (error: any) {
             console.error(`❌ Failed to auto-create care instruction "${careName}":`, error.message);
+            results.autoCreationSummary.careInstructionsFailed++;
             results.errors.push({
               type: 'auto_create_error',
               sheet: 'care_instructions',
