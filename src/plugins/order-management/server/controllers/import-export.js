@@ -9,6 +9,13 @@ module.exports = {
     try {
       const { data: transformedDataset } = ctx.request.body;
       
+      // #region agent log
+      const fs = require('fs'); const logPath = 'c:\\Users\\zkaay\\Documents\\ME\\Website\\STUPIIIIDDDD DHAHDLSBJDJS\\.cursor\\debug.log';
+      const debugLog = (hyp, loc, msg, data) => { try { fs.appendFileSync(logPath, JSON.stringify({hypothesisId:hyp,location:loc,message:msg,data,timestamp:Date.now(),sessionId:'debug-session'})+'\n'); } catch(e){} };
+      debugLog('A','import-export.js:bulkImport:entry','Request body received',{bodyKeys:ctx.request.body?Object.keys(ctx.request.body):'NO_BODY',hasData:!!ctx.request.body?.data,datasetKeys:transformedDataset?Object.keys(transformedDataset):'NO_DATASET'});
+      debugLog('A','import-export.js:bulkImport:fabrics','Fabrics array check',{fabricsCount:transformedDataset?.fabrics?.length||0,isArray:Array.isArray(transformedDataset?.fabrics),firstFabricKeys:transformedDataset?.fabrics?.[0]?Object.keys(transformedDataset.fabrics[0]):null,firstBrandName:transformedDataset?.fabrics?.[0]?.brand_name||'NONE'});
+      // #endregion
+      
       const TIMESTAMP = Date.now();
       console.log('\n\n');
       console.log('═══════════════════════════════════════════════════════════');
@@ -80,6 +87,10 @@ module.exports = {
       console.log('🔍 [CLOUD] Phase 1 Check: transformedDataset.fabrics is array?', Array.isArray(transformedDataset.fabrics));
       console.log('🔍 [CLOUD] Phase 1 Check: transformedDataset.fabrics length?', transformedDataset.fabrics?.length);
       
+      // #region agent log
+      debugLog('B','import-export.js:phase1:condition','Phase 1 condition check',{fabricsExists:!!transformedDataset.fabrics,isArray:Array.isArray(transformedDataset.fabrics),length:transformedDataset.fabrics?.length||0,willEnterLoop:!!(transformedDataset.fabrics && Array.isArray(transformedDataset.fabrics) && transformedDataset.fabrics.length > 0)});
+      // #endregion
+      
       if (transformedDataset.fabrics && Array.isArray(transformedDataset.fabrics) && transformedDataset.fabrics.length > 0) {
         console.log('🔧 [CLOUD] Phase 1: Auto-creating missing brands...');
         console.log('🔧 [CLOUD] Verifying strapi.entityService is available:', !!strapi.entityService);
@@ -133,6 +144,10 @@ module.exports = {
         }
         console.log(`📋 [CLOUD] Phase 1: About to auto-create ${brandNames.size - existingBrandNames.size} missing brands`);
         
+        // #region agent log
+        debugLog('B','import-export.js:phase1:brandNames','Brand names collected',{uniqueBrandNames:Array.from(brandNames),existingBrandNames:Array.from(existingBrandNames),toCreate:brandNames.size - existingBrandNames.size});
+        // #endregion
+        
         // Auto-create missing brands
         for (const brandName of brandNames) {
           const brandNameLower = brandName.toLowerCase().trim();
@@ -140,12 +155,21 @@ module.exports = {
             try {
               console.log(`🔧 [CLOUD] Auto-creating brand: ${brandName}`);
               console.log(`🔧 [CLOUD] Using entityService.create for api::brand.brand`);
+              
+              // #region agent log
+              debugLog('C','import-export.js:phase1:createBrand:before','About to create brand',{brandName,brandNameLower,strapiAvailable:!!strapi,entityServiceAvailable:!!strapi?.entityService});
+              // #endregion
+              
               const createdBrand = await strapi.entityService.create('api::brand.brand', {
                 data: {
                   name: brandName,
                   description: `Auto-created brand: ${brandName}`
                 }
               });
+              // #region agent log
+              debugLog('C','import-export.js:phase1:createBrand:after','Brand creation result',{brandName,createdBrand:createdBrand?{id:createdBrand.id,name:createdBrand.name}:'NULL',success:!!(createdBrand?.id)});
+              // #endregion
+              
               if (!createdBrand || !createdBrand.id) {
                 throw new Error(`Brand creation returned invalid result: ${JSON.stringify(createdBrand)}`);
               }
@@ -161,6 +185,11 @@ module.exports = {
                 code: error.code,
                 status: error.status
               };
+              
+              // #region agent log
+              debugLog('C','import-export.js:phase1:createBrand:error','Brand creation FAILED',{brandName,errorMessage:error.message,errorName:error.name,errorCode:error.code});
+              // #endregion
+              
               console.error(`❌ [CLOUD] Failed to auto-create brand ${brandName}:`, errorDetails);
               console.error(`❌ [CLOUD] Full error object:`, error);
               results.errors.push({
@@ -174,8 +203,17 @@ module.exports = {
             }
           }
         }
+        
+        // #region agent log
+        debugLog('B','import-export.js:phase1:summary','Phase 1 completed',{brandsCreated,brandsFailed,totalInMap:autoCreatedBrands.size,mapKeys:Array.from(autoCreatedBrands.keys())});
+        // #endregion
+        
         console.log(`📊 [CLOUD] Phase 1 Summary: ${brandsCreated} brands created, ${brandsFailed} failed, ${autoCreatedBrands.size} total in map`);
       } else {
+        // #region agent log
+        debugLog('B','import-export.js:phase1:skipped','Phase 1 SKIPPED - no fabrics',{fabricsValue:transformedDataset.fabrics,typeofFabrics:typeof transformedDataset.fabrics});
+        // #endregion
+        
         console.warn('⚠️ [CLOUD] Phase 1: SKIPPED - No fabrics array or empty array');
         console.warn('⚠️ [CLOUD] Phase 1: transformedDataset.fabrics =', transformedDataset.fabrics);
       }
@@ -390,6 +428,10 @@ module.exports = {
             if (productType === 'fabrics' && item.brand_name && !item.brand) {
               const brandNameLower = item.brand_name.toLowerCase().trim();
               const originalBrandName = item.brand_name; // Store before deletion
+              
+              // #region agent log
+              debugLog('D','import-export.js:fabricImport:brandLookup','Looking up brand for fabric',{fabricName:item.name,brandName:originalBrandName,brandNameLower,mapSize:autoCreatedBrands.size,mapHasBrand:autoCreatedBrands.has(brandNameLower),mapKeys:Array.from(autoCreatedBrands.keys())});
+              // #endregion
               
               console.log(`🔍 [CLOUD] Looking up brand "${originalBrandName}" (normalized: "${brandNameLower}") for fabric "${item.name}"`);
               console.log(`🔍 [CLOUD] Brand map has ${autoCreatedBrands.size} entries. Keys: ${Array.from(autoCreatedBrands.keys()).slice(0, 5).join(', ')}...`);

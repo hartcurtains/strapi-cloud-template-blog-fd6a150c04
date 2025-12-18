@@ -41,6 +41,93 @@ export default factories.createCoreController('api::order-management.order-manag
         pricing_rules: 'api::pricing-rule.pricing-rule'
       };
 
+      // ═══════════════════════════════════════════════════════════════════
+      // PHASE 0: Auto-create missing brands and care instructions from fabrics
+      // ═══════════════════════════════════════════════════════════════════
+      if (transformedDataset.fabrics && Array.isArray(transformedDataset.fabrics) && transformedDataset.fabrics.length > 0) {
+        console.log('🔧 Phase 0: Auto-creating missing brands and care instructions...');
+        
+        // Collect unique brand names from fabrics
+        const brandNamesToCreate = new Set<string>();
+        const careInstructionNamesToCreate = new Set<string>();
+        
+        transformedDataset.fabrics.forEach((fabric: any) => {
+          if (fabric.brand_name) {
+            brandNamesToCreate.add(fabric.brand_name.toString().trim());
+          }
+          if (fabric.care_instruction_names) {
+            const names = fabric.care_instruction_names.toString().split(',').map((n: string) => n.trim()).filter(Boolean);
+            names.forEach((name: string) => careInstructionNamesToCreate.add(name));
+          }
+        });
+        
+        console.log(`📋 Found ${brandNamesToCreate.size} unique brand names to check`);
+        console.log(`📋 Found ${careInstructionNamesToCreate.size} unique care instruction names to check`);
+        
+        // Check which brands exist and create missing ones
+        for (const brandName of brandNamesToCreate) {
+          try {
+            const existingBrands = await strapi.entityService.findMany('api::brand.brand' as any, {
+              filters: { name: { $eqi: brandName } }
+            }) as any[];
+            
+            if (!existingBrands || existingBrands.length === 0) {
+              // Create the brand
+              const createdBrand = await strapi.entityService.create('api::brand.brand' as any, {
+                data: {
+                  name: brandName,
+                  description: `Auto-created brand: ${brandName}`
+                }
+              });
+              console.log(`✅ Auto-created brand: "${brandName}" (ID: ${createdBrand.id})`);
+            } else {
+              console.log(`⏭️ Brand already exists: "${brandName}" (ID: ${existingBrands[0].id})`);
+            }
+          } catch (error: any) {
+            console.error(`❌ Failed to auto-create brand "${brandName}":`, error.message);
+            results.errors.push({
+              type: 'auto_create_error',
+              sheet: 'brands',
+              message: `Failed to auto-create brand: ${brandName}`,
+              error: error.message
+            });
+          }
+        }
+        
+        // Check which care instructions exist and create missing ones
+        for (const careName of careInstructionNamesToCreate) {
+          try {
+            const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction' as any, {
+              filters: { name: { $eqi: careName } }
+            }) as any[];
+            
+            if (!existingCareInstructions || existingCareInstructions.length === 0) {
+              // Create the care instruction
+              const createdCareInstruction = await strapi.entityService.create('api::care-instruction.care-instruction' as any, {
+                data: {
+                  name: careName,
+                  description: `Auto-created care instruction: ${careName}`
+                }
+              });
+              console.log(`✅ Auto-created care instruction: "${careName}" (ID: ${createdCareInstruction.id})`);
+            } else {
+              console.log(`⏭️ Care instruction already exists: "${careName}" (ID: ${existingCareInstructions[0].id})`);
+            }
+          } catch (error: any) {
+            console.error(`❌ Failed to auto-create care instruction "${careName}":`, error.message);
+            results.errors.push({
+              type: 'auto_create_error',
+              sheet: 'care_instructions',
+              message: `Failed to auto-create care instruction: ${careName}`,
+              error: error.message
+            });
+          }
+        }
+        
+        console.log('✅ Phase 0 completed: Auto-creation of missing brands and care instructions');
+      }
+      // ═══════════════════════════════════════════════════════════════════
+
       // Import order: brands, linings, trimmings, mechanisations, pricing_rules, care_instructions first, then fabrics, then dependent products
       const importOrder = ['brands', 'linings', 'trimmings', 'mechanisations', 'pricing_rules', 'care_instructions', 'fabrics', 'curtains', 'blinds', 'cushions'];
 
@@ -199,7 +286,8 @@ export default factories.createCoreController('api::order-management.order-manag
                 usableWidth_cm: item.usableWidth_cm || 140,
                 martindale: item.martindale || 50000,
                 availability: item.availability || 'in_stock',
-                is_featured: item.is_featured !== undefined ? item.is_featured : false
+                is_featured: item.is_featured !== undefined ? item.is_featured : false,
+                is_curtain: item.is_curtain !== undefined ? item.is_curtain : false
               };
               
               // Apply defaults for missing fields

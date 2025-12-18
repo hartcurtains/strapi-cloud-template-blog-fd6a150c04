@@ -25,18 +25,23 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
       ? (query.populate as Record<string, any>) 
       : {}
     
-    // Ensure populate includes brand and care_instructions
+    // Ensure populate includes only valid fabric relations
+    // Valid: images, brand, care_instructions, colours, blinds, cushions, pricing_rules
+    // NOT valid: linings, trimmings, curtains (don't exist on fabric schema)
     const populate: Record<string, any> = {
       ...populateQuery,
-      brand: true,
-      care_instructions: true,
+      brand: populateQuery.brand !== undefined ? populateQuery.brand : true,
+      care_instructions: populateQuery.care_instructions !== undefined ? populateQuery.care_instructions : true,
       images: populateQuery.images !== undefined ? populateQuery.images : true,
-      linings: populateQuery.linings !== undefined ? populateQuery.linings : true,
-      trimmings: populateQuery.trimmings !== undefined ? populateQuery.trimmings : true,
-      curtains: populateQuery.curtains !== undefined ? populateQuery.curtains : true,
+      colours: populateQuery.colours !== undefined ? populateQuery.colours : true,
       blinds: populateQuery.blinds !== undefined ? populateQuery.blinds : true,
       cushions: populateQuery.cushions !== undefined ? populateQuery.cushions : true,
+      pricing_rules: populateQuery.pricing_rules !== undefined ? populateQuery.pricing_rules : true,
     }
+    // Remove invalid keys
+    delete populate.linings
+    delete populate.trimmings
+    delete populate.curtains
     
     const sanitizedQuery = await this.sanitizeQuery(ctx)
     sanitizedQuery.populate = populate
@@ -54,24 +59,70 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
     
     if (finalWantsAllFabrics) {
       // Use findMany to bypass pagination limits and get ALL fabrics
-      // Build a clean query for findMany - use '*' for populate to get everything
-      const findManyQuery: any = {
-        populate: '*', // Use '*' to populate all relations (findMany doesn't support complex populate structures)
-        filters: sanitizedQuery.filters || {},
-        sort: sanitizedQuery.sort || ['name:asc']
+      // Use the populate structure from the query to ensure nested relations like colours.thumbnail are populated
+      // Always ensure colours.thumbnail is populated, even if not in the query
+      let findManyPopulate: any
+      if (populateQuery && Object.keys(populateQuery).length > 0) {
+        // Use the populated structure from query, but ensure colours.thumbnail is always populated
+        findManyPopulate = { ...populate }
+        // Ensure colours.thumbnail is populated even if colours structure exists but doesn't include thumbnail
+        if (!findManyPopulate.colours) {
+          findManyPopulate.colours = { populate: { thumbnail: true } }
+        } else if (typeof findManyPopulate.colours === 'object' && !findManyPopulate.colours.populate) {
+          // If colours exists but doesn't have populate, add it
+          findManyPopulate.colours = {
+            ...findManyPopulate.colours,
+            populate: {
+              ...(findManyPopulate.colours.populate || {}),
+              thumbnail: true
+            }
+          }
+        } else if (typeof findManyPopulate.colours === 'object' && findManyPopulate.colours.populate && !findManyPopulate.colours.populate.thumbnail) {
+          // If colours.populate exists but doesn't include thumbnail, add it
+          findManyPopulate.colours.populate.thumbnail = true
+        } else if (findManyPopulate.colours === true) {
+          // If colours is just true, replace with structure that includes thumbnail
+          findManyPopulate.colours = { populate: { thumbnail: true } }
+        }
+      } else {
+        // Fallback: only populate relations that exist on fabric schema
+        findManyPopulate = {
+          images: true,
+          brand: true,
+          care_instructions: true,
+          colours: {
+            populate: {
+              thumbnail: true
+            }
+          },
+          blinds: true,
+          cushions: true,
+          pricing_rules: true
+        }
       }
       
-      console.log('[Fabric Controller] Using findMany to fetch ALL fabrics (bypassing pagination)')
-      console.log('[Fabric Controller] findMany query:', {
-        populate: findManyQuery.populate,
-        hasFilters: !!findManyQuery.filters,
-        hasSort: !!findManyQuery.sort,
-        filterKeys: Object.keys(findManyQuery.filters || {})
-      })
+      // Build findMany query with explicit high limit to get ALL items
+      // Strapi v5 findMany has a default limit, so we must override it
+      const findManyQuery: any = {
+        populate: findManyPopulate,
+        limit: -1 // -1 means no limit in Strapi
+      }
+      
+      console.log('[Fabric Controller] Using findMany with limit=-1 to fetch ALL fabrics')
       
       try {
-        const allResults = await strapi.entityService.findMany('api::fabric.fabric', findManyQuery)
-        console.log('[Fabric Controller] findMany returned', allResults.length, 'fabrics')
+        let allResults = await strapi.entityService.findMany('api::fabric.fabric', findManyQuery)
+        
+        // If limit: -1 didn't work, try with a very high number
+        if (!allResults || (Array.isArray(allResults) && allResults.length < 50)) {
+          console.log('[Fabric Controller] Retrying with limit: 10000')
+          allResults = await strapi.entityService.findMany('api::fabric.fabric', {
+            ...findManyQuery,
+            limit: 10000
+          })
+        }
+        
+        console.log('[Fabric Controller] findMany returned', Array.isArray(allResults) ? allResults.length : 'non-array', 'fabrics')
         
         // Return all results with pagination metadata indicating all items
         return this.transformResponse(allResults, { 
@@ -135,18 +186,21 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
       ? (query.populate as Record<string, any>) 
       : {}
     
-    // Ensure populate includes brand and care_instructions
+    // Ensure populate includes only valid fabric relations
     const populate: Record<string, any> = {
       ...populateQuery,
-      brand: true,
-      care_instructions: true,
+      brand: populateQuery.brand !== undefined ? populateQuery.brand : true,
+      care_instructions: populateQuery.care_instructions !== undefined ? populateQuery.care_instructions : true,
       images: populateQuery.images !== undefined ? populateQuery.images : true,
-      linings: populateQuery.linings !== undefined ? populateQuery.linings : true,
-      trimmings: populateQuery.trimmings !== undefined ? populateQuery.trimmings : true,
-      curtains: populateQuery.curtains !== undefined ? populateQuery.curtains : true,
+      colours: populateQuery.colours !== undefined ? populateQuery.colours : true,
       blinds: populateQuery.blinds !== undefined ? populateQuery.blinds : true,
       cushions: populateQuery.cushions !== undefined ? populateQuery.cushions : true,
+      pricing_rules: populateQuery.pricing_rules !== undefined ? populateQuery.pricing_rules : true,
     }
+    // Remove invalid keys
+    delete populate.linings
+    delete populate.trimmings
+    delete populate.curtains
     
     const sanitizedQuery = await this.sanitizeQuery(ctx)
     sanitizedQuery.populate = populate
