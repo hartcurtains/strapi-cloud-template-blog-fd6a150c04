@@ -349,6 +349,26 @@ module.exports = {
             delete item.id;
             delete item.documentId;
             
+            // Handle martindale: leave empty if null
+            if (item.martindale === null || item.martindale === undefined) {
+              delete item.martindale;
+            }
+            
+            // Handle collections array -> collection field conversion
+            // JSON has "collections": ["Tatton Park"] but DB field is "collection" (singular, short text)
+            if (item.collections !== undefined) {
+              if (Array.isArray(item.collections) && item.collections.length > 0) {
+                // Take the first collection value from array
+                item.collection = item.collections[0].toString().trim();
+              } else if (typeof item.collections === 'string' && item.collections.trim()) {
+                // If it's already a string, use it directly
+                item.collection = item.collections.trim();
+              }
+              // Remove the collections array field (always remove it after conversion)
+              delete item.collections;
+            }
+            // If collection field already exists (from Excel), it will be preserved
+            
             // Ensure required fields exist
             if (!item.name) {
               throw new Error('Name is required');

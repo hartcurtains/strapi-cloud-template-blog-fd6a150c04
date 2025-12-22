@@ -4,6 +4,19 @@
 
 import { factories } from '@strapi/strapi';
 
+// Simple in-memory cache for product lookup maps (cleared on server restart)
+const productLookupCache = new Map<string, {
+  maps: {
+    productIdMap: Map<string, any>;
+    slugMap: Map<string, any>;
+    nameMap: Map<string, any>;
+    firstNameMap: Map<string, any[]>;
+  };
+  timestamp: number;
+}>();
+
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes cache
+
 export default factories.createCoreController('api::order-management.order-management', ({ strapi }) => ({
   // Simple test endpoint
   async test(ctx) {
@@ -165,6 +178,26 @@ export default factories.createCoreController('api::order-management.order-manag
             delete item.id;
             delete item.documentId;
             
+            // Handle martindale: leave empty if null
+            if (item.martindale === null || item.martindale === undefined) {
+              delete item.martindale;
+            }
+            
+            // Handle collections array -> collection field conversion
+            // JSON has "collections": ["Tatton Park"] but DB field is "collection" (singular, short text)
+            if (item.collections !== undefined) {
+              if (Array.isArray(item.collections) && item.collections.length > 0) {
+                // Take the first collection value from array
+                item.collection = item.collections[0].toString().trim();
+              } else if (typeof item.collections === 'string' && item.collections.trim()) {
+                // If it's already a string, use it directly
+                item.collection = item.collections.trim();
+              }
+              // Remove the collections array field (always remove it after conversion)
+              delete item.collections;
+            }
+            // If collection field already exists (from Excel), it will be preserved
+            
             // Ensure required fields exist
             if (!item.name) {
               throw new Error('Name is required');
@@ -298,19 +331,24 @@ export default factories.createCoreController('api::order-management.order-manag
                 price_per_metre: item.price_per_metre || 25.50,
                 patternRepeat_cm: item.patternRepeat_cm || 20,
                 usableWidth_cm: item.usableWidth_cm || 140,
-                martindale: item.martindale || 50000,
+                // martindale is NOT set to a default - leave it empty if null/undefined
                 availability: item.availability || 'in_stock',
                 is_featured: item.is_featured !== undefined ? item.is_featured : false,
                 is_curtain: item.is_curtain !== undefined ? item.is_curtain : false
               };
               
-              // Apply defaults for missing fields
+              // Apply defaults for missing fields (excluding martindale)
               Object.keys(defaults).forEach(key => {
                 if (item[key] === undefined || item[key] === null || item[key] === '') {
                   item[key] = defaults[key];
                   console.log(`🔧 Applied default ${key}: ${defaults[key]} for fabric "${item.name}"`);
                 }
               });
+              
+              // Handle martindale separately - don't set default, leave empty if null/undefined
+              if (item.martindale === null || item.martindale === undefined || item.martindale === '') {
+                delete item.martindale;
+              }
               
               // Generate productId and slug if missing
               if (!item.productId) {
@@ -702,6 +740,624 @@ export default factories.createCoreController('api::order-management.order-manag
       console.error('❌ Error fetching relation data:', error);
       ctx.status = 500;
       ctx.body = { error: error.message };
+    }
+  },
+
+  // Bulk image upload with auto-linking to products
+  async bulkImageUpload(ctx) {
+    // Note: Global unhandled rejection handler is set up in src/index.ts
+    // This prevents the server from crashing when Strapi's cleanup fails on Windows
+    try {
+      // Handle multipart form data
+      const files = ctx.request.files?.files;
+      const productType = ctx.request.body?.productType || 'fabrics';
+      const matchBy = ctx.request.body?.matchBy || 'productId';
+      const createAsColour = ctx.request.body?.createAsColour === 'true' || ctx.request.body?.createAsColour === true;
+
+      // Handle both single file and array of files
+      const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
+
+      if (fileArray.length === 0) {
+        ctx.status = 400;
+        ctx.body = { error: 'No files provided' };
+        return;
+      }
+
+      console.log(`📸 Bulk image upload: ${fileArray.length} files, productType: ${productType}, matchBy: ${matchBy}`);
+
+      const results = {
+        uploaded: 0,
+        linked: 0,
+        failed: 0,
+        skipped: 0,
+        errors: [],
+        details: []
+      };
+
+      // Upload all files to Strapi media library
+      // Upload VERY slowly (one at a time with long delays) to avoid Windows file locking
+      const uploadedFiles = [];
+      const UPLOAD_DELAY_MS = 1000; // 1 second delay between uploads to avoid Windows file locking
+      
+      for (let i = 0; i < fileArray.length; i++) {
+        const file = fileArray[i];
+        
+        // Extract filename from various possible properties
+        const fileName = (file as any).name || 
+                        (file as any).filename || 
+                        (file as any).originalname || 
+                        (file as any).originalFilename ||
+                        `file_${i + 1}`;
+        
+        try {
+          // Add delay between uploads (except first one) to reduce Windows file locking
+          if (i > 0) {
+            console.log(`⏳ Waiting ${UPLOAD_DELAY_MS}ms before next upload to avoid file locking...`);
+            await new Promise(resolve => setTimeout(resolve, UPLOAD_DELAY_MS));
+          }
+          
+          console.log(`📤 Uploading ${i + 1}/${fileArray.length}: ${fileName}...`);
+          
+          // Use Strapi's upload service with comprehensive error handling
+          // Try to capture result even if cleanup fails
+          let uploadedFile: any = null;
+          
+          try {
+            // Attempt upload - wrap in try-catch to handle cleanup errors separately
+            try {
+              const result = await strapi.plugins['upload'].services.upload.upload({
+                data: {},
+                files: file
+              });
+              
+              // Upload succeeded - store result
+              uploadedFile = result;
+              
+              // Wait for cleanup, but don't fail if cleanup errors
+              try {
+                await new Promise(r => setTimeout(r, 800));
+              } catch (cleanupErr: any) {
+                // Cleanup error - but upload might have succeeded
+                const isWindowsCleanupError = cleanupErr?.code === 'EPERM' || 
+                                            cleanupErr?.errno === -4048 ||
+                                            cleanupErr?.message?.includes('EPERM') ||
+                                            cleanupErr?.message?.includes('unlink') ||
+                                            cleanupErr?.syscall === 'unlink';
+                if (isWindowsCleanupError && uploadedFile) {
+                  console.warn(`⚠️ Windows file lock during cleanup for ${fileName} (upload succeeded, ignoring cleanup error)`);
+                  // Upload succeeded, just cleanup failed - continue with result
+                } else if (!isWindowsCleanupError) {
+                  throw cleanupErr; // Re-throw if not a Windows cleanup error
+                }
+              }
+            } catch (uploadErr: any) {
+              // Check if it's a Windows file lock error
+              const isWindowsError = uploadErr?.code === 'EPERM' || 
+                                    uploadErr?.errno === -4048 ||
+                                    uploadErr?.message?.includes('EPERM') ||
+                                    uploadErr?.message?.includes('unlink') ||
+                                    uploadErr?.message?.includes('operation not permitted') ||
+                                    uploadErr?.syscall === 'unlink' ||
+                                    (uploadErr?.path && uploadErr.path.includes('Temp'));
+              
+              if (isWindowsError) {
+                // Windows error - upload might have succeeded despite the error
+                // Try to recover the uploaded file by querying Strapi
+                console.warn(`⚠️ Windows file lock error for ${fileName}, attempting to recover uploaded file...`);
+                
+                try {
+                  // Query for recently uploaded files matching this filename
+                  const baseName = fileName.replace(/\.[^/.]+$/, ''); // Remove extension
+                  const recentFiles = await strapi.entityService.findMany('plugin::upload.file', {
+                    filters: {
+                      $or: [
+                        { name: fileName },
+                        { name: { $contains: baseName } }
+                      ]
+                    },
+                    sort: { createdAt: 'desc' },
+                    limit: 10
+                  });
+                  
+                  // Find exact match or most recent match
+                  const matchedFile = Array.isArray(recentFiles) 
+                    ? recentFiles.find((f: any) => f.name === fileName) || recentFiles[0]
+                    : null;
+                  
+                  // Check if file was uploaded in the last 30 seconds (reasonable window)
+                  if (matchedFile) {
+                    const fileAge = Date.now() - new Date(matchedFile.createdAt || matchedFile.updatedAt).getTime();
+                    if (fileAge < 30000) { // 30 seconds
+                      console.warn(`✅ Recovered uploaded file for ${fileName} (ID: ${matchedFile.id}, age: ${Math.round(fileAge/1000)}s)`);
+                      uploadedFile = [matchedFile]; // Wrap in array to match upload service format
+                    } else {
+                      throw new Error('File too old to be from this upload');
+                    }
+                  } else {
+                    throw new Error('No matching file found');
+                  }
+                } catch (recoveryErr: any) {
+                  // Recovery failed - mark as failed but continue
+                  console.warn(`⚠️ Windows file lock during upload/cleanup for ${fileName} - could not recover file: ${recoveryErr.message}`);
+                  console.warn(`   This is often just a cleanup issue. File may still be uploaded.`);
+                  results.failed++;
+                  results.errors.push({
+                    filename: fileName,
+                    error: `Windows file lock (file may still be uploaded): ${uploadErr.message?.substring(0, 100) || 'Unknown error'}`
+                  });
+                  continue; // Skip to next file
+                }
+              } else {
+                // Not a Windows error - re-throw
+                throw uploadErr;
+              }
+            }
+            
+            // If upload was skipped due to Windows error, continue to next file
+            if (!uploadedFile) {
+              continue;
+            }
+          } catch (uploadError: any) {
+            // Handle other upload errors
+            throw uploadError;
+          }
+          
+          // Handle both single and array response
+          const fileData = Array.isArray(uploadedFile) ? uploadedFile[0] : uploadedFile;
+          
+          if (!fileData || !fileData.id) {
+            throw new Error('Upload returned invalid file data');
+          }
+          
+          // Store filename with uploaded file data for later matching
+          (fileData as any).originalFilename = fileName;
+          uploadedFiles.push(fileData);
+          results.uploaded++;
+          
+          console.log(`✅ Uploaded ${i + 1}/${fileArray.length}: ${fileName} (ID: ${fileData.id})`);
+          
+          // Additional delay after successful upload to let Windows release file handles
+          // Longer delay helps prevent file locking issues
+          if (i < fileArray.length - 1) {
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
+        } catch (error: any) {
+          // Handle other errors
+          console.error(`❌ Failed to upload ${fileName}:`, error.message);
+          results.failed++;
+          results.errors.push({
+            filename: fileName,
+            error: error.message
+          });
+        }
+      }
+      
+      // If all uploads failed due to Windows file locking, warn user
+      if (uploadedFiles.length === 0 && results.failed > 0) {
+        const allWindowsErrors = results.errors.every(err => 
+          err.error?.includes('Windows file lock') || err.error?.includes('EPERM') || err.error?.includes('unlink')
+        );
+        if (allWindowsErrors) {
+          console.warn(`⚠️ All uploads had Windows file lock issues. This is a known Windows/Strapi issue.`);
+          console.warn(`   Recommendation: Upload fewer files at once (try 5-10 at a time) or use Strapi's built-in media library upload.`);
+        }
+      }
+      
+      // If no files were successfully uploaded, return early
+      if (uploadedFiles.length === 0) {
+        ctx.body = {
+          success: false,
+          message: 'No files were successfully uploaded. Check errors for details.',
+          results
+        };
+        return;
+      }
+
+      // Match and link images to products
+      const contentType = `api::${productType === 'fabrics' ? 'fabric' : productType.slice(0, -1)}.${productType === 'fabrics' ? 'fabric' : productType.slice(0, -1)}`;
+      
+      // OPTIMIZATION: Use cached lookup maps if available (minimize API calls)
+      const cacheKey = `${contentType}_${matchBy}`;
+      const cached = productLookupCache.get(cacheKey);
+      const now = Date.now();
+      
+      let productIdMap: Map<string, any>;
+      let slugMap: Map<string, any>;
+      let nameMap: Map<string, any>;
+      let firstNameMap: Map<string, any[]>;
+      
+      if (cached && (now - cached.timestamp) < CACHE_TTL_MS) {
+        // Use cached maps
+        console.log(`📦 Using cached product lookup maps (age: ${Math.round((now - cached.timestamp) / 1000)}s)`);
+        productIdMap = cached.maps.productIdMap;
+        slugMap = cached.maps.slugMap;
+        nameMap = cached.maps.nameMap;
+        firstNameMap = cached.maps.firstNameMap;
+      } else {
+        // Fetch all products ONCE and build lookup maps
+        console.log(`📦 Fetching all products once for efficient matching...`);
+        const allProducts = await strapi.entityService.findMany(contentType as any, {
+          limit: 10000, // Get all products in one call
+          populate: ['images'], // Populate images to check existing ones
+          sort: ['name:asc']
+        }) as any[];
+        
+        console.log(`✅ Loaded ${allProducts.length} products in single API call`);
+        
+        // Build lookup maps for fast matching (one-time cost)
+        productIdMap = new Map<string, any>();
+        slugMap = new Map<string, any>();
+        nameMap = new Map<string, any>(); // For partial name matching
+        firstNameMap = new Map<string, any[]>(); // For firstName matching (multiple products can have same first word)
+        
+        allProducts.forEach((p: any) => {
+          // ProductId index
+          if (p.productId) {
+            productIdMap.set(p.productId.toLowerCase(), p);
+          }
+          // Slug index
+          if (p.slug) {
+            slugMap.set(p.slug.toLowerCase(), p);
+          }
+          // Name index (for partial matching)
+          if (p.name) {
+            const cleanName = p.name.toLowerCase().trim();
+            nameMap.set(cleanName, p);
+          }
+          // First name index
+          if (p.name) {
+            const firstWord = p.name.split(/[\s\-_]+/)[0].trim().toLowerCase();
+            if (firstWord) {
+              if (!firstNameMap.has(firstWord)) {
+                firstNameMap.set(firstWord, []);
+              }
+              firstNameMap.get(firstWord)!.push(p);
+            }
+          }
+        });
+        
+        console.log(`📊 Built lookup maps: ${productIdMap.size} productIds, ${slugMap.size} slugs, ${nameMap.size} names, ${firstNameMap.size} first names`);
+        
+        // Cache the maps
+        productLookupCache.set(cacheKey, {
+          maps: { productIdMap, slugMap, nameMap, firstNameMap },
+          timestamp: now
+        });
+      }
+      
+      // Collect all updates to batch them
+      const updatesToProcess: Array<{ productId: number; imageIds: number[]; filename: string; product: any }> = [];
+      
+      // Match images to products using lookup maps (no API calls)
+      for (const uploadedFile of uploadedFiles) {
+        try {
+          // Extract identifier from filename (remove extension)
+          // Try multiple properties to get filename
+          const filename = (uploadedFile as any).originalFilename ||
+                              uploadedFile.name || 
+                              uploadedFile.filename ||
+                              (uploadedFile as any).originalname ||
+                              `uploaded_${uploadedFile.id}`;
+          const identifier = filename.replace(/\.[^/.]+$/, ''); // Remove extension
+          
+          console.log(`🔍 Matching image "${filename}" (identifier: "${identifier}")...`);
+
+          // Find product using lookup maps (no API calls)
+          let product = null;
+          
+          if (matchBy === 'productId') {
+            product = productIdMap.get(identifier.toLowerCase()) || null;
+          } else if (matchBy === 'slug') {
+            product = slugMap.get(identifier.toLowerCase()) || null;
+          } else if (matchBy === 'name') {
+            // Try to match by name (remove common image suffixes)
+            const cleanName = identifier
+              .replace(/[-_]/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .toLowerCase();
+            
+            // Try exact match first
+            product = nameMap.get(cleanName) || null;
+            
+            // If no exact match, try partial match
+            if (!product) {
+              for (const [productName, prod] of nameMap.entries()) {
+                if (productName.includes(cleanName) || cleanName.includes(productName)) {
+                  product = prod;
+                  break;
+                }
+              }
+            }
+          } else if (matchBy === 'firstName') {
+            // Match by first word of product name vs first N characters of filename
+            // Try different prefix lengths to find best match
+            let bestMatch = null;
+            let bestMatchLength = 0;
+            
+            for (const [firstWord, products] of firstNameMap.entries()) {
+              const filenamePrefix = identifier.substring(0, firstWord.length).toLowerCase();
+              
+              if (filenamePrefix === firstWord && firstWord.length > bestMatchLength) {
+                bestMatch = products[0]; // Take first product if multiple have same first word
+                bestMatchLength = firstWord.length;
+              }
+            }
+            
+            product = bestMatch;
+            
+            if (product) {
+              const productFirstWord = product.name.split(/[\s\-_]+/)[0].trim();
+              const matchedPrefix = identifier.substring(0, productFirstWord.length);
+              console.log(`✅ Matched filename prefix "${matchedPrefix}" to product "${product.name}"`);
+            }
+          }
+
+          // Fallback specifically for colour uploads: strip last 2 chars (colour code) and match fabric by remaining name
+          if (!product && createAsColour && identifier.length > 2) {
+            const fabricNamePartRaw = identifier.slice(0, -2);
+            const cleanNamePart = fabricNamePartRaw.replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+            if (cleanNamePart) {
+              product = nameMap.get(cleanNamePart) || null;
+              if (product) {
+                console.log(`✅ Fallback matched fabric by name (colour code stripped): "${cleanNamePart}"`);
+              }
+            }
+          }
+
+          if (product) {
+            // If createAsColour is enabled and productType is fabrics, create/add as colour item
+            if (createAsColour && productType === 'fabrics') {
+              try {
+                // Extract colour code (last 2 chars) and fabric name part
+                const colourCode = identifier.slice(-2);
+                const fabricNameFromFile = identifier.slice(0, -2).replace(/[-_]/g, ' ').replace(/\s+/g, ' ').trim();
+                const colourName = `${fabricNameFromFile}-${colourCode}`.trim();
+                
+                // Find or create colour item
+                const existingColours = await strapi.entityService.findMany('api::colour.colour', {
+                  filters: {
+                    name: colourName
+                  },
+                  populate: ['fabrics', 'thumbnail'],
+                  limit: 1
+                }) as any[];
+
+                let colourItem: any = existingColours?.[0] || null;
+
+                if (colourItem) {
+                  console.log(`📦 Found existing colour: "${colourName}" (ID: ${colourItem.id}, documentId: ${colourItem.documentId})`);
+                } else {
+                  // STEP 1: Create new colour item with thumbnail already set
+                  colourItem = await strapi.entityService.create('api::colour.colour', {
+                    data: {
+                      name: colourName,
+                      thumbnail: uploadedFile.id,
+                      publishedAt: new Date()
+                    }
+                  });
+                  console.log(`✅ Created new colour: "${colourName}" (ID: ${colourItem.id}, documentId: ${colourItem.documentId})`);
+                  
+                  // STEP 2: Re-fetch the colour to ensure it's fully persisted before linking
+                  colourItem = await strapi.entityService.findOne('api::colour.colour', colourItem.id, {
+                    populate: ['fabrics']
+                  }) as any;
+                  console.log(`✅ Re-fetched colour to ensure persistence: "${colourName}" (ID: ${colourItem.id})`);
+                }
+                
+                // STEP 3: Fetch fabric with colours (AFTER colour is fully created)
+                const fabricWithColours = await strapi.entityService.findOne(contentType as any, product.id, {
+                  populate: ['colours']
+                }) as any;
+                
+                if (!fabricWithColours) {
+                  throw new Error(`Failed to fetch fabric "${product.name}" (ID: ${product.id})`);
+                }
+                
+                console.log(`🔍 Fabric "${product.name}" details: id=${product.id}, documentId=${product.documentId || 'N/A'}`);
+                console.log(`🔍 Fabric current colours:`, fabricWithColours.colours?.map((c: any) => ({ id: c.id, documentId: c.documentId, name: c.name })) || []);
+                
+                // Extract all existing colour IDs (use id consistently)
+                const existingColourIds = Array.isArray(fabricWithColours?.colours)
+                  ? fabricWithColours.colours.map((c: any) => c.id || c).filter(Boolean)
+                  : [];
+                
+                // Check if colour is already linked (check by id only)
+                const isAlreadyLinked = existingColourIds.includes(colourItem.id);
+                
+                console.log(`🔍 Existing colour IDs on fabric:`, existingColourIds);
+                console.log(`🔍 Colour to link ID: ${colourItem.id}`);
+                console.log(`🔍 Already linked: ${isAlreadyLinked}`);
+                
+                if (!isAlreadyLinked) {
+                  // STEP 4: Link by passing FULL array of all colour IDs (existing + new)
+                  // This is the correct format for entityService.update with manyToMany
+                  const allColourIds = [...existingColourIds, colourItem.id];
+                  
+                  console.log(`🔗 Linking colour "${colourName}" (ID: ${colourItem.id}) to fabric "${product.name}" (ID: ${product.id})`);
+                  console.log(`🔗 Full colour IDs array:`, allColourIds);
+                  
+                  try {
+                    // Use full array format (not connect) - this is what entityService.update expects
+                    const updateResult = await strapi.entityService.update(contentType as any, product.id, {
+                      data: {
+                        colours: allColourIds as any
+                      }
+                    });
+                    
+                    console.log(`✅ Update call completed`);
+                    console.log(`🔍 Update result colours:`, updateResult?.colours?.map((c: any) => c.id) || []);
+                    
+                    // Verify the link worked by re-fetching (add one more API call for verification)
+                    const verifyFabric = await strapi.entityService.findOne(contentType as any, product.id, {
+                      populate: ['colours']
+                    }) as any;
+                    const verifiedColourIds = Array.isArray(verifyFabric?.colours)
+                      ? verifyFabric.colours.map((c: any) => c.id || c).filter(Boolean)
+                      : [];
+                    
+                    console.log(`✅ After update, fabric colours:`, verifiedColourIds.map((id: any) => ({ id })));
+                    const linkVerified = verifiedColourIds.includes(colourItem.id);
+                    
+                    if (linkVerified) {
+                      console.log(`✅ Successfully linked colour "${colourName}" to fabric "${product.name}"`);
+                      results.linked++;
+                      results.details.push({
+                        filename,
+                        productId: product.productId || product.id,
+                        productName: product.name,
+                        status: `created/linked as colour: "${colourName}"`
+                      });
+                    } else {
+                      console.error(`❌ Link update succeeded but verification failed - colour ID ${colourItem.id} not found in fabric's colours`);
+                      console.error(`❌ Expected: ${colourItem.id}, Got:`, verifiedColourIds);
+                      console.error(`❌ Update result had colours:`, updateResult?.colours?.map((c: any) => c.id) || []);
+                      results.failed++;
+                      results.errors.push({
+                        filename,
+                        error: `Link update succeeded but verification failed - colour not found in fabric's colours`
+                      });
+                    }
+                  } catch (updateError: any) {
+                    console.error(`❌ Error linking colour "${colourName}" to fabric:`, updateError.message);
+                    console.error(`❌ Error stack:`, updateError.stack);
+                    results.failed++;
+                    results.errors.push({
+                      filename,
+                      error: `Failed to link colour to fabric: ${updateError.message}`
+                    });
+                  }
+                } else {
+                  console.log(`ℹ️ Colour "${colourName}" already linked to fabric "${product.name}"`);
+                  results.skipped++;
+                  results.details.push({
+                    filename,
+                    productId: product.productId || product.id,
+                    productName: product.name,
+                    status: 'skipped (colour already linked)'
+                  });
+                }
+              } catch (colourError: any) {
+                console.error(`❌ Error creating/linking colour for "${filename}":`, colourError.message);
+                // Fall through to regular image linking
+              }
+            }
+            
+            // Also add image to fabric's images (unless createAsColour is the only action)
+            if (!createAsColour || productType !== 'fabrics') {
+              // Get existing images
+              const existingImages = product.images || [];
+              const imageIds = Array.isArray(existingImages) 
+                ? existingImages.map((img: any) => img.id || img)
+                : [];
+
+              // Add new image if not already present
+              if (!imageIds.includes(uploadedFile.id)) {
+                imageIds.push(uploadedFile.id);
+                
+                // Collect update instead of doing it immediately
+                updatesToProcess.push({
+                  productId: product.id,
+                  imageIds: imageIds,
+                  filename: filename,
+                  product: product
+                });
+              } else {
+                results.skipped++;
+                results.details.push({
+                  filename,
+                  productId: product.productId || product.id,
+                  productName: product.name,
+                  status: 'skipped (already exists)'
+                });
+              }
+            }
+          } else {
+            results.skipped++;
+            results.details.push({
+              filename,
+              identifier,
+              status: 'skipped (no match found)'
+            });
+            console.log(`⚠️ No product found for image "${filename}" (identifier: "${identifier}")`);
+          }
+        } catch (error: any) {
+          console.error(`❌ Error processing image "${uploadedFile.name}":`, error.message);
+          results.failed++;
+          results.errors.push({
+            filename: uploadedFile.name || 'unknown',
+            error: error.message
+          });
+        }
+      }
+      
+      // OPTIMIZATION: Batch all updates (minimize API calls)
+      console.log(`📝 Processing ${updatesToProcess.length} product updates in batches...`);
+      const BATCH_SIZE = 10; // Process 10 updates at a time
+      
+      for (let i = 0; i < updatesToProcess.length; i += BATCH_SIZE) {
+        const batch = updatesToProcess.slice(i, i + BATCH_SIZE);
+        
+        // Process batch in parallel
+        await Promise.all(batch.map(async ({ productId, imageIds, filename, product }) => {
+          try {
+            await strapi.entityService.update(contentType as any, productId, {
+              data: {
+                images: imageIds
+              }
+            });
+
+            results.linked++;
+            results.details.push({
+              filename,
+              productId: product.productId || product.id,
+              productName: product.name,
+              status: 'linked'
+            });
+            
+            console.log(`✅ Linked image "${filename}" to product "${product.name}" (ID: ${productId})`);
+          } catch (error: any) {
+            console.error(`❌ Error updating product ${productId}:`, error.message);
+            results.failed++;
+            results.errors.push({
+              filename,
+              error: `Failed to update product: ${error.message}`
+            });
+          }
+        }));
+      }
+
+      // Send response
+      ctx.body = {
+        success: true,
+        message: `Uploaded ${results.uploaded} images, linked ${results.linked} to products`,
+        results
+      };
+      } catch (error: any) {
+      console.error('❌ Error in bulk image upload:', error);
+      
+      // Prevent server crash - ensure response is sent even on error
+      try {
+        ctx.status = 500;
+        ctx.body = { 
+          success: false,
+          error: error.message || 'Unknown error',
+          message: 'Bulk upload encountered an error. Check server logs for details.',
+          results: {
+            uploaded: 0,
+            linked: 0,
+            failed: 0,
+            skipped: 0,
+            errors: [{ filename: 'system', error: error.message }],
+            details: []
+          }
+        };
+      } catch (ctxError: any) {
+        // Last resort - log and return minimal error
+        console.error('❌ Critical: Failed to send error response:', ctxError);
+        ctx.status = 500;
+        ctx.body = { error: 'Internal server error during bulk upload' };
+      }
     }
   }
 }));

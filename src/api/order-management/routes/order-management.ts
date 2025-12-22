@@ -38,6 +38,14 @@ export default {
         auth: false,
       },
     },
+    {
+      method: 'POST',
+      path: '/order-management/bulk-image-upload',
+      handler: 'order-management.bulkImageUpload',
+      config: {
+        auth: false,
+      },
+    },
   ],
 };
 

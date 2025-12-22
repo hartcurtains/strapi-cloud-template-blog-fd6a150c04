@@ -15,8 +15,8 @@
       "type": "string",
       "required": true
     },
-    "description": {
-      "type": "text"
+    "collection": {
+      "type": "string"
     },
     "images": {
       "type": "media",
@@ -135,6 +135,9 @@
       "relation": "manyToMany",
       "target": "api::pricing-rule.pricing-rule",
       "inversedBy": "fabrics"
+    },
+    "description": {
+      "type": "text"
     }
   }
 }

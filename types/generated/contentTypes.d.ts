@@ -711,6 +711,7 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
       'manyToMany',
       'api::care-instruction.care-instruction'
     >;
+    collection: Schema.Attribute.String;
     colours: Schema.Attribute.Relation<'manyToMany', 'api::colour.colour'>;
     composition: Schema.Attribute.String & Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;

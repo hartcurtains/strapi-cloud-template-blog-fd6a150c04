@@ -987,9 +987,9 @@ export const excelHelper = {
     const productSchemas = {
       fabrics: {
         headers: ['name', 'description', 'brand_name', 'colour', 'pattern', 'composition', 'price_per_metre', 'patternRepeat_cm', 'usableWidth_cm', 'martindale', 'availability', 'is_featured', 'featured_until', 'curtain_names', 'blind_names', 'cushion_names', 'care_instruction_names'],
-        sampleData: ['Sample Fabric', 'Beautiful cotton fabric', 'Sample Brand', 'Blue', 'Solid', '100% Cotton', 25.50, 20, 140, 50000, 'in_stock', false, '', 'Sample Curtain', 'Sample Blind', 'Sample Cushion', 'Machine Wash'],
-        required: ['name', 'brand_name', 'colour', 'pattern', 'composition', 'price_per_metre', 'patternRepeat_cm', 'usableWidth_cm', 'martindale', 'availability'],
-        instructions: 'Fill in fabric details. Brand name must exist in Brands sheet. ProductId and slug will be auto-generated. All fields except description and featured_until are required. Use comma-separated names for relations.',
+        sampleData: ['Sample Fabric', 'Beautiful cotton fabric', 'Sample Brand', 'Blue', 'Solid', '100% Cotton', 25.50, 20, 140, '', 'in_stock', false, '', 'Sample Curtain', 'Sample Blind', 'Sample Cushion', 'Machine Wash'],
+        required: ['name', 'brand_name', 'colour', 'pattern', 'composition', 'price_per_metre', 'patternRepeat_cm', 'usableWidth_cm', 'availability'],
+        instructions: 'Fill in fabric details. Brand name must exist in Brands sheet. ProductId and slug will be auto-generated. All fields except description, featured_until, and martindale are required. Use comma-separated names for relations.',
         defaults: {
           colour: 'Blue',
           pattern: 'Solid',
@@ -997,7 +997,7 @@ export const excelHelper = {
           price_per_metre: 25.50,
           patternRepeat_cm: 20,
           usableWidth_cm: 140,
-          martindale: 50000,
+          // martindale is NOT set to a default - leave it empty if not provided
           availability: 'in_stock',
           is_featured: false
         }
@@ -1758,7 +1758,7 @@ export const excelHelper = {
               price_per_metre: row.price_per_metre ? parseFloat(row.price_per_metre) : null,
               patternRepeat_cm: row.patternRepeat_cm ? parseFloat(row.patternRepeat_cm) : null,
               usableWidth_cm: row.usableWidth_cm ? parseFloat(row.usableWidth_cm) : null,
-              martindale: row.martindale ? parseInt(row.martindale) : null,
+              martindale: row.martindale && row.martindale !== null ? parseInt(row.martindale) : undefined,
               availability: row.availability ? row.availability.toString().trim().toLowerCase() : undefined,
               is_featured: isFeatured,
               is_curtain: isCurtain,
@@ -1769,7 +1769,9 @@ export const excelHelper = {
               curtain_names: row.curtain_names?.toString().trim(),
               blind_names: row.blind_names?.toString().trim(),
               cushion_names: row.cushion_names?.toString().trim(),
-              care_instruction_names: row.care_instruction_names?.toString().trim()
+              care_instruction_names: row.care_instruction_names?.toString().trim(),
+              // Handle collections: pass as-is (array or string), backend will convert to collection field
+              collections: row.collections || row.collection || undefined
             };
 
             const requiredDefaults = {
@@ -1791,12 +1793,13 @@ export const excelHelper = {
               }
             });
 
+            // Remove martindale if it's null or NaN (leave it empty)
             if (
               transformedFabric.martindale === undefined ||
               transformedFabric.martindale === null ||
               Number.isNaN(transformedFabric.martindale)
             ) {
-              transformedFabric.martindale = null;
+              delete transformedFabric.martindale;
             }
 
             console.log(`🔗 Frontend: Passing relation names for fabric "${row.name}":`, {

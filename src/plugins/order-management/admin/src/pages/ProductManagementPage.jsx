@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ImageUploader from '../components/ImageUploader';
+import BulkImageUploader from '../components/BulkImageUploader';
 import excelHelper from '../utils/excelHelper';
 import pdfHelper from '../utils/pdfHelper';
 import { 
@@ -36,6 +37,7 @@ export default function ProductManagementPage() {
   const [importMode, setImportMode] = useState('file'); // 'file' or 'json'
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState(null);
+  const [showBulkImageUpload, setShowBulkImageUpload] = useState(false);
 
   // Product types configuration
   const productTypes = {
@@ -1680,6 +1682,28 @@ export default function ProductManagementPage() {
             </button>
             
             <button
+              onClick={() => setShowBulkImageUpload(!showBulkImageUpload)}
+              style={{
+                background: showBulkImageUpload ? '#3b82f6' : '#3b82f6',
+                color: 'white',
+                border: 'none',
+                borderRadius: '12px',
+                padding: '12px 24px',
+                fontSize: '14px',
+                fontWeight: '600',
+                cursor: 'pointer',
+                transition: 'all 0.3s ease',
+                boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <Upload size={16} />
+              {showBulkImageUpload ? 'Hide' : 'Bulk Image Upload'}
+            </button>
+            
+            <button
               onClick={handleExportToCSV}
               style={{
                 background: '#059669',
@@ -1852,8 +1876,23 @@ export default function ProductManagementPage() {
                 </div>
               )}
             </div>
-          </div>
         </div>
+      </div>
+
+      {/* Bulk Image Upload Section */}
+      {showBulkImageUpload && (
+        <div style={{
+          background: '#ffffff',
+          borderRadius: '16px',
+          padding: '0',
+          marginBottom: '32px',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+          border: '1px solid #f1f5f9',
+          overflow: 'hidden'
+        }}>
+          <BulkImageUploader productType={activeTab} />
+        </div>
+      )}
 
         {/* Product Type Tabs */}
         <div style={{
