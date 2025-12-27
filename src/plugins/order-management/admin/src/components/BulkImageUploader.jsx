@@ -16,7 +16,12 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
   });
 
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('strapi-token') || localStorage.getItem('jwtToken');
+    // Use Strapi's internal admin API - get the JWT token from Strapi's admin context
+    // This matches the pattern used in ProductManagementPage
+    const token = window.strapi?.auth?.getToken?.() || 
+                  localStorage.getItem('strapi-token') || 
+                  localStorage.getItem('jwtToken');
+    
     return {
       ...(token && { 'Authorization': `Bearer ${token}` })
     };
@@ -121,12 +126,20 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
             const response = await fetch('/api/order-management/bulk-image-upload', {
               method: 'POST',
               headers: getAuthHeaders(),
-              body: formData
+              body: formData,
+              credentials: 'include', // Include cookies/session for authentication
             });
 
             if (!response.ok) {
-              const errorData = await response.json();
-              throw new Error(errorData.error || `Upload failed: ${response.status}`);
+              let errorMessage = `Upload failed: ${response.status}`;
+              try {
+                const errorData = await response.json();
+                errorMessage = errorData.error || errorMessage;
+              } catch (e) {
+                // If response is not JSON, use status text
+                errorMessage = response.statusText || errorMessage;
+              }
+              throw new Error(errorMessage);
             }
 
             const data = await response.json();
@@ -652,6 +665,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
     </div>
   );
 }
+
 
 
 

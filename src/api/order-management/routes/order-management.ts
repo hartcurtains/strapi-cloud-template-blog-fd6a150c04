@@ -43,7 +43,7 @@ export default {
       path: '/order-management/bulk-image-upload',
       handler: 'order-management.bulkImageUpload',
       config: {
-        auth: false,
+        auth: true, // Enable authentication - admin-only endpoint
       },
     },
   ],
