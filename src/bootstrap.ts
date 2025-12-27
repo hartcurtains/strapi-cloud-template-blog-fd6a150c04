@@ -191,10 +191,14 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
       let typeFailed = 0;
 
       for (const item of items) {
+        // Extract data from item.data (entities.jsonl structure: {type, id, data: {...}})
+        const entityData = item.data || item;
+        const itemId = item.id || item.data?.id || 'unknown';
+        
+        // Extract identifier for error reporting (before cleaning data)
+        const identifier = entityData?.productId || entityData?.orderNumber || entityData?.name || itemId;
+        
         try {
-          // Extract data from item.data (entities.jsonl structure: {type, id, data: {...}})
-          const entityData = item.data || item;
-          
           // Remove internal fields that shouldn't be imported
           const { id, documentId, __type, type, createdAt, updatedAt, publishedAt, locale, ...cleanData } = entityData;
 
@@ -204,7 +208,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
             if (contentType !== 'api::order.order' && !cleanData.orderNumber) {
               typeFailed++;
               totalFailed++;
-              console.error(`\n❌ Skipping ${contentType} with null/undefined name (id: ${item.id || 'unknown'})`);
+              console.error(`\n❌ Skipping ${contentType} with null/undefined name (id: ${itemId})`);
               continue;
             }
           }
@@ -235,8 +239,6 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
         } catch (error: any) {
           typeFailed++;
           totalFailed++;
-          const itemId = item.id || item.data?.id || 'unknown';
-          const identifier = cleanData?.productId || cleanData?.orderNumber || cleanData?.name || itemId;
           console.error(`\n❌ Error importing ${contentType} (${identifier}):`, error.message);
         }
       }
