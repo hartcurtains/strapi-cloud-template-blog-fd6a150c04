@@ -43,7 +43,7 @@ export default {
       path: '/order-management/bulk-image-upload',
       handler: 'order-management.bulkImageUpload',
       config: {
-        auth: true, // Enable authentication - admin-only endpoint
+        // auth config omitted - defaults to requiring authentication in Strapi
       },
     },
   ],
