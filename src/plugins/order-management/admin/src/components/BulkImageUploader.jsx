@@ -657,3 +657,13 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
 
 
 
+
+
+
+
+
+
+
+
+
+

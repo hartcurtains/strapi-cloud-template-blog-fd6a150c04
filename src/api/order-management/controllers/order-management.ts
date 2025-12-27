@@ -748,6 +748,29 @@ export default factories.createCoreController('api::order-management.order-manag
     // Note: Global unhandled rejection handler is set up in src/index.ts
     // This prevents the server from crashing when Strapi's cleanup fails on Windows
     try {
+      // SECURITY: Check authentication - admin-only access
+      const user = ctx.state.user;
+      if (!user) {
+        ctx.status = 401;
+        ctx.body = { error: 'Authentication required' };
+        return;
+      }
+
+      // Check if user is admin
+      const userRole = user.role || user.roles?.[0];
+      const isAdmin = userRole?.type === 'admin' || 
+                     userRole?.name === 'Administrator' ||
+                     userRole?.name === 'Admin' ||
+                     userRole?.name === 'Super Admin' ||
+                     userRole?.code === 'strapi-super-admin' ||
+                     userRole?.code === 'strapi-admin';
+
+      if (!isAdmin) {
+        ctx.status = 403;
+        ctx.body = { error: 'Admin access required' };
+        return;
+      }
+
       // Handle multipart form data
       const files = ctx.request.files?.files;
       const productType = ctx.request.body?.productType || 'fabrics';
@@ -763,7 +786,60 @@ export default factories.createCoreController('api::order-management.order-manag
         return;
       }
 
-      console.log(`📸 Bulk image upload: ${fileArray.length} files, productType: ${productType}, matchBy: ${matchBy}`);
+      // SECURITY: Validate file types and sizes BEFORE processing
+      const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+      const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB per file
+      const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100MB total
+
+      let totalSize = 0;
+      const validatedFiles = [];
+
+      for (const file of fileArray) {
+        // Get MIME type from file
+        const mimeType = (file as any).type || (file as any).mimetype || '';
+        const fileSize = (file as any).size || 0;
+        const fileName = (file as any).name || (file as any).filename || (file as any).originalname || 'unknown';
+
+        // Validate MIME type
+        if (!ALLOWED_TYPES.includes(mimeType)) {
+          ctx.status = 400;
+          ctx.body = { error: `Invalid file type: ${mimeType}. Allowed types: ${ALLOWED_TYPES.join(', ')}` };
+          return;
+        }
+
+        // Validate file size
+        if (fileSize > MAX_FILE_SIZE) {
+          ctx.status = 400;
+          ctx.body = { error: `File ${fileName} exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB` };
+          return;
+        }
+
+        totalSize += fileSize;
+        if (totalSize > MAX_TOTAL_SIZE) {
+          ctx.status = 400;
+          ctx.body = { error: `Total upload size exceeds ${MAX_TOTAL_SIZE / 1024 / 1024}MB` };
+          return;
+        }
+
+        // Validate file extension matches MIME type
+        const fileExtension = fileName.toLowerCase().split('.').pop();
+        const expectedExtensions: { [key: string]: string[] } = {
+          'image/jpeg': ['jpg', 'jpeg'],
+          'image/png': ['png'],
+          'image/gif': ['gif'],
+          'image/webp': ['webp']
+        };
+        const validExtensions = expectedExtensions[mimeType] || [];
+        if (fileExtension && !validExtensions.includes(fileExtension)) {
+          ctx.status = 400;
+          ctx.body = { error: `File extension .${fileExtension} does not match MIME type ${mimeType}` };
+          return;
+        }
+
+        validatedFiles.push(file);
+      }
+
+      console.log(`📸 Bulk image upload: ${validatedFiles.length} files (${fileArray.length} received, ${validatedFiles.length} validated), productType: ${productType}, matchBy: ${matchBy}`);
 
       const results = {
         uploaded: 0,
@@ -774,13 +850,14 @@ export default factories.createCoreController('api::order-management.order-manag
         details: []
       };
 
-      // Upload all files to Strapi media library
+      // Upload all validated files to Strapi media library
       // Upload VERY slowly (one at a time with long delays) to avoid Windows file locking
       const uploadedFiles = [];
       const UPLOAD_DELAY_MS = 1000; // 1 second delay between uploads to avoid Windows file locking
       
-      for (let i = 0; i < fileArray.length; i++) {
-        const file = fileArray[i];
+      // Use validated files instead of original fileArray
+      for (let i = 0; i < validatedFiles.length; i++) {
+        const file = validatedFiles[i];
         
         // Extract filename from various possible properties
         const fileName = (file as any).name || 
@@ -796,7 +873,7 @@ export default factories.createCoreController('api::order-management.order-manag
             await new Promise(resolve => setTimeout(resolve, UPLOAD_DELAY_MS));
           }
           
-          console.log(`📤 Uploading ${i + 1}/${fileArray.length}: ${fileName}...`);
+          console.log(`📤 Uploading ${i + 1}/${validatedFiles.length}: ${fileName}...`);
           
           // Use Strapi's upload service with comprehensive error handling
           // Try to capture result even if cleanup fails
@@ -914,11 +991,11 @@ export default factories.createCoreController('api::order-management.order-manag
           uploadedFiles.push(fileData);
           results.uploaded++;
           
-          console.log(`✅ Uploaded ${i + 1}/${fileArray.length}: ${fileName} (ID: ${fileData.id})`);
+          console.log(`✅ Uploaded ${i + 1}/${validatedFiles.length}: ${fileName} (ID: ${fileData.id})`);
           
           // Additional delay after successful upload to let Windows release file handles
           // Longer delay helps prevent file locking issues
-          if (i < fileArray.length - 1) {
+          if (i < validatedFiles.length - 1) {
             await new Promise(resolve => setTimeout(resolve, 500));
           }
         } catch (error: any) {

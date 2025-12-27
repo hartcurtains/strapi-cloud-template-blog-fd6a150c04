@@ -2,13 +2,117 @@
  * Bootstrap: Import Data on Startup
  * 
  * This runs when Strapi starts and checks if data needs to be imported.
- * Only runs once (checks for a flag file).
+ * Uses database flag to prevent duplicates and checks for existing items before creating.
  */
 
 import type { Core } from '@strapi/strapi';
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
+
+// Helper function to check if import has already been completed (database flag)
+async function checkImportFlag(strapi: Core.Strapi): Promise<boolean> {
+  try {
+    // Try to find an order-management entry that serves as our import flag
+    // We use order-management as it's a system content type
+    const flagEntries = await strapi.entityService.findMany('api::order-management.order-management', {
+      filters: { name: '__BOOTSTRAP_IMPORT_FLAG__' },
+      limit: 1,
+    });
+    return flagEntries && Array.isArray(flagEntries) && flagEntries.length > 0;
+  } catch (error) {
+    // If order-management doesn't exist or query fails, fall back to file check
+    const dataDir = path.join(process.cwd(), 'database', 'migrations', 'data');
+    const importFlagFile = path.join(dataDir, '.imported');
+    return fs.existsSync(importFlagFile);
+  }
+}
+
+// Helper function to set import flag in database
+async function setImportFlag(strapi: Core.Strapi): Promise<void> {
+  try {
+    // Check if flag already exists
+    const existing = await strapi.entityService.findMany('api::order-management.order-management', {
+      filters: { name: '__BOOTSTRAP_IMPORT_FLAG__' },
+      limit: 1,
+    });
+
+    if (!existing || !Array.isArray(existing) || existing.length === 0) {
+      // Create flag entry
+      await strapi.entityService.create('api::order-management.order-management', {
+        data: {
+          name: '__BOOTSTRAP_IMPORT_FLAG__',
+        },
+      });
+    }
+  } catch (error) {
+    // Fall back to file system flag if database flag fails
+    const dataDir = path.join(process.cwd(), 'database', 'migrations', 'data');
+    const importFlagFile = path.join(dataDir, '.imported');
+    fs.writeFileSync(importFlagFile, new Date().toISOString());
+    console.log('⚠️  Database flag failed, using file system flag as fallback');
+  }
+}
+
+// Helper function to check if an item already exists based on unique identifier
+async function findExistingItem(
+  strapi: Core.Strapi,
+  contentType: string,
+  data: any
+): Promise<any | null> {
+  try {
+    // Define unique identifier lookup strategies for each content type
+    const lookupStrategies: Record<string, (data: any) => any> = {
+      'api::fabric.fabric': (d) => {
+        if (d.productId) return { productId: d.productId };
+        if (d.slug) return { slug: d.slug };
+        return { name: d.name };
+      },
+      'api::order.order': (d) => ({ orderNumber: d.orderNumber }),
+      'api::brand.brand': (d) => ({ name: d.name }),
+      'api::care-instruction.care-instruction': (d) => ({ name: d.name }),
+      'api::colour.colour': (d) => ({ name: d.name }),
+      'api::curtain-type.curtain-type': (d) => ({ name: d.name }),
+      'api::lining.lining': (d) => ({ name: d.name }),
+      'api::trimming.trimming': (d) => ({ name: d.name }),
+      'api::mechanisation.mechanisation': (d) => ({ name: d.name }),
+      'api::pricing-rule.pricing-rule': (d) => ({ name: d.name }),
+      'api::blind.blind': (d) => {
+        if (d.productId) return { productId: d.productId };
+        return { name: d.name };
+      },
+      'api::cushion.cushion': (d) => {
+        if (d.productId) return { productId: d.productId };
+        return { name: d.name };
+      },
+    };
+
+    const strategy = lookupStrategies[contentType];
+    if (!strategy) {
+      // Default: use name for all other types
+      if (!data.name) return null;
+      return { name: data.name };
+    }
+
+    const filters = strategy(data);
+    if (!filters || Object.keys(filters).length === 0) return null;
+
+    const existing = await strapi.entityService.findMany(contentType as any, {
+      filters,
+      limit: 1,
+    });
+
+    if (existing && Array.isArray(existing) && existing.length > 0) {
+      return existing[0];
+    }
+
+    return null;
+  } catch (error) {
+    // If lookup fails, return null (will attempt to create)
+    console.warn(`⚠️  Error checking for existing ${contentType}:`, error);
+    return null;
+  }
+}
 
 export default async ({ strapi }: { strapi: Core.Strapi }) => {
   // Wait a bit for Strapi to be fully ready
@@ -22,11 +126,11 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
 
   const dataDir = path.join(process.cwd(), 'database', 'migrations', 'data');
   const entitiesFile = path.join(dataDir, 'entities.jsonl');
-  const importFlagFile = path.join(dataDir, '.imported');
 
-  // Check if already imported
-  if (fs.existsSync(importFlagFile)) {
-    console.log('✅ Data already imported (flag file exists)');
+  // Check if already imported (database flag)
+  const alreadyImported = await checkImportFlag(strapi);
+  if (alreadyImported) {
+    console.log('✅ Data already imported (database flag exists)');
     return;
   }
 
@@ -38,6 +142,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
 
   console.log('🚀 Starting data import on bootstrap...');
   console.log(`📖 Reading entities from: ${entitiesFile}`);
+  console.log('🔍 Duplicate detection enabled - will skip existing items');
 
   try {
     // Read entities
@@ -72,13 +177,18 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
     ];
 
     let totalImported = 0;
+    let totalSkipped = 0;
     let totalFailed = 0;
 
     for (const contentType of importOrder) {
       const items = entitiesByType[contentType] || [];
       if (items.length === 0) continue;
 
-      console.log(`📦 Importing ${items.length} ${contentType}...`);
+      console.log(`📦 Processing ${items.length} ${contentType}...`);
+
+      let typeImported = 0;
+      let typeSkipped = 0;
+      let typeFailed = 0;
 
       for (const item of items) {
         try {
@@ -90,37 +200,59 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
 
           // Validate required fields - skip if name is null/undefined (required for most content types)
           if (cleanData.name === null || cleanData.name === undefined) {
-            totalFailed++;
-            console.error(`\n❌ Skipping ${contentType} with null/undefined name (id: ${item.id || 'unknown'})`);
+            // Exception: orders don't require name, they use orderNumber
+            if (contentType !== 'api::order.order' && !cleanData.orderNumber) {
+              typeFailed++;
+              totalFailed++;
+              console.error(`\n❌ Skipping ${contentType} with null/undefined name (id: ${item.id || 'unknown'})`);
+              continue;
+            }
+          }
+
+          // Check if item already exists (duplicate detection)
+          const existing = await findExistingItem(strapi, contentType, cleanData);
+          
+          if (existing) {
+            // Item already exists - skip to prevent duplicates
+            typeSkipped++;
+            totalSkipped++;
+            if ((typeSkipped + typeImported) % 50 === 0) {
+              process.stdout.write('.');
+            }
             continue;
           }
 
-          // Use Strapi's entity service
+          // Item doesn't exist - create it
           await strapi.entityService.create(contentType as any, {
             data: cleanData,
           });
 
+          typeImported++;
           totalImported++;
-          if (totalImported % 10 === 0) {
+          if ((typeImported + typeSkipped) % 50 === 0) {
             process.stdout.write('.');
           }
         } catch (error: any) {
+          typeFailed++;
           totalFailed++;
           const itemId = item.id || item.data?.id || 'unknown';
-          console.error(`\n❌ Error importing ${contentType} (id: ${itemId}):`, error.message);
+          const identifier = cleanData?.productId || cleanData?.orderNumber || cleanData?.name || itemId;
+          console.error(`\n❌ Error importing ${contentType} (${identifier}):`, error.message);
         }
       }
 
-      console.log(`\n✅ ${contentType}: ${items.length} processed`);
+      console.log(`\n✅ ${contentType}: ${typeImported} created, ${typeSkipped} skipped, ${typeFailed} failed`);
     }
 
     console.log(`\n📊 Import Summary:`);
-    console.log(`   ✅ Imported: ${totalImported}`);
+    console.log(`   ✅ Created: ${totalImported}`);
+    console.log(`   ⏭️  Skipped (duplicates): ${totalSkipped}`);
     console.log(`   ❌ Failed: ${totalFailed}`);
+    console.log(`   📦 Total processed: ${totalImported + totalSkipped + totalFailed}`);
 
-    // Create flag file to prevent re-import
-    fs.writeFileSync(importFlagFile, new Date().toISOString());
-    console.log('✅ Data import complete! Flag file created.');
+    // Set import flag in database to prevent re-import
+    await setImportFlag(strapi);
+    console.log('✅ Data import complete! Import flag set in database.');
 
   } catch (error: any) {
     console.error('❌ Error during data import:', error);

@@ -9,6 +9,7 @@ export default function ImageUploader({
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
+  const [imageErrors, setImageErrors] = useState({}); // Track which images have errors
 
   // Debug logging
   console.log('🖼️ ImageUploader received images:', images);
@@ -189,23 +190,33 @@ export default function ImageUploader({
                 border: '2px solid #e5e7eb'
               }}
             >
-              <img
-                src={getImageUrl(imageId)}
-                alt={`Product image ${index + 1}`}
-                style={{
-                  width: '100%',
+              {imageErrors[index] ? (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   height: '100%',
-                  objectFit: 'cover'
-                }}
-                onError={(e) => {
-                  e.target.style.display = 'none';
-                  e.target.parentElement.innerHTML = `
-                    <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6b7280; font-size: 12px;">
-                      Image Error
-                    </div>
-                  `;
-                }}
-              />
+                  color: '#6b7280',
+                  fontSize: '12px'
+                }}>
+                  Image Error
+                </div>
+              ) : (
+                <img
+                  src={getImageUrl(imageId)}
+                  alt={`Product image ${index + 1}`}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover'
+                  }}
+                  onError={(e) => {
+                    e.target.style.display = 'none';
+                    // SECURITY: Use React state instead of innerHTML
+                    setImageErrors(prev => ({ ...prev, [index]: true }));
+                  }}
+                />
+              )}
               
               {/* Remove Button */}
               <button

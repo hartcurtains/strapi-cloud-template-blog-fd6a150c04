@@ -17,6 +17,7 @@ export default function OrderPage() {
   const [paymentStatusFilter, setPaymentStatusFilter] = useState('all');
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [imageErrors, setImageErrors] = useState({}); // Track which images have errors
   
   useEffect(() => {
     fetchOrders();
@@ -1413,28 +1414,42 @@ export default function OrderPage() {
                                 background: '#f8fafc',
                                 border: '2px solid #e5e7eb'
                               }}>
-                                <img 
-                                  src={(() => {
-                                    const imageUrl = item.image || item.fabric?.image;
-                                    // Convert external URLs to local URLs to avoid CSP issues
-                                    if (imageUrl && imageUrl.includes('celebrated-feast-8b6e91b21c.media.strapiapp.com')) {
-                                      // Extract filename from external URL and convert to local path
-                                      const filename = imageUrl.split('/').pop();
-                                      return `/uploads/${filename}`;
-                                    }
-                                    return imageUrl;
-                                  })()} 
-                                  alt={item.name || 'Product'}
-                                  style={{
-                                    width: '100%',
+                                {imageErrors[`${selectedOrder?.id}-${index}`] ? (
+                                  <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
                                     height: '100%',
-                                    objectFit: 'cover'
-                                  }}
-                                  onError={(e) => {
-                                    e.target.style.display = 'none';
-                                    e.target.parentElement.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #6b7280; font-size: 12px;">No Image</div>';
-                                  }}
-                                />
+                                    color: '#6b7280',
+                                    fontSize: '12px'
+                                  }}>
+                                    No Image
+                                  </div>
+                                ) : (
+                                  <img 
+                                    src={(() => {
+                                      const imageUrl = item.image || item.fabric?.image;
+                                      // Convert external URLs to local URLs to avoid CSP issues
+                                      if (imageUrl && imageUrl.includes('celebrated-feast-8b6e91b21c.media.strapiapp.com')) {
+                                        // Extract filename from external URL and convert to local path
+                                        const filename = imageUrl.split('/').pop();
+                                        return `/uploads/${filename}`;
+                                      }
+                                      return imageUrl;
+                                    })()} 
+                                    alt={item.name || 'Product'}
+                                    style={{
+                                      width: '100%',
+                                      height: '100%',
+                                      objectFit: 'cover'
+                                    }}
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                      // SECURITY: Use React state instead of innerHTML
+                                      setImageErrors(prev => ({ ...prev, [`${selectedOrder?.id}-${index}`]: true }));
+                                    }}
+                                  />
+                                )}
                               </div>
                             )}
                             
