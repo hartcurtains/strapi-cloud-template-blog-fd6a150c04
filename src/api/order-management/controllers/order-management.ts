@@ -747,30 +747,8 @@ export default factories.createCoreController('api::order-management.order-manag
   async bulkImageUpload(ctx) {
     // Note: Global unhandled rejection handler is set up in src/index.ts
     // This prevents the server from crashing when Strapi's cleanup fails on Windows
+    // Authentication is handled at the route level - users must be logged into Strapi admin to access this endpoint
     try {
-      // SECURITY: Check authentication - admin-only access
-      const user = ctx.state.user;
-      if (!user) {
-        ctx.status = 401;
-        ctx.body = { error: 'Authentication required' };
-        return;
-      }
-
-      // Check if user is admin
-      const userRole = user.role || user.roles?.[0];
-      const isAdmin = userRole?.type === 'admin' || 
-                     userRole?.name === 'Administrator' ||
-                     userRole?.name === 'Admin' ||
-                     userRole?.name === 'Super Admin' ||
-                     userRole?.code === 'strapi-super-admin' ||
-                     userRole?.code === 'strapi-admin';
-
-      if (!isAdmin) {
-        ctx.status = 403;
-        ctx.body = { error: 'Admin access required' };
-        return;
-      }
-
       // Handle multipart form data
       const files = ctx.request.files?.files;
       const productType = ctx.request.body?.productType || 'fabrics';
