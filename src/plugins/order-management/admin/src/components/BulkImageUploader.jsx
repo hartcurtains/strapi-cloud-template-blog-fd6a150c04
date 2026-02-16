@@ -1,10 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon } from 'lucide-react';
+import { extractColorId, matchImageToProduct, parseColorIdFromFilename } from '../utils/imageMatching';
 
 export default function BulkImageUploader({ productType = 'fabrics' }) {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
-  const [matchBy, setMatchBy] = useState('productId');
+  const [matchBy, setMatchBy] = useState('colorId'); // Default to color ID matching
   const [createAsColour, setCreateAsColour] = useState(false);
   const [results, setResults] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -15,25 +16,84 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
     status: '' // 'uploading', 'matching', 'linking', 'complete'
   });
 
+  // New state for color ID matching
+  const [imageMatches, setImageMatches] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [colorMappings, setColorMappings] = useState({});
+  const [showColorMapping, setShowColorMapping] = useState(false);
+
   const getAuthHeaders = () => {
     // Use Strapi's internal admin API - get the JWT token from Strapi's admin context
     // This matches the pattern used in ProductManagementPage
-    const token = window.strapi?.auth?.getToken?.() || 
-                  localStorage.getItem('strapi-token') || 
-                  localStorage.getItem('jwtToken');
-    
+    const token = window.strapi?.auth?.getToken?.() ||
+      localStorage.getItem('strapi-token') ||
+      localStorage.getItem('jwtToken');
+
     return {
       ...(token && { 'Authorization': `Bearer ${token}` })
     };
   };
 
+  // Fetch products when component mounts or productType changes
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const apiPath = `/api/${productType}`;
+        const response = await fetch(`${apiPath}?populate=*`, {
+          headers: getAuthHeaders()
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setProducts(data.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      }
+    };
+
+    if (matchBy === 'colorId') {
+      fetchProducts();
+    }
+  }, [productType, matchBy]);
+
   const handleFileSelect = (files) => {
-    const imageFiles = Array.from(files).filter(file => 
-      file.type.startsWith('image/')
+    const validFiles = Array.from(files).filter(file =>
+      file.type.startsWith('image/') ||
+      file.type === 'application/zip' ||
+      file.type === 'application/x-zip-compressed' ||
+      file.name.toLowerCase().endsWith('.zip')
     );
-    
-    setSelectedFiles(prev => [...prev, ...imageFiles]);
+
+    setSelectedFiles(prev => [...prev, ...validFiles]);
     setResults(null);
+
+    // If using color ID matching, match images to products
+    if (matchBy === 'colorId' && products.length > 0) {
+      const matches = validFiles.map(file => {
+        const productMatches = matchImageToProduct(file.name, products);
+        const parsed = parseColorIdFromFilename(file.name);
+
+        return {
+          file,
+          colorId: parsed.colorId,
+          matches: productMatches,
+          selectedProduct: productMatches[0]?.productId || null
+        };
+      });
+
+      setImageMatches(prev => [...prev, ...matches]);
+
+      // Extract unique color IDs
+      const uniqueColorIds = [...new Set(matches.map(m => m.colorId))];
+      const newMappings = {};
+      uniqueColorIds.forEach(id => {
+        if (!colorMappings[id]) {
+          newMappings[id] = '';
+        }
+      });
+      setColorMappings(prev => ({ ...prev, ...newMappings }));
+    }
   };
 
   const handleFileInput = (e) => {
@@ -62,6 +122,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
 
   const removeFile = (index) => {
     setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+    setImageMatches(prev => prev.filter((_, i) => i !== index));
     setResults(null);
   };
 
@@ -73,7 +134,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
 
     setUploading(true);
     setResults(null);
-    
+
     // Initialize progress
     setUploadProgress({
       current: 0,
@@ -102,13 +163,13 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
       // Process each batch
       for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
         const batch = batches[batchIndex];
-        
+
         // Upload files in batch one at a time for progress visibility
         for (let fileIndex = 0; fileIndex < batch.length; fileIndex++) {
           const file = batch[fileIndex];
           const fileName = file.name;
           const globalIndex = batchIndex * BATCH_SIZE + fileIndex + 1;
-          
+
           setUploadProgress({
             current: globalIndex,
             total: selectedFiles.length,
@@ -123,6 +184,14 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
             formData.append('matchBy', matchBy);
             formData.append('createAsColour', createAsColour ? 'true' : 'false');
 
+            // Add color ID matching data if in color ID mode
+            if (matchBy === 'colorId' && imageMatches[globalIndex - 1]) {
+              const match = imageMatches[globalIndex - 1];
+              formData.append('colorId', match.colorId);
+              formData.append('selectedProductId', match.selectedProduct || '');
+              formData.append('colorName', colorMappings[match.colorId] || '');
+            }
+
             const response = await fetch('/api/order-management/bulk-image-upload', {
               method: 'POST',
               headers: getAuthHeaders(),
@@ -134,7 +203,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
               let errorMessage = `Upload failed: ${response.status}`;
               try {
                 const errorData = await response.json();
-                errorMessage = errorData.error || errorMessage;
+                errorMessage = errorData.error || (typeof errorData === 'object' ? JSON.stringify(errorData) : errorData) || errorMessage;
               } catch (e) {
                 // If response is not JSON, use status text
                 errorMessage = response.statusText || errorMessage;
@@ -143,7 +212,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
             }
 
             const data = await response.json();
-            
+
             // Merge results
             if (data.results) {
               allResults.uploaded += data.results.uploaded || 0;
@@ -167,7 +236,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
               error: error.message
             });
             setUploadProgress(prev => ({ ...prev, status: 'error' }));
-            
+
             // Continue with next file even if one fails
             await new Promise(resolve => setTimeout(resolve, 100));
           }
@@ -176,7 +245,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
 
       setResults(allResults);
       setSelectedFiles([]); // Clear after successful upload
-      
+
       console.log('✅ Bulk upload completed:', allResults);
     } catch (error) {
       console.error('❌ Error in upload process:', error);
@@ -197,11 +266,11 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
   };
 
   return (
-    <div style={{ 
-      padding: '24px', 
+    <div style={{
+      padding: '24px',
       paddingBottom: uploading ? '120px' : '24px', // Extra padding when progress bar is visible
-      maxWidth: '1200px', 
-      margin: '0 auto' 
+      maxWidth: '1200px',
+      margin: '0 auto'
     }}>
       <div style={{ marginBottom: '32px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
@@ -235,6 +304,18 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
           Match Images By:
         </label>
         <div style={{ display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+            <input
+              type="radio"
+              value="colorId"
+              checked={matchBy === 'colorId'}
+              onChange={(e) => setMatchBy(e.target.value)}
+              style={{ marginRight: '8px' }}
+            />
+            <span style={{ fontSize: '14px', color: '#374151' }}>
+              <strong>Color ID (Smart Matching)</strong> - Extract last 2 chars as color ID and match product name
+            </span>
+          </label>
           <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
             <input
               type="radio"
@@ -307,17 +388,17 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
           id="bulk-image-upload"
           type="file"
           multiple
-          accept="image/*"
+          accept="image/*,.zip"
           onChange={handleFileInput}
           style={{ display: 'none' }}
         />
-        
+
         <ImageIcon size={48} style={{ color: '#9ca3af', marginBottom: '16px' }} />
         <div style={{ fontSize: '18px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
           Drop images here or click to browse
         </div>
         <div style={{ fontSize: '14px', color: '#6b7280' }}>
-          Select multiple images to upload and auto-link to products
+          Select multiple images or ZIP folders to upload and auto-link to products
         </div>
       </div>
 
@@ -343,7 +424,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
               Clear All
             </button>
           </div>
-          
+
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
@@ -425,6 +506,151 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
         </div>
       )}
 
+      {/* Image Matches Preview (Color ID Mode) */}
+      {matchBy === 'colorId' && imageMatches.length > 0 && (
+        <div style={{ marginBottom: '24px' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '16px' }}>
+            Image Matches ({imageMatches.length})
+          </h3>
+
+          <div style={{ display: 'grid', gap: '16px' }}>
+            {imageMatches.map((match, index) => (
+              <div
+                key={index}
+                style={{
+                  padding: '16px',
+                  background: 'white',
+                  borderRadius: '8px',
+                  border: '2px solid #e5e7eb'
+                }}
+              >
+                <div style={{ display: 'flex', gap: '16px', alignItems: 'start' }}>
+                  {/* Image Preview */}
+                  <div style={{
+                    width: '100px',
+                    height: '100px',
+                    borderRadius: '8px',
+                    overflow: 'hidden',
+                    flexShrink: 0,
+                    background: '#f3f4f6'
+                  }}>
+                    <img
+                      src={URL.createObjectURL(match.file)}
+                      alt={match.file.name}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover'
+                      }}
+                    />
+                  </div>
+
+                  {/* Match Info */}
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
+                      {match.file.name}
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '12px' }}>
+                      Color ID: <span style={{
+                        background: '#dbeafe',
+                        color: '#1e40af',
+                        padding: '2px 8px',
+                        borderRadius: '4px',
+                        fontWeight: '600'
+                      }}>{match.colorId}</span>
+                    </div>
+
+                    {/* Product Selection */}
+                    <div>
+                      <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                        Select Product:
+                      </label>
+                      <select
+                        value={match.selectedProduct || ''}
+                        onChange={(e) => {
+                          const newMatches = [...imageMatches];
+                          newMatches[index].selectedProduct = e.target.value ? parseInt(e.target.value) : null;
+                          setImageMatches(newMatches);
+                        }}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px',
+                          fontSize: '14px',
+                          border: '1px solid #d1d5db',
+                          borderRadius: '6px',
+                          background: 'white'
+                        }}
+                      >
+                        <option value="">Select a product...</option>
+                        {match.matches.map((productMatch, idx) => (
+                          <option key={idx} value={productMatch.productId}>
+                            {productMatch.productName} ({productMatch.confidence}% match)
+                          </option>
+                        ))}
+                        {products.filter(p => !match.matches.find(m => m.productId === p.id)).map(product => (
+                          <option key={product.id} value={product.id}>
+                            {product.name} (manual)
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Match Confidence */}
+                    {match.matches.length > 0 && match.matches[0].confidence && (
+                      <div style={{ marginTop: '8px', fontSize: '12px' }}>
+                        <span style={{
+                          color: match.matches[0].confidence >= 80 ? '#059669' :
+                            match.matches[0].confidence >= 60 ? '#f59e0b' : '#ef4444'
+                        }}>
+                          {match.matches[0].confidence >= 80 ? '✓ High confidence' :
+                            match.matches[0].confidence >= 60 ? '⚠ Medium confidence' : '⚠ Low confidence'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Color Mapping Interface */}
+      {matchBy === 'colorId' && Object.keys(colorMappings).length > 0 && (
+        <div style={{ marginBottom: '24px', padding: '16px', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#374151', marginBottom: '12px' }}>
+            Color ID Mappings
+          </h3>
+          <p style={{ fontSize: '14px', color: '#6b7280', marginBottom: '16px' }}>
+            Define what each color ID means (e.g., "01" = "Navy Blue")
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
+            {Object.keys(colorMappings).map(colorId => (
+              <div key={colorId}>
+                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
+                  Color ID "{colorId}":
+                </label>
+                <input
+                  type="text"
+                  value={colorMappings[colorId]}
+                  onChange={(e) => setColorMappings(prev => ({ ...prev, [colorId]: e.target.value }))}
+                  placeholder="e.g., Navy Blue"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    fontSize: '14px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    background: 'white'
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Upload Button */}
       {selectedFiles.length > 0 && !uploading && (
         <div style={{ marginBottom: '24px' }}>
@@ -466,9 +692,9 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
         }}>
           <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
             {/* Progress Text */}
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'space-between', 
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
               alignItems: 'center',
               marginBottom: '12px'
             }}>
@@ -492,7 +718,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
                 {uploadProgress.current}/{uploadProgress.total}
               </div>
             </div>
-            
+
             {/* Progress Bar */}
             <div style={{
               width: '100%',
@@ -506,8 +732,8 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
               <div style={{
                 width: `${uploadProgress.total > 0 ? (uploadProgress.current / uploadProgress.total) * 100 : 0}%`,
                 height: '100%',
-                background: uploadProgress.status === 'error' ? '#ef4444' : 
-                           uploadProgress.status === 'complete' ? '#10b981' : '#3b82f6',
+                background: uploadProgress.status === 'error' ? '#ef4444' :
+                  uploadProgress.status === 'complete' ? '#10b981' : '#3b82f6',
                 transition: 'width 0.3s ease, background 0.3s ease',
                 display: 'flex',
                 alignItems: 'center',
@@ -520,23 +746,23 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
                 )}
               </div>
             </div>
-            
+
             {/* Percentage and Status */}
-            <div style={{ 
+            <div style={{
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
-              fontSize: '12px', 
+              fontSize: '12px',
               color: '#6b7280',
               marginTop: '4px'
             }}>
               <span>
-                {uploadProgress.total > 0 
+                {uploadProgress.total > 0
                   ? `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}% complete`
                   : 'Starting...'}
               </span>
               <span style={{ fontWeight: '600' }}>
-                {uploadProgress.current > 0 && uploadProgress.total > 0 
+                {uploadProgress.current > 0 && uploadProgress.total > 0
                   ? `${uploadProgress.current} of ${uploadProgress.total} files`
                   : ''}
               </span>
@@ -557,7 +783,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
           <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#374151', marginBottom: '16px' }}>
             Upload Results
           </h3>
-          
+
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
             <div style={{ padding: '16px', background: 'white', borderRadius: '8px' }}>
               <div style={{ fontSize: '24px', fontWeight: '700', color: '#3b82f6' }}>

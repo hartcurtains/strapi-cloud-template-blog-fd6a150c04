@@ -1487,7 +1487,7 @@ export default function ProductManagementPage() {
   };
 
   return (
-    <>
+    <div>
       <style>{spinnerStyle}</style>
       <div style={{
       padding: '32px',
@@ -1636,248 +1636,50 @@ export default function ProductManagementPage() {
               <strong>💡 Pro Tip:</strong> Export existing products first to see the exact format, then modify and re-import for bulk updates!
             </div>
           </div>
-          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-            <button
-              onClick={openCreateModal}
-              style={{
-                background: '#059669',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 15px rgba(5, 150, 105, 0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <Plus size={16} />
-              Add New Product
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', background: '#f8faf9', padding: '8px', borderRadius: '12px' }}>
+            <button onClick={openCreateModal} style={{ background: '#10b981', color: 'white', border: 'none', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Plus size={14} /> Add
             </button>
-            
-            <button
-              onClick={handleExportToExcel}
-              style={{
-                background: '#000000',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 15px rgba(0, 0, 0, 0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <Download size={16} />
-              Export to Excel
+
+            <button onClick={handleExportToExcel} style={{ background: 'white', color: '#0f172a', border: '1px solid #e6eef0', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={14} /> Export
             </button>
-            
-            <button
-              onClick={() => setShowBulkImageUpload(!showBulkImageUpload)}
-              style={{
-                background: showBulkImageUpload ? '#3b82f6' : '#3b82f6',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 15px rgba(59, 130, 246, 0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <Upload size={16} />
-              {showBulkImageUpload ? 'Hide' : 'Bulk Image Upload'}
+
+            <button onClick={() => setShowBulkImageUpload(!showBulkImageUpload)} style={{ background: showBulkImageUpload ? '#0ea5e9' : 'white', color: showBulkImageUpload ? 'white' : '#0f172a', border: '1px solid #e6eef0', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Upload size={14} /> Images
             </button>
-            
-            <button
-              onClick={handleExportToCSV}
-              style={{
-                background: '#059669',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 15px rgba(5, 150, 105, 0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <Download size={16} />
-              Export to CSV
+
+            <button onClick={handleExportToCSV} style={{ background: 'white', color: '#0f172a', border: '1px solid #e6eef0', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Download size={14} /> CSV
             </button>
-            
+
             {selectedProducts.length > 0 && (
-              <>
-                <button
-                  onClick={handleExportSelected}
-                  style={{
-                    background: '#7c3aed',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    padding: '12px 24px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 15px rgba(124, 58, 237, 0.4)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <Download size={16} />
-                  Export Selected ({selectedProducts.length})
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button onClick={handleExportSelected} style={{ background: '#7c3aed', color: 'white', border: 'none', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Download size={14} /> Selected
                 </button>
-                
-                <button
-                  onClick={handleExportSelectedToCSV}
-                  style={{
-                    background: '#dc2626',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '12px',
-                    padding: '12px 24px',
-                    fontSize: '14px',
-                    fontWeight: '600',
-                    cursor: 'pointer',
-                    transition: 'all 0.3s ease',
-                    boxShadow: '0 4px 15px rgba(220, 38, 38, 0.4)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <Download size={16} />
-                  Export Selected CSV ({selectedProducts.length})
+                <button onClick={handleExportSelectedToCSV} style={{ background: '#ef4444', color: 'white', border: 'none', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Download size={14} /> Selected CSV
                 </button>
-              </>
+              </div>
             )}
-            
-            <button
-              onClick={() => setIsImportModalOpen(true)}
-              style={{
-                background: '#059669',
-                color: 'white',
-                border: 'none',
-                borderRadius: '12px',
-                padding: '12px 24px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                boxShadow: '0 4px 15px rgba(5, 150, 105, 0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}
-            >
-              <Upload size={16} />
-              Import Products
+
+            <button onClick={() => setIsImportModalOpen(true)} style={{ marginLeft: 'auto', background: '#059669', color: 'white', border: 'none', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Upload size={14} /> Import
             </button>
-            
+
             <div style={{ position: 'relative', display: 'inline-block' }} data-template-dropdown>
-              <button
-                onClick={() => setShowTemplateDropdown(!showTemplateDropdown)}
-                style={{
-                  background: '#000000',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '12px',
-                  padding: '12px 24px',
-                  fontSize: '14px',
-                  fontWeight: '600',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s ease',
-                  boxShadow: '0 4px 15px rgba(0, 0, 0, 0.4)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <FileText size={16} />
-                Download Template
-                <span style={{ fontSize: '12px', marginLeft: '4px' }}>▼</span>
+              <button onClick={() => setShowTemplateDropdown(!showTemplateDropdown)} style={{ background: 'white', color: '#0f172a', border: '1px solid #e6eef0', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer' }}>
+                <FileText size={14} /> Template ▾
               </button>
-              
               {showTemplateDropdown && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: '0',
-                  background: 'white',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-                  zIndex: 1000,
-                  minWidth: '200px',
-                  marginTop: '4px'
-                }}>
-                  <button
-                    onClick={() => {
-                      handleDownloadTemplate(false);
-                      setShowTemplateDropdown(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: 'none',
-                      background: 'transparent',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      color: '#374151',
-                      borderBottom: '1px solid #f3f4f6'
-                    }}
-                    onMouseEnter={(e) => e.target.style.background = '#f9fafb'}
-                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
-                  >
-                    Current Tab Only ({productTypes[activeTab].name})
-                  </button>
-                  <button
-                    onClick={() => {
-                      handleDownloadTemplate(true);
-                      setShowTemplateDropdown(false);
-                    }}
-                    style={{
-                      width: '100%',
-                      padding: '12px 16px',
-                      border: 'none',
-                      background: 'transparent',
-                      textAlign: 'left',
-                      cursor: 'pointer',
-                      fontSize: '14px',
-                      color: '#374151'
-                    }}
-                    onMouseEnter={(e) => e.target.style.background = '#f9fafb'}
-                    onMouseLeave={(e) => e.target.style.background = 'transparent'}
-                  >
-                    Comprehensive (All Sheets)
-                  </button>
+                <div style={{ position: 'absolute', top: '100%', right: 0, background: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 6px 18px rgba(15, 23, 42, 0.08)', zIndex: 1000, minWidth: '220px', marginTop: '8px' }}>
+                  <button onClick={() => { handleDownloadTemplate(false); setShowTemplateDropdown(false); }} style={{ width: '100%', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#374151', borderBottom: '1px solid #f3f4f6' }}>Current Tab Only ({productTypes[activeTab].name})</button>
+                  <button onClick={() => { handleDownloadTemplate(true); setShowTemplateDropdown(false); }} style={{ width: '100%', padding: '12px 16px', border: 'none', background: 'transparent', textAlign: 'left', cursor: 'pointer', fontSize: '14px', color: '#374151' }}>Comprehensive (All Sheets)</button>
                 </div>
               )}
             </div>
-        </div>
-      </div>
+          </div>
 
       {/* Bulk Image Upload Section */}
       {showBulkImageUpload && (
@@ -1895,35 +1697,22 @@ export default function ProductManagementPage() {
       )}
 
         {/* Product Type Tabs */}
-        <div style={{
-          display: 'flex',
-          gap: '8px',
-          marginBottom: '24px',
-          flexWrap: 'wrap'
-        }}>
+        <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
           {Object.entries(productTypes).map(([key, type]) => (
-            <button
-              key={key}
-              onClick={() => setActiveTab(key)}
-              style={{
-                background: activeTab === key 
-                  ? '#059669' 
-                  : '#ffffff',
-                color: activeTab === key ? 'white' : '#000000',
-                border: activeTab === key ? 'none' : '2px solid #059669',
-                borderRadius: '12px',
-                padding: '12px 20px',
-                fontSize: '14px',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.3s ease',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
-                boxShadow: activeTab === key ? '0 4px 15px rgba(5, 150, 105, 0.4)' : 'none'
-              }}
-            >
-              <span style={{ fontSize: '16px' }}>{type.icon}</span>
+            <button key={key} onClick={() => setActiveTab(key)} style={{
+              background: activeTab === key ? '#0f766e' : '#f8fafb',
+              color: activeTab === key ? 'white' : '#0f172a',
+              border: activeTab === key ? '1px solid rgba(255,255,255,0.06)' : '1px solid #e6eef0',
+              borderRadius: '999px',
+              padding: '8px 14px',
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
+            }}>
+              <span style={{ fontSize: '14px', opacity: activeTab === key ? 1 : 0.9 }}>{type.icon}</span>
               {type.name}
             </button>
           ))}
@@ -2027,344 +1816,24 @@ export default function ProductManagementPage() {
         </div>
       </div>
 
-      {/* Products Table */}
+      {/* Products list removed to simplify the page - keep bulk upload features */}
       <div style={{
         background: '#ffffff',
         borderRadius: '16px',
-        padding: '0',
+        padding: '40px',
         boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
         border: '1px solid #f1f5f9',
-        overflow: 'hidden'
+        textAlign: 'center',
+        color: '#6b7280'
       }}>
-        {loading ? (
-          <div style={{
-            padding: '60px',
-            textAlign: 'center',
-            color: '#6b7280'
-          }}>
-            <div style={{
-              fontSize: '48px',
-              marginBottom: '16px',
-              display: 'flex',
-              justifyContent: 'center'
-            }}>
-              <Loader2 size={48} className="animate-spin" />
-            </div>
-            <div style={{
-              fontSize: '18px',
-              fontWeight: '600'
-            }}>Loading products...</div>
-          </div>
-        ) : filteredProducts.length === 0 ? (
-          <div style={{
-            padding: '60px',
-            textAlign: 'center',
-            color: '#6b7280'
-          }}>
-            <div style={{
-              fontSize: '48px',
-              marginBottom: '16px',
-              display: 'flex',
-              justifyContent: 'center'
-            }}>
-              <PackageX size={48} />
-            </div>
-            <div style={{
-              fontSize: '18px',
-              fontWeight: '600',
-              color: '#374151'
-            }}>No products found</div>
-          </div>
-        ) : (
-          <div style={{ overflow: 'auto' }}>
-            <table style={{
-              width: '100%',
-              borderCollapse: 'collapse',
-              fontSize: '14px'
-            }}>
-              <thead>
-                <tr style={{
-                  background: '#f8fafc',
-                  borderBottom: '1px solid #e2e8f0'
-                }}>
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'left',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    width: '50px'
-                  }}>
-                    <input
-                      type="checkbox"
-                      checked={selectedProducts.length === filteredProducts.length && filteredProducts.length > 0}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          selectAllProducts();
-                        } else {
-                          setSelectedProducts([]);
-                        }
-                      }}
-                      style={{
-                        width: '16px',
-                        height: '16px',
-                        cursor: 'pointer'
-                      }}
-                    />
-                  </th>
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'left',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>Name</th>
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'left',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>ID/Slug</th>
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'left',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>Price</th>
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'left',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>Status</th>
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'left',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>Relations</th>
-                  {(activeTab === 'curtains' || activeTab === 'blinds' || activeTab === 'cushions') && (
-                    <th style={{
-                      padding: '20px 16px',
-                      textAlign: 'left',
-                      fontWeight: '700',
-                      color: '#374151',
-                      fontSize: '12px',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px'
-                    }}>Pricing Rules</th>
-                  )}
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'left',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>Created</th>
-                  <th style={{
-                    padding: '20px 16px',
-                    textAlign: 'center',
-                    fontWeight: '700',
-                    color: '#374151',
-                    fontSize: '12px',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px'
-                  }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredProducts.map((product, index) => (
-                  <tr
-                    key={product.id}
-                    style={{
-                      borderBottom: '1px solid #f1f5f9',
-                      transition: 'all 0.2s ease',
-                      background: index % 2 === 0 ? 'rgba(255, 255, 255, 0.5)' : 'rgba(248, 250, 252, 0.5)'
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = 'rgba(5, 150, 105, 0.05)';
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = index % 2 === 0 ? 'rgba(255, 255, 255, 0.5)' : 'rgba(248, 250, 252, 0.5)';
-                    }}
-                  >
-                    <td style={{ padding: '20px 16px' }}>
-                      <input
-                        type="checkbox"
-                        checked={selectedProducts.includes(product.id)}
-                        onChange={() => toggleProductSelection(product.id)}
-                        style={{
-                          width: '16px',
-                          height: '16px',
-                          cursor: 'pointer'
-                        }}
-                      />
-                    </td>
-                    <td style={{
-                      padding: '20px 16px',
-                      fontWeight: '600',
-                      color: '#1f2937'
-                    }}>
-                      {product.name}
-                    </td>
-                    <td style={{
-                      padding: '20px 16px',
-                      color: '#6b7280',
-                      fontFamily: 'monospace',
-                      fontSize: '13px'
-                    }}>
-                      {getProductFieldValue(product, 'productId') || getProductFieldValue(product, 'slug') || 
-                       getProductFieldValue(product, 'liningType') || getProductFieldValue(product, 'type') || 
-                       getProductFieldValue(product, 'product_type') || 'N/A'}
-                    </td>
-                    <td style={{
-                      padding: '20px 16px',
-                      fontWeight: '700',
-                      color: '#059669',
-                      fontSize: '16px'
-                    }}>
-                      {getProductFieldValue(product, 'price_per_metre') ? formatPrice(getProductFieldValue(product, 'price_per_metre')) : 
-                       getProductFieldValue(product, 'price') ? formatPrice(getProductFieldValue(product, 'price')) : 
-                       getProductFieldValue(product, 'formula') ? 'Formula Set' : 'N/A'}
-                    </td>
-                    <td style={{ padding: '20px 16px' }}>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '6px 12px',
-                        borderRadius: '20px',
-                        fontSize: '12px',
-                        fontWeight: '600',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px',
-                        background: getProductStatus(product) === 'in_stock' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-                                   getProductStatus(product) === 'out_of_stock' ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' :
-                                   getProductStatus(product) === 'available' ? 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' :
-                                   'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                        color: 'white',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-                      }}>
-                        {getStatusDisplayText(product)}
-                      </span>
-                    </td>
-                    <td style={{
-                      padding: '20px 16px',
-                      color: '#6b7280',
-                      fontSize: '12px',
-                      maxWidth: '200px'
-                    }}>
-                      <div style={{
-                        background: '#f8fafc',
-                        padding: '8px 12px',
-                        borderRadius: '8px',
-                        border: '1px solid #e2e8f0',
-                        fontSize: '11px',
-                        lineHeight: '1.4'
-                      }}>
-                        {getMainRelationInfo(product)}
-                      </div>
-                    </td>
-                    {(activeTab === 'curtains' || activeTab === 'blinds' || activeTab === 'cushions') && (
-                      <td style={{
-                        padding: '20px 16px',
-                        color: '#6b7280',
-                        fontSize: '12px',
-                        maxWidth: '200px'
-                      }}>
-                        <div style={{
-                          background: '#f0f9ff',
-                          padding: '8px 12px',
-                          borderRadius: '8px',
-                          border: '1px solid #bae6fd',
-                          fontSize: '11px',
-                          lineHeight: '1.4'
-                        }}>
-                          {product.pricing_rules && product.pricing_rules.length > 0 
-                            ? product.pricing_rules.map(rule => rule.name).join(', ')
-                            : 'No pricing rules'
-                          }
-                        </div>
-                      </td>
-                    )}
-                    <td style={{
-                      padding: '20px 16px',
-                      color: '#6b7280',
-                      fontSize: '13px'
-                    }}>
-                      {formatDate(product.createdAt)}
-                    </td>
-                    <td style={{
-                      padding: '20px 16px',
-                      textAlign: 'center'
-                    }}>
-                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                        <button
-                          onClick={() => openEditModal(product)}
-                          style={{
-                            background: '#059669',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            padding: '8px 12px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            boxShadow: '0 2px 8px rgba(5, 150, 105, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Edit size={12} />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(product.id)}
-                          style={{
-                            background: '#000000',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '8px',
-                            padding: '8px 12px',
-                            fontSize: '12px',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            transition: 'all 0.3s ease',
-                            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '4px'
-                          }}
-                        >
-                          <Trash2 size={12} />
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div style={{ fontSize: '20px', fontWeight: '700', color: '#374151' }}>Product list hidden</div>
+        <div style={{ marginTop: '8px' }}>The detailed products table has been removed to keep this page clean.</div>
+        <div style={{ marginTop: '12px', fontSize: '14px' }}>
+          Use the <strong>Export</strong> / <strong>Import</strong> buttons or <strong>Add New Product</strong> to manage items.
+        </div>
+        <div style={{ marginTop: '16px', color: '#374151' }}>
+          {Array.isArray(products[activeTab]) ? `Products available: ${products[activeTab].length}` : ''}
+        </div>
       </div>
 
       {/* Product Form Modal */}
@@ -3468,6 +2937,7 @@ export default function ProductManagementPage() {
         </div>
       )}
     </div>
-    </>
+  </div>
+  </div>
   );
 }
