@@ -778,7 +778,11 @@ export interface ApiLiningLining extends Struct.CollectionTypeSchema {
       'api::lining.lining'
     > &
       Schema.Attribute.Private;
-    price_per_metre: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    price_per_metre: Schema.Attribute.Decimal;
+    pricing_rule: Schema.Attribute.Relation<
+      'oneToOne',
+      'api::pricing-rule.pricing-rule'
+    >;
     publishedAt: Schema.Attribute.DateTime;
     thumbnail: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     updatedAt: Schema.Attribute.DateTime;
@@ -916,10 +920,37 @@ export interface ApiPricingRulePricingRule extends Struct.CollectionTypeSchema {
     > &
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
-    product_type: Schema.Attribute.Enumeration<
-      ['curtain', 'blind', 'cushion']
+    product_type: Schema.Attribute.Enumeration<['curtain', 'blind', 'cushion']>;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiSiteStateSiteState extends Struct.SingleTypeSchema {
+  collectionName: 'site_states';
+  info: {
+    displayName: 'site state';
+    pluralName: 'site-states';
+    singularName: 'site-state';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::site-state.site-state'
     > &
-      Schema.Attribute.Required;
+      Schema.Attribute.Private;
+    ordersEnabled: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<true>;
     publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -1483,6 +1514,7 @@ declare module '@strapi/strapi' {
       'api::order-management.order-management': ApiOrderManagementOrderManagement;
       'api::order.order': ApiOrderOrder;
       'api::pricing-rule.pricing-rule': ApiPricingRulePricingRule;
+      'api::site-state.site-state': ApiSiteStateSiteState;
       'api::trimming.trimming': ApiTrimmingTrimming;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;

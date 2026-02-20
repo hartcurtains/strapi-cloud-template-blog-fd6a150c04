@@ -1,0 +1,20 @@
+{
+  "kind": "singleType",
+  "collectionName": "site_states",
+  "info": {
+    "singularName": "site-state",
+    "pluralName": "site-states",
+    "displayName": "site state"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "ordersEnabled": {
+      "type": "boolean",
+      "required": true,
+      "default": true
+    }
+  }
+}

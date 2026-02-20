@@ -21,7 +21,7 @@
     },
     "product_type": {
       "type": "enumeration",
-      "required": true,
+      "required": false,
       "enum": [
         "curtain",
         "blind",

@@ -17,7 +17,7 @@
     },
     "price_per_metre": {
       "type": "decimal",
-      "required": true
+      "required": false
     },
     "colour": {
       "type": "string",
@@ -32,6 +32,11 @@
         "videos",
         "audios"
       ]
+    },
+    "pricing_rule": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::pricing-rule.pricing-rule"
     }
   }
 }
