@@ -51,6 +51,9 @@ export default factories.createCoreService(
         productType: string;
         matchBy: string;
         createAsColour: boolean;
+        colorId?: string;
+        colorName?: string;
+        selectedProductId?: string | number;
         log?: (msg: string) => void;
       }): Promise<BulkUploadResult> {
         const {
@@ -58,8 +61,20 @@ export default factories.createCoreService(
           productType,
           matchBy,
           createAsColour,
+          colorId: providedColorId,
+          colorName: providedColorName,
+          selectedProductId: providedProductId,
           log = console.log
         } = params;
+
+        log('🚀 [bulkImageUpload] RECEIVED PARAMS:', {
+          providedColorId,
+          providedColorName,
+          providedProductId,
+          productType,
+          matchBy,
+          createAsColour
+        });
 
         const results: BulkUploadResult = {
           uploaded: 0,
@@ -289,7 +304,28 @@ export default factories.createCoreService(
 
           let product: any = null;
 
-          if (matchBy === 'productId') {
+          // Priority 1: Specifically selected product from UI
+          if (providedProductId) {
+            log(`🎯 Using manually selected product ID: ${providedProductId}`);
+            const numericId = typeof providedProductId === 'string' ? parseInt(providedProductId) : providedProductId;
+
+            // Try to find in cache first
+            for (const p of productIdMap.values()) {
+              if (p.id === numericId) {
+                product = p;
+                break;
+              }
+            }
+
+            // Fallback to direct DB lookup if not in cache (though cache should have it)
+            if (!product) {
+              product = await strapi.entityService.findOne(contentType as any, numericId, {
+                populate: ['images']
+              });
+            }
+          }
+
+          if (!product && matchBy === 'productId') {
             product = productIdMap.get(identifier.toLowerCase()) || null;
           } else if (matchBy === 'slug') {
             product = slugMap.get(identifier.toLowerCase()) || null;
@@ -390,9 +426,26 @@ export default factories.createCoreService(
               continue;
             }
 
-            // Use ONLY the color code as the colour name (shared across fabrics)
-            const colourName = parsedCode.trim();
+            // Priority 1: Use provided color name from manual mapping
+            // Priority 2: Use provided color ID from smart matching
+            // Priority 3: Fallback to parsed code from filename
+            const colourName = (providedColorName && providedColorName.trim()) ||
+              (providedColorId && providedColorId.trim()) ||
+              (parsedCode && parsedCode.trim());
+
+            if (!colourName) {
+              results.failed++;
+              results.errors.push({
+                filename,
+                phase: 'colour_lookup',
+                error: 'Could not determine colour name (no name, ID, or parsed code)'
+              });
+              log(`❌ [colour_lookup] ${filename}: Could not determine colour name`);
+              continue;
+            }
+
             const colourNameKey = colourName.toLowerCase().trim();
+            log(`🔍 [colour_lookup] Using colour name: "${colourName}" for file "${filename}"`);
 
             let colourItem: any = colourByNameMap.get(colourNameKey) || null;
 
@@ -420,9 +473,10 @@ export default factories.createCoreService(
               log(`📦 Found existing colour: "${colourName}" (ID: ${colourItem.id})`);
             }
 
-            if (!colourItem) {
+            if (!colourItem || !colourItem.id) {
               results.failed++;
-              results.errors.push({ filename, phase: 'fabric_link', error: 'Colour entity missing after create' });
+              results.errors.push({ filename, phase: 'colour_lookup', error: 'Colour entity missing after create/find' });
+              log(`❌ [colour_lookup] ${filename}: Colour entity missing after create/find`);
               continue;
             }
 
@@ -461,19 +515,29 @@ export default factories.createCoreService(
             // Relation is owned by Colour.fabrics (Fabric has mappedBy: "colours"); update the Colour, not the Fabric.
             const fabricId = product.id;
             const fabricDocumentId = product.documentId;
-            const fabricKey = fabricDocumentId ?? fabricId;
+            const fabricKey = fabricDocumentId || fabricId;
 
-            const existingFabricIds = Array.isArray(colourItem.fabrics)
-              ? colourItem.fabrics.map((f: any) => f.documentId ?? f.id ?? f).filter(Boolean)
-              : [];
-            const alreadyHasFabric =
-              existingFabricIds.includes(fabricKey) ||
-              existingFabricIds.includes(fabricId) ||
-              (Array.isArray(colourItem.fabrics) &&
-                colourItem.fabrics.some(
-                  (f: any) =>
-                    (f.documentId ?? f.id) === fabricKey || (f.documentId ?? f.id) === fabricId
-                ));
+            if (!fabricKey) {
+              log(`❌ [link_check] ${filename}: Missing fabric ID or Document ID for product "${product.name}"`);
+              results.failed++;
+              results.errors.push({ filename, phase: 'link_check', error: 'Missing fabric ID' });
+              continue;
+            }
+
+            log(`🔍 [link_check] Comparing fabric "${product.name}" (ID: ${fabricId}, DocID: ${fabricDocumentId}) against colour "${colourName}" fabrics...`);
+
+            const existingFabrics = Array.isArray(colourItem.fabrics) ? colourItem.fabrics : [];
+            const existingFabricIds = existingFabrics.map((f: any) => {
+              const id = f.documentId ?? f.id ?? f;
+              return id ? String(id) : null;
+            }).filter(Boolean);
+
+            log(`🔍 [link_check] Color "${colourName}" has ${existingFabricIds.length} existing fabrics: [${existingFabricIds.join(', ')}]`);
+
+            const alreadyHasFabric = existingFabricIds.some(existingId =>
+              String(existingId) === String(fabricId) ||
+              String(existingId) === String(fabricKey)
+            );
 
             if (alreadyHasFabric) {
               results.skipped++;
@@ -484,9 +548,11 @@ export default factories.createCoreService(
                 colourName,
                 status: 'skipped (colour already linked to this fabric)'
               });
-              log(`⏭️ Colour "${colourName}" already linked to fabric "${product.name}"`);
+              log(`⏭️ [link_check] SKIP: Colour "${colourName}" ALREADY linked to fabric "${product.name}"`);
               continue;
             }
+
+            log(`🔗 [link_check] PROCEED: Colour "${colourName}" is NOT yet linked to fabric "${product.name}"`);
 
             const allFabricIds = [...existingFabricIds, fabricKey];
             // Use numeric id for update/verify so Strapi resolves the entity reliably
@@ -532,7 +598,7 @@ export default factories.createCoreService(
                 verifiedIdSet.has(fabricId) ||
                 verifiedIdSet.has(String(fabricKey)) ||
                 verifiedIdSet.has(String(fabricId));
-            } catch (_) {}
+            } catch (_) { }
 
             // Count as linked if update succeeded; verification can be flaky (e.g. populate timing)
             results.linked++;
@@ -580,7 +646,7 @@ export default factories.createCoreService(
                 await strapi.entityService.update(contentType as any, productId, {
                   data: { images: imageIds }
                 });
-                results.linked++; 
+                results.linked++;
                 results.details.push({
                   filename,
                   productId: product.productId ?? product.id,
@@ -597,7 +663,7 @@ export default factories.createCoreService(
           );
         }
 
-        log(`🎉 Bulk upload complete: ${results.uploaded} uploaded, ${results.linked} linked, ${results.failed} failed, ${results.skipped} skipped`);
+        log(`🎉 Bulk upload complete for request: ${results.uploaded} uploaded, ${results.linked} linked, ${results.failed} failed, ${results.skipped} skipped`);
         return results;
       }
     };

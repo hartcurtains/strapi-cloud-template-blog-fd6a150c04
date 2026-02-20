@@ -730,231 +730,249 @@ export default factories.createCoreController('api::order-management.order-manag
     }
   },
 
-// Bulk image upload with auto-linking to products
-async bulkImageUpload(ctx) {
-  try {
-    // Import fs at the top of the file if not already imported
-    const fs = require('fs').promises;
-
-    // Handle multipart form data
-    const files = ctx.request.files?.files;
-    const productType = ctx.request.body?.productType || 'fabrics';
-    const matchBy = ctx.request.body?.matchBy || 'productId';
-    const createAsColour = ctx.request.body?.createAsColour === 'true' || ctx.request.body?.createAsColour === true;
-
-    // Handle both single file and array of files
-    const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
-
-    if (fileArray.length === 0) {
-      ctx.status = 400;
-      ctx.body = { error: 'No files provided' };
-      return;
-    }
-
-    console.log(`📸 Processing ${fileArray.length} files...`);
-
-    // CRITICAL: Read files into buffers IMMEDIATELY before paths are cleared
-    const fileDescriptors = await Promise.all(
-      fileArray.map(async (file) => {
-        const f = file as any;
-
-        // Get path and filename immediately
-        const path = f.path || f.filepath || f.newFilename;
-        const name = f.originalFilename || f.name || f.filename || f.originalname || 'unknown';
-        const mimeType = f.mimetype || f.type || '';
-        const size = f.size || 0;
-
-        let buffer = f.buffer; // Use existing buffer if available
-
-        // If no buffer but we have a path, read the file NOW
-        if (!buffer && path && typeof path === 'string') {
-          try {
-            console.log(`📖 Reading file into buffer: ${name}`);
-            buffer = await fs.readFile(path);
-            console.log(`✅ Buffer created for ${name}: ${buffer.length} bytes`);
-          } catch (readErr) {
-            console.error(`❌ Failed to read file ${name} from ${path}:`, readErr);
-            // Don't throw yet, let validation handle it
-          }
-        }
-
-        return {
-          name,
-          mimeType,
-          size,
-          buffer, // This is now guaranteed to be set if file was readable
-          originalPath: path // Keep for debugging only
-        };
-      })
-    );
-
-    console.log(`📸 Created ${fileDescriptors.length} file descriptors with buffers`);
-
-    // Debug: Log first file to verify buffer exists
-    if (fileDescriptors.length > 0) {
-      const first = fileDescriptors[0];
-      console.log('First file descriptor:', {
-        name: first.name,
-        hasBuffer: !!first.buffer,
-        bufferSize: first.buffer?.length || 0,
-        mimeType: first.mimeType
-      });
-    }
-
-    // SECURITY: Validate file types and sizes
-    const ALLOWED_TYPES = [
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'application/zip', 'application/x-zip-compressed',
-      'application/octet-stream', 'application/x-zip', 'multipart/x-zip'
-    ];
-    const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB per file
-    const MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024; // 2GB total
-
-    let totalSize = 0;
-    const validatedFiles = [];
-    const validationErrors: { filename: string; reason: string }[] = [];
-
-    for (const descriptor of fileDescriptors) {
-      // Check if we have a buffer
-      if (!descriptor.buffer) {
-        console.error(`❌ No buffer available for file: ${descriptor.name}`);
-        validationErrors.push({
-          filename: descriptor.name,
-          reason: 'Failed to read file data'
-        });
-        continue;
-      }
-
-      // Validate MIME type
-      if (!ALLOWED_TYPES.includes(descriptor.mimeType)) {
-        ctx.status = 400;
-        ctx.body = {
-          error: `Invalid file type: ${descriptor.mimeType}. Allowed types: ${ALLOWED_TYPES.join(', ')}`
-        };
-        return;
-      }
-
-      // Validate file size
-      if (descriptor.size > MAX_FILE_SIZE) {
-        ctx.status = 400;
-        ctx.body = {
-          error: `File ${descriptor.name} exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB`
-        };
-        return;
-      }
-
-      totalSize += descriptor.size;
-      if (totalSize > MAX_TOTAL_SIZE) {
-        ctx.status = 400;
-        ctx.body = {
-          error: `Total upload size exceeds ${MAX_TOTAL_SIZE / 1024 / 1024}MB`
-        };
-        return;
-      }
-
-      validatedFiles.push(descriptor);
-    }
-
-    // If no files could be validated, return error
-    if (validatedFiles.length === 0) {
-      ctx.status = 400;
-      ctx.body = {
-        success: false,
-        error: 'No valid files could be processed',
-        details: validationErrors,
-        results: {
-          uploaded: 0,
-          linked: 0,
-          failed: validationErrors.length,
-          skipped: 0,
-          errors: validationErrors.map(({ filename, reason }) => ({
-            filename,
-            phase: 'validation',
-            error: reason
-          })),
-          details: []
-        }
-      };
-      return;
-    }
-
-    console.log(`📸 Bulk image upload: ${validatedFiles.length} validated files, productType: ${productType}, matchBy: ${matchBy}`);
-
-    // Pass validated file descriptors (with buffers) to service
-    const service = strapi.service('api::order-management.order-management') as any;
-    let results;
-
+  // Bulk image upload with auto-linking to products
+  async bulkImageUpload(ctx) {
     try {
-      results = await service.processBulkImageUpload({
-        fileDescriptors: validatedFiles,  // Each has a buffer property now
+      // Import fs at the top of the file if not already imported
+      const fs = require('fs').promises;
+
+      // Handle multipart form data
+      const files = ctx.request.files?.files;
+      const productType = ctx.request.body?.productType || 'fabrics';
+      const matchBy = ctx.request.body?.matchBy || 'productId';
+      const createAsColour = ctx.request.body?.createAsColour === 'true' || ctx.request.body?.createAsColour === true;
+
+      // Handle both single file and array of files
+      const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
+
+      if (fileArray.length === 0) {
+        ctx.status = 400;
+        ctx.body = { error: 'No files provided' };
+        return;
+      }
+
+      console.log(`📸 Processing ${fileArray.length} files...`);
+
+      // CRITICAL: Read files into buffers IMMEDIATELY before paths are cleared
+      const fileDescriptors = await Promise.all(
+        fileArray.map(async (file) => {
+          const f = file as any;
+
+          // Get path and filename immediately
+          const path = f.path || f.filepath || f.newFilename;
+          const name = f.originalFilename || f.name || f.filename || f.originalname || 'unknown';
+          const mimeType = f.mimetype || f.type || '';
+          const size = f.size || 0;
+
+          let buffer = f.buffer; // Use existing buffer if available
+
+          // If no buffer but we have a path, read the file NOW
+          if (!buffer && path && typeof path === 'string') {
+            try {
+              console.log(`📖 Reading file into buffer: ${name}`);
+              buffer = await fs.readFile(path);
+              console.log(`✅ Buffer created for ${name}: ${buffer.length} bytes`);
+            } catch (readErr) {
+              console.error(`❌ Failed to read file ${name} from ${path}:`, readErr);
+              // Don't throw yet, let validation handle it
+            }
+          }
+
+          return {
+            name,
+            mimeType,
+            size,
+            buffer, // This is now guaranteed to be set if file was readable
+            originalPath: path // Keep for debugging only
+          };
+        })
+      );
+
+      console.log(`📸 Created ${fileDescriptors.length} file descriptors with buffers`);
+
+      // Debug: Log first file to verify buffer exists
+      if (fileDescriptors.length > 0) {
+        const first = fileDescriptors[0];
+        console.log('First file descriptor:', {
+          name: first.name,
+          hasBuffer: !!first.buffer,
+          bufferSize: first.buffer?.length || 0,
+          mimeType: first.mimeType
+        });
+      }
+
+      // SECURITY: Validate file types and sizes
+      const ALLOWED_TYPES = [
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'application/zip', 'application/x-zip-compressed',
+        'application/octet-stream', 'application/x-zip', 'multipart/x-zip'
+      ];
+      const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB per file
+      const MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024; // 2GB total
+
+      let totalSize = 0;
+      const validatedFiles = [];
+      const validationErrors: { filename: string; reason: string }[] = [];
+
+      for (const descriptor of fileDescriptors) {
+        // Check if we have a buffer
+        if (!descriptor.buffer) {
+          console.error(`❌ No buffer available for file: ${descriptor.name}`);
+          validationErrors.push({
+            filename: descriptor.name,
+            reason: 'Failed to read file data'
+          });
+          continue;
+        }
+
+        // Validate MIME type
+        if (!ALLOWED_TYPES.includes(descriptor.mimeType)) {
+          ctx.status = 400;
+          ctx.body = {
+            error: `Invalid file type: ${descriptor.mimeType}. Allowed types: ${ALLOWED_TYPES.join(', ')}`
+          };
+          return;
+        }
+
+        // Validate file size
+        if (descriptor.size > MAX_FILE_SIZE) {
+          ctx.status = 400;
+          ctx.body = {
+            error: `File ${descriptor.name} exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB`
+          };
+          return;
+        }
+
+        totalSize += descriptor.size;
+        if (totalSize > MAX_TOTAL_SIZE) {
+          ctx.status = 400;
+          ctx.body = {
+            error: `Total upload size exceeds ${MAX_TOTAL_SIZE / 1024 / 1024}MB`
+          };
+          return;
+        }
+
+        validatedFiles.push(descriptor);
+      }
+
+      // If no files could be validated, return error
+      if (validatedFiles.length === 0) {
+        ctx.status = 400;
+        ctx.body = {
+          success: false,
+          error: 'No valid files could be processed',
+          details: validationErrors,
+          results: {
+            uploaded: 0,
+            linked: 0,
+            failed: validationErrors.length,
+            skipped: 0,
+            errors: validationErrors.map(({ filename, reason }) => ({
+              filename,
+              phase: 'validation',
+              error: reason
+            })),
+            details: []
+          }
+        };
+        return;
+      }
+
+      console.log(`📸 Bulk image upload: ${validatedFiles.length} validated files, productType: ${productType}, matchBy: ${matchBy}`);
+
+      // Pass validated file descriptors (with buffers) to service
+      const service = strapi.service('api::order-management.order-management') as any;
+      let results;
+
+      // Extract mapping data from request body
+      const colorId = ctx.request.body?.colorId;
+      const colorName = ctx.request.body?.colorName;
+      const selectedProductId = ctx.request.body?.selectedProductId;
+
+      console.log('📥 REQ BODY:', {
+        colorId,
+        colorName,
+        selectedProductId,
         productType,
         matchBy,
         createAsColour,
-        log: console.log
+        allBody: ctx.request.body
       });
 
-      // Merge validation errors into results
-      if (validationErrors.length > 0 && results) {
-        results.errors = results.errors || [];
-        results.errors.push(
-          ...validationErrors.map(({ filename, reason }) => ({
-            filename,
-            phase: 'validation',
-            error: reason
-          }))
-        );
-        results.failed = (results.failed || 0) + validationErrors.length;
+      try {
+        results = await service.processBulkImageUpload({
+          fileDescriptors: validatedFiles,  // Each has a buffer property now
+          productType,
+          matchBy,
+          createAsColour,
+          colorId,
+          colorName,
+          selectedProductId,
+          log: console.log
+        });
+
+        // Merge validation errors into results
+        if (validationErrors.length > 0 && results) {
+          results.errors = results.errors || [];
+          results.errors.push(
+            ...validationErrors.map(({ filename, reason }) => ({
+              filename,
+              phase: 'validation',
+              error: reason
+            }))
+          );
+          results.failed = (results.failed || 0) + validationErrors.length;
+        }
+      } catch (processErr: any) {
+        console.error('❌ Error in bulk image upload:', processErr);
+        ctx.status = 500;
+        ctx.body = {
+          success: false,
+          error: processErr.message || 'Unknown error',
+          message: 'Bulk upload encountered an error. Check server logs for details.',
+          results: {
+            uploaded: 0,
+            linked: 0,
+            failed: 0,
+            skipped: 0,
+            errors: [{ filename: 'system', phase: 'process', error: processErr.message || 'Unknown error' }],
+            details: []
+          }
+        };
+        return;
       }
-    } catch (processErr: any) {
-      console.error('❌ Error in bulk image upload:', processErr);
+
+      if (results.uploaded === 0 && results.errors.length > 0) {
+        ctx.body = {
+          success: false,
+          message: 'No files were successfully uploaded. Check errors for details.',
+          results
+        };
+        return;
+      }
+
+      ctx.body = {
+        success: true,
+        message: `Uploaded ${results.uploaded} images, linked ${results.linked} to products`,
+        results
+      };
+    } catch (error: any) {
+      console.error('❌ Error in bulk image upload:', error);
       ctx.status = 500;
       ctx.body = {
         success: false,
-        error: processErr.message || 'Unknown error',
+        error: error.message || 'Unknown error',
         message: 'Bulk upload encountered an error. Check server logs for details.',
         results: {
           uploaded: 0,
           linked: 0,
           failed: 0,
           skipped: 0,
-          errors: [{ filename: 'system', phase: 'process', error: processErr.message || 'Unknown error' }],
+          errors: [{ filename: 'system', phase: 'system', error: error.message }],
           details: []
         }
       };
-      return;
     }
-
-    if (results.uploaded === 0 && results.errors.length > 0) {
-      ctx.body = {
-        success: false,
-        message: 'No files were successfully uploaded. Check errors for details.',
-        results
-      };
-      return;
-    }
-
-    ctx.body = {
-      success: true,
-      message: `Uploaded ${results.uploaded} images, linked ${results.linked} to products`,
-      results
-    };
-  } catch (error: any) {
-    console.error('❌ Error in bulk image upload:', error);
-    ctx.status = 500;
-    ctx.body = {
-      success: false,
-      error: error.message || 'Unknown error',
-      message: 'Bulk upload encountered an error. Check server logs for details.',
-      results: {
-        uploaded: 0,
-        linked: 0,
-        failed: 0,
-        skipped: 0,
-        errors: [{ filename: 'system', phase: 'system', error: error.message }],
-        details: []
-      }
-    };
   }
-}
 }));
 
