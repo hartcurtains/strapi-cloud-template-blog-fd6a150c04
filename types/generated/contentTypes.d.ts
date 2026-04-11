@@ -442,40 +442,6 @@ export interface ApiBlindTypeBlindType extends Struct.CollectionTypeSchema {
   };
 }
 
-export interface ApiBlindBlind extends Struct.CollectionTypeSchema {
-  collectionName: 'blinds';
-  info: {
-    displayName: 'Blind';
-    pluralName: 'blinds';
-    singularName: 'blind';
-  };
-  options: {
-    draftAndPublish: true;
-  };
-  attributes: {
-    blind_type: Schema.Attribute.Relation<
-      'oneToOne',
-      'api::blind-type.blind-type'
-    >;
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    fabrics: Schema.Attribute.Relation<'manyToMany', 'api::fabric.fabric'>;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'api::blind.blind'> &
-      Schema.Attribute.Private;
-    mechanisations: Schema.Attribute.Relation<
-      'manyToMany',
-      'api::mechanisation.mechanisation'
-    >;
-    name: Schema.Attribute.String & Schema.Attribute.Required;
-    publishedAt: Schema.Attribute.DateTime;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-  };
-}
-
 export interface ApiBrandBrand extends Struct.CollectionTypeSchema {
   collectionName: 'brands';
   info: {
@@ -705,7 +671,6 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
       ['in_stock', 'out_of_stock', 'discontinued']
     > &
       Schema.Attribute.Required;
-    blinds: Schema.Attribute.Relation<'manyToMany', 'api::blind.blind'>;
     brand: Schema.Attribute.Relation<'manyToOne', 'api::brand.brand'>;
     care_instructions: Schema.Attribute.Relation<
       'manyToMany',
@@ -724,6 +689,9 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
       'images' | 'files' | 'videos' | 'audios',
       true
     >;
+    is_blind: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<true>;
     is_curtain: Schema.Attribute.Boolean &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<false>;
@@ -803,7 +771,6 @@ export interface ApiMechanisationMechanisation
     draftAndPublish: true;
   };
   attributes: {
-    blinds: Schema.Attribute.Relation<'manyToMany', 'api::blind.blind'>;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1500,7 +1467,6 @@ declare module '@strapi/strapi' {
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
       'api::blind-type.blind-type': ApiBlindTypeBlindType;
-      'api::blind.blind': ApiBlindBlind;
       'api::brand.brand': ApiBrandBrand;
       'api::care-instruction.care-instruction': ApiCareInstructionCareInstruction;
       'api::colour.colour': ApiColourColour;
