@@ -1,10 +1,10 @@
 {
   "kind": "collectionType",
-  "collectionName": "mechanisations",
+  "collectionName": "finish_options",
   "info": {
-    "singularName": "mechanisation",
-    "pluralName": "mechanisations",
-    "displayName": "Mechanisation"
+    "singularName": "finish-option",
+    "pluralName": "finish-options",
+    "displayName": "Finish Option"
   },
   "options": {
     "draftAndPublish": true
@@ -12,12 +12,7 @@
   "pluginOptions": {},
   "attributes": {
     "name": {
-      "type": "string",
-      "required": true
-    },
-    "price": {
-      "type": "decimal",
-      "required": true
+      "type": "string"
     },
     "thumbnail": {
       "type": "media",

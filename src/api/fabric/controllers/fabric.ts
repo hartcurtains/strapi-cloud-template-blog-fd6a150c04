@@ -26,7 +26,7 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
       : {}
     
     // Ensure populate includes only valid fabric relations
-    // Valid: images, brand, care_instructions, colours, blinds, cushions, pricing_rules
+    // Valid: images, brand, care_instructions, colours, cushions, pricing_rules
     // NOT valid: linings, trimmings, curtains (don't exist on fabric schema)
     const populate: Record<string, any> = {
       ...populateQuery,
@@ -34,7 +34,6 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
       care_instructions: populateQuery.care_instructions !== undefined ? populateQuery.care_instructions : true,
       images: populateQuery.images !== undefined ? populateQuery.images : true,
       colours: populateQuery.colours !== undefined ? populateQuery.colours : true,
-      blinds: populateQuery.blinds !== undefined ? populateQuery.blinds : true,
       cushions: populateQuery.cushions !== undefined ? populateQuery.cushions : true,
       pricing_rules: populateQuery.pricing_rules !== undefined ? populateQuery.pricing_rules : true,
     }
@@ -95,7 +94,6 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
               thumbnail: true
             }
           },
-          blinds: true,
           cushions: true,
           pricing_rules: true
         }
@@ -193,7 +191,6 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
       care_instructions: populateQuery.care_instructions !== undefined ? populateQuery.care_instructions : true,
       images: populateQuery.images !== undefined ? populateQuery.images : true,
       colours: populateQuery.colours !== undefined ? populateQuery.colours : true,
-      blinds: populateQuery.blinds !== undefined ? populateQuery.blinds : true,
       cushions: populateQuery.cushions !== undefined ? populateQuery.cushions : true,
       pricing_rules: populateQuery.pricing_rules !== undefined ? populateQuery.pricing_rules : true,
     }

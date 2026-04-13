@@ -15,14 +15,14 @@
       "type": "string",
       "required": true
     },
-    "types": {
-      "type": "enumeration",
-      "required": true,
-      "enum": [
-        "roller",
-        "venetian",
-        "vertical",
-        "roman"
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
       ]
     }
   }

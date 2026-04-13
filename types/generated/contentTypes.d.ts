@@ -432,10 +432,7 @@ export interface ApiBlindTypeBlindType extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
-    types: Schema.Attribute.Enumeration<
-      ['roller', 'venetian', 'vertical', 'roman']
-    > &
-      Schema.Attribute.Required;
+    thumbnail: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -724,6 +721,36 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiFinishOptionFinishOption
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'finish_options';
+  info: {
+    displayName: 'Finish Option';
+    pluralName: 'finish-options';
+    singularName: 'finish-option';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::finish-option.finish-option'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    thumbnail: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiLiningLining extends Struct.CollectionTypeSchema {
   collectionName: 'linings';
   info: {
@@ -780,9 +807,10 @@ export interface ApiMechanisationMechanisation
       'api::mechanisation.mechanisation'
     > &
       Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
     price: Schema.Attribute.Decimal & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
-    type: Schema.Attribute.String & Schema.Attribute.Required;
+    thumbnail: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1475,6 +1503,7 @@ declare module '@strapi/strapi' {
       'api::cushion-type.cushion-type': ApiCushionTypeCushionType;
       'api::cushion.cushion': ApiCushionCushion;
       'api::fabric.fabric': ApiFabricFabric;
+      'api::finish-option.finish-option': ApiFinishOptionFinishOption;
       'api::lining.lining': ApiLiningLining;
       'api::mechanisation.mechanisation': ApiMechanisationMechanisation;
       'api::order-management.order-management': ApiOrderManagementOrderManagement;
