@@ -27,7 +27,7 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
     
     // Ensure populate includes only valid fabric relations
     // Valid: images, brand, care_instructions, colours, cushions, pricing_rules
-    // NOT valid: linings, trimmings, curtains (don't exist on fabric schema)
+    // NOT valid: blinds, linings, trimmings, curtains (don't exist on fabric schema)
     const populate: Record<string, any> = {
       ...populateQuery,
       brand: populateQuery.brand !== undefined ? populateQuery.brand : true,
@@ -38,6 +38,7 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
       pricing_rules: populateQuery.pricing_rules !== undefined ? populateQuery.pricing_rules : true,
     }
     // Remove invalid keys
+    delete populate.blinds
     delete populate.linings
     delete populate.trimmings
     delete populate.curtains

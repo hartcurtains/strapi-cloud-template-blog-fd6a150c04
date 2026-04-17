@@ -47,7 +47,7 @@ export default factories.createCoreService(
       parseColourCodeFromFilename: parseColourCodeFromFilenameUtil,
 
       async processBulkImageUpload(params: {
-        fileDescriptors: { name: string; mimeType: string; size: number; buffer: Buffer }[];
+        fileDescriptors: { name: string; mimeType: string; size: number; buffer: Buffer; meta?: { colorId?: string; colorName?: string; selectedProductId?: string } }[];
         productType: string;
         matchBy: string;
         createAsColour: boolean;
@@ -77,7 +77,8 @@ export default factories.createCoreService(
             ? (['jpg', 'jpeg'].includes((d.name || '').toLowerCase().split('.').pop() || '') ? 'image/jpeg' : 'image/png')
             : d.mimeType,
           size: d.size || (d.buffer ? d.buffer.length : 0),
-          buffer: d.buffer
+          buffer: d.buffer,
+          meta: d.meta // Preserve admin-supplied metadata
         })).filter((item) => item.buffer != null);
 
         const skipped = fileDescriptors.length - itemsToProcess.length;
@@ -192,6 +193,8 @@ export default factories.createCoreService(
 
             if (uploadedFile?.id) {
               (uploadedFile as any).originalFilename = fileName;
+              // Attach metadata for color creation flow
+              (uploadedFile as any)._hc_meta = item.meta;
               processedUploads.push(uploadedFile);
               results.uploaded++;
               log(`✅ Uploaded ${i + 1}/${itemsToProcess.length}: ${fileName} (ID: ${uploadedFile.id})`);
@@ -391,7 +394,8 @@ export default factories.createCoreService(
             }
 
             // Use ONLY the color code as the colour name (shared across fabrics)
-            const colourName = parsedCode.trim();
+            // Prefer admin-supplied color name mapping over parsed filename code
+            const colourName = ((uploadedFile as any)._hc_meta?.colorName?.trim()) || parsedCode.trim();
             const colourNameKey = colourName.toLowerCase().trim();
 
             let colourItem: any = colourByNameMap.get(colourNameKey) || null;

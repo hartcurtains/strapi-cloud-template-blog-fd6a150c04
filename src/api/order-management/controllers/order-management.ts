@@ -741,6 +741,11 @@ async bulkImageUpload(ctx) {
     const productType = ctx.request.body?.productType || 'fabrics';
     const matchBy = ctx.request.body?.matchBy || 'productId';
     const createAsColour = ctx.request.body?.createAsColour === 'true' || ctx.request.body?.createAsColour === true;
+    
+    // Extract admin-supplied color metadata (for createAsColour flow)
+    const adminColorId = ctx.request.body?.colorId;
+    const adminColorName = ctx.request.body?.colorName;
+    const adminSelectedProductId = ctx.request.body?.selectedProductId;
 
     // Handle both single file and array of files
     const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
@@ -783,7 +788,12 @@ async bulkImageUpload(ctx) {
           mimeType,
           size,
           buffer, // This is now guaranteed to be set if file was readable
-          originalPath: path // Keep for debugging only
+          originalPath: path, // Keep for debugging only
+          meta: {
+            colorId: adminColorId,
+            colorName: adminColorName,
+            selectedProductId: adminSelectedProductId
+          }
         };
       })
     );
