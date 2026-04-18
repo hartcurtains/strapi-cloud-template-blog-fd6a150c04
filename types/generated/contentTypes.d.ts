@@ -498,6 +498,35 @@ export interface ApiCareInstructionCareInstruction
   };
 }
 
+export interface ApiColorCodeColorCode extends Struct.CollectionTypeSchema {
+  collectionName: 'color_codes';
+  info: {
+    displayName: 'Color code';
+    pluralName: 'color-codes';
+    singularName: 'color-code';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    code: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::color-code.color-code'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiColourColour extends Struct.CollectionTypeSchema {
   collectionName: 'colours';
   info: {
@@ -1497,6 +1526,7 @@ declare module '@strapi/strapi' {
       'api::blind-type.blind-type': ApiBlindTypeBlindType;
       'api::brand.brand': ApiBrandBrand;
       'api::care-instruction.care-instruction': ApiCareInstructionCareInstruction;
+      'api::color-code.color-code': ApiColorCodeColorCode;
       'api::colour.colour': ApiColourColour;
       'api::curtain-pole.curtain-pole': ApiCurtainPoleCurtainPole;
       'api::curtain-type.curtain-type': ApiCurtainTypeCurtainType;

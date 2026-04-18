@@ -45,5 +45,23 @@ module.exports = {
         middlewares: [],
       },
     },
+    {
+      method: 'GET',
+      path: '/color-codes/lookup',
+      handler: 'import-export.lookupColorCode',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'POST',
+      path: '/create-fabric-with-colour',
+      handler: 'import-export.createFabricWithColour',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 };

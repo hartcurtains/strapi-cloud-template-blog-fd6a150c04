@@ -8,11 +8,13 @@ export default [
   {
     name: 'strapi::body',
     config: {
-      formLimit: '1024mb', // Increase JSON/form body limit
-      jsonLimit: '1024mb',
-      textLimit: '1024mb',
+      formLimit: '2gb', // Allow large file uploads for bulk image import
+      jsonLimit: '50mb',
+      textLimit: '50mb',
       formidable: {
-        maxFileSize: 1024 * 1024 * 1024, // 1GB
+        maxFileSize: 1 * 1024 * 1024 * 1024, // 1GB per file (matches controller validation)
+        maxFields: 10,
+        maxFieldsSize: 2 * 1024 * 1024,
       },
     },
   },

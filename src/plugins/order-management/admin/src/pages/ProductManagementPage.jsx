@@ -3,6 +3,7 @@ import ImageUploader from '../components/ImageUploader';
 import BulkImageUploader from '../components/BulkImageUploader';
 import excelHelper from '../utils/excelHelper';
 import pdfHelper from '../utils/pdfHelper';
+import { extractCodeFromName, extractAndLookupColorCode } from '../utils/colorCodeMatcher';
 import { 
   Scissors, Blinds, Sofa, Tag, Layers, Palette, Settings, PackageSearch, 
   Plus, Download, Upload, FileText, Edit, Trash2, CheckSquare, Loader2, 
@@ -817,14 +818,60 @@ export default function ProductManagementPage() {
     }
 
     try {
+      // Transform the form data to match API expectations
+      const transformedData = transformFormData(formData);
+
+      // Special handling for fabrics: use color-code endpoint for new fabrics with color codes
+      if (activeTab === 'fabrics' && !editingProduct && transformedData.name) {
+        const colorCode = extractCodeFromName(transformedData.name);
+        
+        if (colorCode) {
+          // Check if color code exists in database
+          const colorCodeRecord = await extractAndLookupColorCode(transformedData.name);
+          
+          if (colorCodeRecord) {
+            console.log(`✅ Color code "${colorCode}" found: "${colorCodeRecord.name}"`);
+            
+            // Use the special create-fabric-with-colour endpoint
+            const getFirstImageId = () => {
+              if (transformedData.images && Array.isArray(transformedData.images) && transformedData.images.length > 0) {
+                return transformedData.images[0];
+              }
+              return null;
+            };
+
+            const response = await fetch('/api/order-management/create-fabric-with-colour', {
+              method: 'POST',
+              headers: getAuthHeaders(),
+              body: JSON.stringify({
+                fabric: transformedData,
+                imageId: getFirstImageId()
+              })
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              console.error('API Error:', errorData);
+              throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            await fetchProducts();
+            closeModal();
+            
+            console.log(`✅ Created fabric with auto-generated colour successfully!`);
+            return;
+          } else {
+            console.warn(`⚠️ Color code "${colorCode}" not found in database. Fabric will be created without auto-generated colour.`);
+          }
+        }
+      }
+
+      // Standard flow: use regular API endpoint for other product types or existing products
       const url = editingProduct 
         ? `${productTypes[activeTab].apiPath}/${editingProduct.id}`
         : productTypes[activeTab].apiPath;
       
       const method = editingProduct ? 'PUT' : 'POST';
-      
-      // Transform the form data to match API expectations
-      const transformedData = transformFormData(formData);
       
       const response = await fetch(url, {
         method,

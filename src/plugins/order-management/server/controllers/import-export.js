@@ -678,6 +678,20 @@ module.exports = {
                 }
               } else {
                 // Create new fabric
+                // Apply color code resolution to auto-create colour records
+                if (productType === 'fabrics') {
+                  try {
+                    const { resolveFabricWithColour } = require('../../api/fabric/services/color-code-matcher');
+                    const resolvedItem = await resolveFabricWithColour(strapi, item);
+                    if (resolvedItem) {
+                      item = resolvedItem;
+                    }
+                  } catch (colorCodeError) {
+                    console.warn(`⚠️ Color code resolution failed for fabric "${item.name}":`, colorCodeError.message);
+                    // Continue without color code resolution
+                  }
+                }
+                
                 upsertedItem = await strapi.entityService.create('api::fabric.fabric', {
               data: item
             });
@@ -1113,6 +1127,7 @@ module.exports = {
       
       console.log(`📄 Extracted data:`, Object.keys(parsedData).map(key => `${key}: ${parsedData[key].length} items`).join(', '));
 
+      
       ctx.body = {
         success: true,
         data: parsedData,
@@ -1122,6 +1137,81 @@ module.exports = {
       console.error('❌ Error parsing PDF:', error);
       ctx.status = 500;
       ctx.body = { error: error.message || 'Failed to parse PDF' };
+    }
+  },
+
+  // Look up a color code and return the color name
+  async lookupColorCode(ctx) {
+    try {
+      const { code } = ctx.query;
+
+      if (!code || code.trim().length === 0) {
+        ctx.status = 400;
+        ctx.body = { error: 'Color code is required' };
+        return;
+      }
+
+      // Import color-code-matcher service
+      const { matchColorCodeToRecord } = require('../../api/fabric/services/color-code-matcher');
+
+      // Look up the color code
+      const colorCodeRecord = await matchColorCodeToRecord(strapi, code);
+
+      if (!colorCodeRecord) {
+        ctx.status = 404;
+        ctx.body = { error: `Color code "${code}" not found` };
+        return;
+      }
+
+      ctx.body = {
+        success: true,
+        data: colorCodeRecord,
+        message: `Color code "${code}" found: "${colorCodeRecord.name}"`
+      };
+    } catch (error) {
+      console.error('❌ Error looking up color code:', error);
+      ctx.status = 500;
+      ctx.body = { error: error.message || 'Failed to look up color code' };
+    }
+  },
+
+  // Create fabric with automatic colour based on color code
+  async createFabricWithColour(ctx) {
+    try {
+      const { fabric, imageId } = ctx.request.body;
+
+      if (!fabric || !fabric.name) {
+        ctx.status = 400;
+        ctx.body = { error: 'Fabric data with name is required' };
+        return;
+      }
+
+      // Import color-code-matcher service
+      const { resolveFabricWithColour } = require('../../api/fabric/services/color-code-matcher');
+
+      // Resolve fabric with automatic colour creation
+      const fabricWithColour = await resolveFabricWithColour(strapi, fabric, imageId);
+
+      if (!fabricWithColour) {
+        ctx.status = 500;
+        ctx.body = { error: 'Failed to process fabric with colour' };
+        return;
+      }
+
+      // Create the fabric in Strapi
+      const createdFabric = await strapi.entityService.create('api::fabric.fabric', {
+        data: fabricWithColour,
+      });
+
+      ctx.body = {
+        success: true,
+        data: createdFabric,
+        message: `Fabric "${fabric.name}" created successfully`
+      };
+    } catch (error) {
+      console.error('❌ Error creating fabric with colour:', error);
+      ctx.status = 500;
+      ctx.body = { error: error.message || 'Failed to create fabric' };
     }
   }
 };

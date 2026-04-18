@@ -393,9 +393,30 @@ export default factories.createCoreService(
               continue;
             }
 
-            // Use ONLY the color code as the colour name (shared across fabrics)
-            // Prefer admin-supplied color name mapping over parsed filename code
-            const colourName = ((uploadedFile as any)._hc_meta?.colorName?.trim()) || parsedCode.trim();
+            // Look up color code in color-codes collection to get the proper name
+            let colourName = parsedCode;
+            try {
+              const colorCodeRecords = await strapi.entityService.findMany('api::color-code.color-code', {
+                filters: { code: parsedCode.toUpperCase() },
+                limit: 1
+              });
+              
+              if (colorCodeRecords && Array.isArray(colorCodeRecords) && colorCodeRecords.length > 0) {
+                const colorCodeRecord = colorCodeRecords[0] as any;
+                colourName = colorCodeRecord.name || parsedCode;
+                log(`✅ [colour_lookup] Found color code "${parsedCode}" → "${colourName}"`);
+              } else {
+                log(`⚠️ [colour_lookup] Color code "${parsedCode}" not found in database, using code as name`);
+              }
+            } catch (lookupErr: any) {
+              log(`⚠️ [colour_lookup] Error looking up color code "${parsedCode}": ${lookupErr.message}, using code as name`);
+            }
+
+            // Prefer admin-supplied color name mapping over looked-up name
+            if (((uploadedFile as any)._hc_meta?.colorName?.trim())) {
+              colourName = ((uploadedFile as any)._hc_meta?.colorName?.trim());
+            }
+            
             const colourNameKey = colourName.toLowerCase().trim();
 
             let colourItem: any = colourByNameMap.get(colourNameKey) || null;

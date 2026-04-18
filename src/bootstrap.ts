@@ -71,6 +71,7 @@ async function findExistingItem(
       'api::order.order': (d) => ({ orderNumber: d.orderNumber }),
       'api::brand.brand': (d) => ({ name: d.name }),
       'api::care-instruction.care-instruction': (d) => ({ name: d.name }),
+      'api::color-code.color-code': (d) => ({ code: d.code }),
       'api::colour.colour': (d) => ({ name: d.name }),
       'api::curtain-type.curtain-type': (d) => ({ name: d.name }),
       'api::lining.lining': (d) => ({ name: d.name }),
@@ -163,6 +164,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
     const importOrder = [
       'api::brand.brand',
       'api::care-instruction.care-instruction',
+      'api::color-code.color-code',
       'api::colour.colour',
       'api::curtain-type.curtain-type',
       'api::lining.lining',
@@ -252,6 +254,9 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
     console.log(`   ❌ Failed: ${totalFailed}`);
     console.log(`   📦 Total processed: ${totalImported + totalSkipped + totalFailed}`);
 
+    // Seed default color codes if none exist
+    await seedColorCodes(strapi);
+
     // Set import flag in database to prevent re-import
     await setImportFlag(strapi);
     console.log('✅ Data import complete! Import flag set in database.');
@@ -260,6 +265,47 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
     console.error('❌ Error during data import:', error);
   }
 };
+
+async function seedColorCodes(strapi: Core.Strapi): Promise<void> {
+  try {
+    const defaultColorCodes = [
+      { code: 'AQ', name: 'Aqua' },
+      { code: 'RD', name: 'Red' },
+      { code: 'BL', name: 'Blue' },
+      { code: 'GR', name: 'Green' },
+      { code: 'YL', name: 'Yellow' },
+      { code: 'WH', name: 'White' },
+      { code: 'BK', name: 'Black' },
+      { code: 'GY', name: 'Grey' },
+      { code: 'BR', name: 'Brown' },
+      { code: 'PK', name: 'Pink' },
+      { code: 'PR', name: 'Purple' },
+      { code: 'OR', name: 'Orange' },
+    ];
+
+    let seedCount = 0;
+    for (const colorCode of defaultColorCodes) {
+      // Check if code already exists
+      const existing = await strapi.entityService.findMany('api::color-code.color-code', {
+        filters: { code: colorCode.code },
+        limit: 1,
+      });
+
+      if (!existing || !Array.isArray(existing) || existing.length === 0) {
+        await strapi.entityService.create('api::color-code.color-code', {
+          data: colorCode,
+        });
+        seedCount++;
+      }
+    }
+
+    if (seedCount > 0) {
+      console.log(`✅ Seeded ${seedCount} color codes`);
+    }
+  } catch (error: any) {
+    console.warn('⚠️  Error seeding color codes:', error.message);
+  }
+}
 
 async function readJSONL(filePath: string): Promise<any[]> {
   const fileStream = fs.createReadStream(filePath);

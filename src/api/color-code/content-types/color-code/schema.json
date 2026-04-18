@@ -1,0 +1,21 @@
+{
+  "kind": "collectionType",
+  "collectionName": "color_codes",
+  "info": {
+    "singularName": "color-code",
+    "pluralName": "color-codes",
+    "displayName": "Color code"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "code": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string"
+    }
+  }
+}
