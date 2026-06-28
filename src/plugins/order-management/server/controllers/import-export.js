@@ -656,6 +656,9 @@ module.exports = {
                   (item.price_per_metre !== undefined && item.price_per_metre !== existing.price_per_metre) ||
                   (item.availability !== undefined && item.availability !== existing.availability) ||
                   (item.is_featured !== undefined && item.is_featured !== existing.is_featured) ||
+                  (item.is_cushion !== undefined && item.is_cushion !== existing.is_cushion) ||
+                  (item.is_curtain !== undefined && item.is_curtain !== existing.is_curtain) ||
+                  (item.is_blind !== undefined && item.is_blind !== existing.is_blind) ||
                   (item.featured_until !== undefined && item.featured_until !== existing.featured_until) ||
                   (item.patternRepeat_cm !== undefined && item.patternRepeat_cm !== existing.patternRepeat_cm) ||
                   (item.usableWidth_cm !== undefined && item.usableWidth_cm !== existing.usableWidth_cm) ||

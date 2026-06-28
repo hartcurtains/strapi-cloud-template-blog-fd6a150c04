@@ -1406,7 +1406,7 @@ export const excelHelper = {
     const info = [];
     
     const productSchemas = {
-      fabrics: ['name', 'brand_name', 'composition', 'price_per_metre'],
+      fabrics: ['name'],
       curtains: ['name'],
       blinds: ['name'],
       cushions: ['name'],
