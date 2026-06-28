@@ -618,6 +618,38 @@ export interface ApiCurtainTypeCurtainType extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCushionPipingCushionPiping
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'cushion_piping_types';
+  info: {
+    displayName: 'Cushion Piping';
+    pluralName: 'cushion-piping-types';
+    singularName: 'cushion-piping';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::cushion-piping.cushion-piping'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    price: Schema.Attribute.Decimal;
+    publishedAt: Schema.Attribute.DateTime;
+    thumbnail: Schema.Attribute.Media<'images'>;
+    type: Schema.Attribute.Enumeration<['piped', 'unpiped', 'trimming']>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCushionTypeCushionType extends Struct.CollectionTypeSchema {
   collectionName: 'cushion_types';
   info: {
@@ -719,6 +751,9 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<true>;
     is_curtain: Schema.Attribute.Boolean &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<false>;
+    is_cushion: Schema.Attribute.Boolean &
       Schema.Attribute.Required &
       Schema.Attribute.DefaultTo<false>;
     is_featured: Schema.Attribute.Boolean &
@@ -1530,6 +1565,7 @@ declare module '@strapi/strapi' {
       'api::colour.colour': ApiColourColour;
       'api::curtain-pole.curtain-pole': ApiCurtainPoleCurtainPole;
       'api::curtain-type.curtain-type': ApiCurtainTypeCurtainType;
+      'api::cushion-piping.cushion-piping': ApiCushionPipingCushionPiping;
       'api::cushion-type.cushion-type': ApiCushionTypeCushionType;
       'api::cushion.cushion': ApiCushionCushion;
       'api::fabric.fabric': ApiFabricFabric;

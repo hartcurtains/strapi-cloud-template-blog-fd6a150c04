@@ -137,6 +137,11 @@
       "type": "boolean",
       "required": true,
       "default": true
+    },
+    "is_cushion": {
+      "type": "boolean",
+      "required": true,
+      "default": false
     }
   }
 }
