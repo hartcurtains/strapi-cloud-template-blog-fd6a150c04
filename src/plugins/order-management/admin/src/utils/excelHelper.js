@@ -1985,62 +1985,77 @@ export const excelHelper = {
   bulkImportMultiSheet: async (transformedDataset, getAuthHeaders) => {
     console.log('📤 Starting multi-sheet bulk import via server endpoint...');
     
-    try {
-      const response = await fetch('/api/order-management/import', {
-        method: 'POST',
-        headers: getAuthHeaders(),
-        body: JSON.stringify({
-          data: transformedDataset
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Server import failed: ${response.status} - ${errorText}`);
-      }
-
-      let results;
-      try {
-        results = await response.json();
-      } catch (parseError) {
-        const responseText = await response.text();
-        console.error('❌ Failed to parse import response:', responseText);
-        throw new Error('Server returned invalid JSON response. Check server logs for details.');
-      }
-      
-      console.log('📤 [FRONTEND] Server-side bulk import completed:', results);
-      
-      // Log auto-creation summary if available
-      if (results.autoCreationSummary) {
-        console.log('📊 [FRONTEND] AUTO-CREATION SUMMARY FROM BACKEND:');
-        console.log(`   Brands: ${results.autoCreationSummary.brandsCreated} created, ${results.autoCreationSummary.brandsFailed} failed`);
-        console.log(`   Care Instructions: ${results.autoCreationSummary.careInstructionsCreated} created, ${results.autoCreationSummary.careInstructionsFailed} failed`);
-        console.log(`   Total brands in map: ${results.autoCreationSummary.totalBrandsInMap}`);
-        console.log(`   Total care instructions in map: ${results.autoCreationSummary.totalCareInstructionsInMap}`);
-        
-        if (results.autoCreationSummary.brandsCreated === 0 && results.autoCreationSummary.brandsFailed === 0) {
-          console.warn('⚠️ [FRONTEND] WARNING: No brands were created or failed! Check backend logs.');
-        }
-        if (results.autoCreationSummary.careInstructionsCreated === 0 && results.autoCreationSummary.careInstructionsFailed === 0) {
-          console.warn('⚠️ [FRONTEND] WARNING: No care instructions were created or failed! Check backend logs.');
-        }
-      } else {
-        console.warn('⚠️ [FRONTEND] WARNING: No autoCreationSummary in response! Backend code may not be deployed yet.');
-      }
-      
-      // Log errors related to auto-creation
-      if (results.errors && results.errors.length > 0) {
-        const autoCreateErrors = results.errors.filter(e => e.type === 'auto_create_error' || e.type === 'missing_relation');
-        if (autoCreateErrors.length > 0) {
-          console.error('❌ [FRONTEND] Auto-creation errors:', autoCreateErrors);
-        }
-      }
-      
-      return results;
-    } catch (error) {
-      console.error('❌ Server-side bulk import error:', error);
-      throw error;
+    const BATCH_SIZE = 50;
+    const allResults = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [], autoCreationSummary: null };
+    
+    const fabricBatches = [];
+    const fabrics = transformedDataset.fabrics || [];
+    for (let i = 0; i < fabrics.length; i += BATCH_SIZE) {
+      fabricBatches.push(fabrics.slice(i, i + BATCH_SIZE));
     }
+    
+    // Non-fabric types sent in first batch (or their own batch)
+    const nonFabricData = {};
+    for (const [key, val] of Object.entries(transformedDataset)) {
+      if (key !== 'fabrics') nonFabricData[key] = val;
+    }
+    
+    const totalBatches = Math.max(fabricBatches.length, 1);
+    console.log(`📤 Importing ${fabrics.length} fabrics in ${totalBatches} batch(es) of ${BATCH_SIZE}...`);
+    
+    for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+      const batchFabrics = fabricBatches[batchIdx] || [];
+      const payload = { ...nonFabricData, fabrics: batchFabrics };
+      
+      // Only include non-fabric types in the first batch
+      if (batchIdx > 0) {
+        for (const key of Object.keys(nonFabricData)) {
+          delete payload[key];
+        }
+      }
+      
+      console.log(`📤 Batch ${batchIdx + 1}/${totalBatches}: ${batchFabrics.length} fabrics...`);
+      
+      try {
+        const response = await fetch('/api/order-management/import', {
+          method: 'POST',
+          headers: getAuthHeaders(),
+          body: JSON.stringify({ data: payload })
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Server import failed: ${response.status} - ${errorText}`);
+        }
+
+        let batchResults;
+        try {
+          batchResults = await response.json();
+        } catch (parseError) {
+          const responseText = await response.text();
+          console.error('❌ Failed to parse import response:', responseText);
+          throw new Error('Server returned invalid JSON response.');
+        }
+        
+        allResults.created += batchResults.created || 0;
+        allResults.updated += batchResults.updated || 0;
+        allResults.skipped += batchResults.skipped || 0;
+        allResults.failed += batchResults.failed || 0;
+        allResults.errors.push(...(batchResults.errors || []));
+        if (batchResults.autoCreationSummary) {
+          allResults.autoCreationSummary = batchResults.autoCreationSummary;
+        }
+        
+        console.log(`✅ Batch ${batchIdx + 1}/${totalBatches} done: +${batchResults.created} created, ~${batchResults.updated} updated`);
+      } catch (error) {
+        console.error(`❌ Batch ${batchIdx + 1}/${totalBatches} failed:`, error);
+        allResults.failed += batchFabrics.length;
+        allResults.errors.push({ type: 'batch_error', message: error.message });
+      }
+    }
+    
+    console.log('📤 [FRONTEND] All batches completed:', allResults);
+    return allResults;
   }
 };
 
