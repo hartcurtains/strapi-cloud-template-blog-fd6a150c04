@@ -1681,6 +1681,9 @@ export const excelHelper = {
 
     return data.map(row => {
       const isFeatured = row.is_featured === 'true' || row.is_featured === true;
+      const isCurtain = row.is_curtain === 'true' || row.is_curtain === true;
+      const isCushion = row.is_cushion === 'true' || row.is_cushion === true;
+      const isBlind = row.is_blind === 'true' || row.is_blind === true;
       let featuredUntilIso = null;
       if (isFeatured && row.featured_until) {
         featuredUntilIso = parseDDMMYYYY(row.featured_until) || new Date(row.featured_until).toISOString();
@@ -1693,12 +1696,15 @@ export const excelHelper = {
         colour: row.colour?.toString().trim(),
         pattern: row.pattern?.toString().trim(),
         composition: row.composition?.toString().trim(),
-        price_per_metre: row.price_per_metre ? parseFloat(row.price_per_metre) : null,
-        patternRepeat_cm: row.patternRepeat_cm ? parseFloat(row.patternRepeat_cm) : null,
-        usableWidth_cm: row.usableWidth_cm ? parseFloat(row.usableWidth_cm) : null,
-        martindale: row.martindale ? parseInt(row.martindale) : null,
+        price_per_metre: row.price_per_metre !== undefined && row.price_per_metre !== null && row.price_per_metre !== '' ? parseFloat(row.price_per_metre) : null,
+        patternRepeat_cm: row.patternRepeat_cm !== undefined && row.patternRepeat_cm !== null && row.patternRepeat_cm !== '' ? parseFloat(row.patternRepeat_cm) : null,
+        usableWidth_cm: row.usableWidth_cm !== undefined && row.usableWidth_cm !== null && row.usableWidth_cm !== '' ? parseFloat(row.usableWidth_cm) : null,
+        martindale: row.martindale !== undefined && row.martindale !== null ? parseInt(row.martindale) : undefined,
         availability: row.availability ? row.availability.toString().trim().toLowerCase() : undefined,
         is_featured: isFeatured,
+        is_curtain: isCurtain,
+        is_cushion: isCushion,
+        is_blind: isBlind,
         featured_until: featuredUntilIso,
         images: [] // Empty array for new imports
       };
@@ -1743,6 +1749,8 @@ export const excelHelper = {
 
             const isFeatured = row.is_featured === 'true' || row.is_featured === true;
             const isCurtain = row.is_curtain === 'true' || row.is_curtain === true;
+            const isCushion = row.is_cushion === 'true' || row.is_cushion === true;
+            const isBlind = row.is_blind === 'true' || row.is_blind === true;
             let featuredUntil = null;
             if (isFeatured && row.featured_until) {
               featuredUntil = parseDDMMYYYY(row.featured_until) || new Date(row.featured_until).toISOString();
@@ -1755,13 +1763,15 @@ export const excelHelper = {
               colour: row.colour?.toString().trim(),
               pattern: row.pattern?.toString().trim(),
               composition: row.composition?.toString().trim(),
-              price_per_metre: row.price_per_metre ? parseFloat(row.price_per_metre) : null,
-              patternRepeat_cm: row.patternRepeat_cm ? parseFloat(row.patternRepeat_cm) : null,
-              usableWidth_cm: row.usableWidth_cm ? parseFloat(row.usableWidth_cm) : null,
-              martindale: row.martindale && row.martindale !== null ? parseInt(row.martindale) : undefined,
+              price_per_metre: row.price_per_metre !== undefined && row.price_per_metre !== null && row.price_per_metre !== '' ? parseFloat(row.price_per_metre) : null,
+              patternRepeat_cm: row.patternRepeat_cm !== undefined && row.patternRepeat_cm !== null && row.patternRepeat_cm !== '' ? parseFloat(row.patternRepeat_cm) : null,
+              usableWidth_cm: row.usableWidth_cm !== undefined && row.usableWidth_cm !== null && row.usableWidth_cm !== '' ? parseFloat(row.usableWidth_cm) : null,
+              martindale: row.martindale !== undefined && row.martindale !== null ? parseInt(row.martindale) : undefined,
               availability: row.availability ? row.availability.toString().trim().toLowerCase() : undefined,
               is_featured: isFeatured,
               is_curtain: isCurtain,
+              is_cushion: isCushion,
+              is_blind: isBlind,
               featured_until: featuredUntil,
               images: [],
               // Pass relation names as strings - backend will convert to IDs

@@ -1,0 +1,7 @@
+[
+  { "productId": "FAB-ABELLA-9001", "is_cushion": false, "is_curtain": true, "is_blind": true },
+  { "productId": "FAB-ADA-9002", "is_cushion": true, "is_curtain": true, "is_blind": true },
+  { "productId": "FAB-ADELINE-9003", "is_cushion": true, "is_curtain": true, "is_blind": true },
+  { "productId": "FAB-ADLINGTON-9004", "is_cushion": false, "is_curtain": true, "is_blind": true },
+  { "productId": "FAB-AREZZO-9020", "is_cushion": true, "is_curtain": true, "is_blind": true }
+]

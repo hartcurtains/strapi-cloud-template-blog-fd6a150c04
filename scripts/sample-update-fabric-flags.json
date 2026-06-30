@@ -1,0 +1,7 @@
+[
+  { "productId": "FAB-ADA-9002", "is_cushion": true },
+  { "productId": "FAB-ADELINE-9003", "is_cushion": true },
+  { "productId": "FAB-ALASKA-9006", "is_cushion": true },
+  { "productId": "FAB-ABELLA-9001", "is_cushion": false, "is_curtain": true },
+  { "productId": "FAB-ADLINGTON-9004", "is_cushion": false, "is_curtain": true }
+]

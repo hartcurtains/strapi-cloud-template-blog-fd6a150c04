@@ -342,8 +342,10 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
             availability: fabricData.availability || 'in_stock',
             description: fabricData.description || '',
             martindale: fabricData.martindale,
-            is_featured: false,
-            is_curtain: false,
+            is_featured: fabricData.is_featured ?? false,
+            is_curtain: fabricData.is_curtain ?? false,
+            is_cushion: fabricData.is_cushion ?? false,
+            is_blind: fabricData.is_blind ?? true,
             publishedAt: new Date(),
           };
 

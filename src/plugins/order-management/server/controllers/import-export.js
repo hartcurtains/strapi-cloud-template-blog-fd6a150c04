@@ -349,6 +349,11 @@ module.exports = {
             delete item.id;
             delete item.documentId;
             
+            // Remove colour field (doesn't exist in fabric schema - the relation is "colours" plural)
+            if (productType === 'fabrics') {
+              delete item.colour;
+            }
+            
             // Handle martindale: leave empty if null
             if (item.martindale === null || item.martindale === undefined) {
               delete item.martindale;
@@ -650,7 +655,6 @@ module.exports = {
                   (item.name !== undefined && item.name !== existing.name) ||
                   (item.description !== undefined && item.description !== existing.description) ||
                   (item.brand !== undefined && item.brand !== existing.brand?.id) ||
-                  (item.colour !== undefined && item.colour !== existing.colour) ||
                   (item.pattern !== undefined && item.pattern !== existing.pattern) ||
                   (item.composition !== undefined && item.composition !== existing.composition) ||
                   (item.price_per_metre !== undefined && item.price_per_metre !== existing.price_per_metre) ||
