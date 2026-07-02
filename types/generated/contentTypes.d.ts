@@ -697,7 +697,6 @@ export interface ApiCushionSizeCushionSize extends Struct.CollectionTypeSchema {
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    fabric_metres: Schema.Attribute.Decimal & Schema.Attribute.Required;
     height_cm: Schema.Attribute.Integer & Schema.Attribute.Required;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -715,7 +714,6 @@ export interface ApiCushionSizeCushionSize extends Struct.CollectionTypeSchema {
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     width_cm: Schema.Attribute.Integer & Schema.Attribute.Required;
-    workmanship_cost: Schema.Attribute.Decimal & Schema.Attribute.Required;
   };
 }
 

@@ -15,16 +15,6 @@
       "type": "enumeration",
       "enum": ["square", "rectangular", "bolster", "round", "oval"],
       "required": true
-    },
-    "fabric_metres": {
-      "type": "decimal",
-      "required": true,
-      "description": "Pre-calculated linear metres of fabric needed for one cover at this size"
-    },
-    "workmanship_cost": {
-      "type": "decimal",
-      "required": true,
-      "description": "Flat labour cost to produce one cover at this size"
     }
   }
 }
