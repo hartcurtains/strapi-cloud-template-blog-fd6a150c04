@@ -626,7 +626,7 @@ export interface ApiCushionPadCushionPad extends Struct.CollectionTypeSchema {
     singularName: 'cushion-pad';
   };
   options: {
-    draftAndPublish: false;
+    draftAndPublish: true;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
@@ -641,6 +641,7 @@ export interface ApiCushionPadCushionPad extends Struct.CollectionTypeSchema {
     name: Schema.Attribute.String & Schema.Attribute.Required;
     price: Schema.Attribute.Decimal & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
+    thumbnail: Schema.Attribute.Media<'images'>;
     type: Schema.Attribute.Enumeration<
       ['duck_feather', 'synthetic', 'cover_only']
     > &
@@ -691,7 +692,7 @@ export interface ApiCushionSizeCushionSize extends Struct.CollectionTypeSchema {
     singularName: 'cushion-size';
   };
   options: {
-    draftAndPublish: false;
+    draftAndPublish: true;
   };
   attributes: {
     createdAt: Schema.Attribute.DateTime;
@@ -710,6 +711,7 @@ export interface ApiCushionSizeCushionSize extends Struct.CollectionTypeSchema {
       ['square', 'rectangular', 'bolster', 'round', 'oval']
     > &
       Schema.Attribute.Required;
+    thumbnail: Schema.Attribute.Media<'images'>;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

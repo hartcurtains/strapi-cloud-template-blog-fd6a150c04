@@ -6,7 +6,7 @@
     "pluralName": "cushion-pads",
     "displayName": "Cushion Pad"
   },
-  "options": { "draftAndPublish": false },
+  "options": { "draftAndPublish": true },
   "attributes": {
     "name": { "type": "string", "required": true },
     "type": {
@@ -18,6 +18,12 @@
       "type": "decimal",
       "required": true,
       "description": "0.00 for cover_only"
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
     }
   }
 }

@@ -6,7 +6,7 @@
     "pluralName": "cushion-sizes",
     "displayName": "Cushion Size"
   },
-  "options": { "draftAndPublish": false },
+  "options": { "draftAndPublish": true },
   "attributes": {
     "name": { "type": "string", "required": true },
     "width_cm": { "type": "integer", "required": true },
@@ -15,6 +15,12 @@
       "type": "enumeration",
       "enum": ["square", "rectangular", "bolster", "round", "oval"],
       "required": true
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
     }
   }
 }
