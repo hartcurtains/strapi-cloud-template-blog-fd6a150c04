@@ -23,6 +23,16 @@
         "round",
         "oval"
       ]
+    },
+    "width_cm": {
+      "type": "integer",
+      "required": true,
+      "description": "Width of the cushion in cm"
+    },
+    "height_cm": {
+      "type": "integer",
+      "required": true,
+      "description": "Height of the cushion in cm"
     }
   }
 }
