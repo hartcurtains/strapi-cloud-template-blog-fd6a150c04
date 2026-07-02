@@ -25,6 +25,21 @@
       "type": "relation",
       "relation": "oneToOne",
       "target": "api::cushion-type.cushion-type"
+    },
+    "available_sizes": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::cushion-size.cushion-size"
+    },
+    "available_pads": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::cushion-pad.cushion-pad"
+    },
+    "available_piping_types": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::cushion-piping.cushion-piping"
     }
   }
 }

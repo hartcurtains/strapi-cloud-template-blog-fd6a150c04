@@ -1,0 +1,23 @@
+{
+  "kind": "collectionType",
+  "collectionName": "cushion_pads",
+  "info": {
+    "singularName": "cushion-pad",
+    "pluralName": "cushion-pads",
+    "displayName": "Cushion Pad"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "type": {
+      "type": "enumeration",
+      "enum": ["duck_feather", "synthetic", "cover_only"],
+      "required": true
+    },
+    "price": {
+      "type": "decimal",
+      "required": true,
+      "description": "0.00 for cover_only"
+    }
+  }
+}

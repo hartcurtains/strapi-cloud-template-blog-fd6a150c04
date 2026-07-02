@@ -118,7 +118,10 @@ async function findExistingItem(
 export default async ({ strapi }: { strapi: Core.Strapi }) => {
   // Wait a bit for Strapi to be fully ready
   await new Promise(resolve => setTimeout(resolve, 2000));
-  
+
+  // Seed pricing rules in all environments (runs before production-only import)
+  await seedCushionPricingRule(strapi);
+
   // Only run in production (Strapi Cloud)
   if (process.env.NODE_ENV !== 'production') {
     console.log('⏭️  Skipping data import (not in production)');
@@ -326,5 +329,65 @@ async function readJSONL(filePath: string): Promise<any[]> {
   }
 
   return entities;
+}
+
+async function seedCushionPricingRule(strapi: Core.Strapi): Promise<void> {
+  try {
+    const existing = await strapi.entityService.findMany('api::pricing-rule.pricing-rule', {
+      filters: { name: 'Cushion Pricing Rule' },
+      limit: 1,
+    });
+
+    if (existing && Array.isArray(existing) && existing.length > 0) {
+      console.log('✅ Cushion pricing rule already exists');
+      return;
+    }
+
+    await strapi.entityService.create('api::pricing-rule.pricing-rule', {
+      data: {
+        name: 'Cushion Pricing Rule',
+        product_type: 'cushion',
+        formula: {
+          steps: [
+            {
+              name: 'Fabric Cost',
+              inputs: ['size.fabric_metres', 'fabric.price_per_metre'],
+              output: 'fabricCost',
+              operation: 'multiply',
+            },
+            {
+              name: 'Piping Cost',
+              inputs: ['cushion_piping_type.price'],
+              output: 'pipingCost',
+              operation: 'set',
+            },
+            {
+              name: 'Pad Cost',
+              inputs: ['cushion_pad.price'],
+              output: 'padCost',
+              operation: 'set',
+            },
+            {
+              name: 'Workmanship Cost',
+              inputs: ['size.workmanship_cost'],
+              output: 'workmanshipCost',
+              operation: 'set',
+            },
+            {
+              name: 'Total Cost',
+              inputs: ['fabricCost', 'pipingCost', 'padCost', 'workmanshipCost'],
+              output: 'totalPrice',
+              operation: 'add',
+            },
+          ],
+          finalOutput: 'totalPrice',
+        },
+      },
+    });
+
+    console.log('✅ Created Cushion Pricing Rule');
+  } catch (error: any) {
+    console.warn('⚠️  Error seeding cushion pricing rule:', error.message);
+  }
 }
 

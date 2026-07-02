@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "cushion_sizes",
+  "info": {
+    "singularName": "cushion-size",
+    "pluralName": "cushion-sizes",
+    "displayName": "Cushion Size"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "name": { "type": "string", "required": true },
+    "width_cm": { "type": "integer", "required": true },
+    "height_cm": { "type": "integer", "required": true },
+    "shape": {
+      "type": "enumeration",
+      "enum": ["square", "rectangular", "bolster", "round", "oval"],
+      "required": true
+    },
+    "fabric_metres": {
+      "type": "decimal",
+      "required": true,
+      "description": "Pre-calculated linear metres of fabric needed for one cover at this size"
+    },
+    "workmanship_cost": {
+      "type": "decimal",
+      "required": true,
+      "description": "Flat labour cost to produce one cover at this size"
+    }
+  }
+}

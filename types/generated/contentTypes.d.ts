@@ -618,6 +618,39 @@ export interface ApiCurtainTypeCurtainType extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCushionPadCushionPad extends Struct.CollectionTypeSchema {
+  collectionName: 'cushion_pads';
+  info: {
+    displayName: 'Cushion Pad';
+    pluralName: 'cushion-pads';
+    singularName: 'cushion-pad';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::cushion-pad.cushion-pad'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    price: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    type: Schema.Attribute.Enumeration<
+      ['duck_feather', 'synthetic', 'cover_only']
+    > &
+      Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCushionPipingCushionPiping
   extends Struct.CollectionTypeSchema {
   collectionName: 'cushion_piping_types';
@@ -647,6 +680,42 @@ export interface ApiCushionPipingCushionPiping
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiCushionSizeCushionSize extends Struct.CollectionTypeSchema {
+  collectionName: 'cushion_sizes';
+  info: {
+    displayName: 'Cushion Size';
+    pluralName: 'cushion-sizes';
+    singularName: 'cushion-size';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    fabric_metres: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    height_cm: Schema.Attribute.Integer & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::cushion-size.cushion-size'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    shape: Schema.Attribute.Enumeration<
+      ['square', 'rectangular', 'bolster', 'round', 'oval']
+    > &
+      Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    width_cm: Schema.Attribute.Integer & Schema.Attribute.Required;
+    workmanship_cost: Schema.Attribute.Decimal & Schema.Attribute.Required;
   };
 }
 
@@ -692,6 +761,18 @@ export interface ApiCushionCushion extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    available_pads: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::cushion-pad.cushion-pad'
+    >;
+    available_piping_types: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::cushion-piping.cushion-piping'
+    >;
+    available_sizes: Schema.Attribute.Relation<
+      'manyToMany',
+      'api::cushion-size.cushion-size'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -1565,7 +1646,9 @@ declare module '@strapi/strapi' {
       'api::colour.colour': ApiColourColour;
       'api::curtain-pole.curtain-pole': ApiCurtainPoleCurtainPole;
       'api::curtain-type.curtain-type': ApiCurtainTypeCurtainType;
+      'api::cushion-pad.cushion-pad': ApiCushionPadCushionPad;
       'api::cushion-piping.cushion-piping': ApiCushionPipingCushionPiping;
+      'api::cushion-size.cushion-size': ApiCushionSizeCushionSize;
       'api::cushion-type.cushion-type': ApiCushionTypeCushionType;
       'api::cushion.cushion': ApiCushionCushion;
       'api::fabric.fabric': ApiFabricFabric;
