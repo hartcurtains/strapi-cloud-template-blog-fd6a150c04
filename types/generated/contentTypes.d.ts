@@ -568,6 +568,12 @@ export interface ApiCurtainPoleCurtainPole extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    allowed_brackets: Schema.Attribute.JSON & Schema.Attribute.Required;
+    allowed_lengths: Schema.Attribute.JSON & Schema.Attribute.Required;
+    bracket_requirement: Schema.Attribute.Enumeration<
+      ['required', 'optional', 'forbidden']
+    > &
+      Schema.Attribute.Required;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;

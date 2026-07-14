@@ -26,6 +26,23 @@
     },
     "price": {
       "type": "decimal"
+    },
+    "allowed_lengths": {
+      "type": "json",
+      "required": true
+    },
+    "allowed_brackets": {
+      "type": "json",
+      "required": true
+    },
+    "bracket_requirement": {
+      "type": "enumeration",
+      "enum": [
+        "required",
+        "optional",
+        "forbidden"
+      ],
+      "required": true
     }
   }
 }
