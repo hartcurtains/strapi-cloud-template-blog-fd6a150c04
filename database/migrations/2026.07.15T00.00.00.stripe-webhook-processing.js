@@ -3,6 +3,7 @@
 const TABLE = 'stripe_webhook_processings';
 const EVENT_INDEX = 'stripe_webhook_processings_event_id_uq_pb07';
 const ORDER_INDEX = 'stripe_webhook_processings_order_number_uq_pb07';
+const STATUS_VALUES = Object.freeze(['processing', 'completed', 'reconciliation_required']);
 
 const REQUIRED_COLUMNS = {
   id: ['integer', 'bigint'],
@@ -120,6 +121,16 @@ async function validateColumns(knex) {
   }
 }
 
+async function validateStatuses(knex) {
+  const invalid = await knex(TABLE)
+    .select('status')
+    .whereNotIn('status', STATUS_VALUES)
+    .distinct();
+  if (invalid.length) {
+    throw new Error(`PB-07 migration found incompatible lifecycle statuses: ${invalid.map(row => row.status).join(', ')}`);
+  }
+}
+
 async function ensureUniqueIndex(knex, column, name) {
   if (hasUniqueIndex(await indexes(knex), column)) return;
   await knex.raw('CREATE UNIQUE INDEX ?? ON ?? (??)', [name, TABLE, column]);
@@ -136,6 +147,7 @@ module.exports = {
 
     await knex.transaction(async trx => {
       await validateColumns(trx);
+      await validateStatuses(trx);
       await ensureUniqueIndex(trx, 'event_id', EVENT_INDEX);
       await ensureUniqueIndex(trx, 'order_number', ORDER_INDEX);
     });
@@ -146,5 +158,5 @@ module.exports = {
     // prove across deployments that a deterministic equivalent index was not pre-existing.
   },
 
-  constants: { TABLE, EVENT_INDEX, ORDER_INDEX },
+  constants: { TABLE, EVENT_INDEX, ORDER_INDEX, STATUS_VALUES },
 };

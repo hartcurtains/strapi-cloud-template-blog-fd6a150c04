@@ -69,7 +69,8 @@
         "pending",
         "processing",
         "shipped",
-        "delivered"
+        "delivered",
+        "cancelled"
       ]
     },
     "stripeCustomerId": {

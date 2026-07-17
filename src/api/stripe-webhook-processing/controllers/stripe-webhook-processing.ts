@@ -55,6 +55,19 @@ export default factories.createCoreController('api::stripe-webhook-processing.st
     }
   },
 
+  async markReconciliationRequired(ctx) {
+    const body = ctx.request.body as any;
+    if (!validEvent(body) || !CLAIM_TOKEN.test(body.claimToken)) {
+      return ctx.badRequest('Invalid lifecycle request');
+    }
+    try {
+      return ctx.send(await lifecycle(strapi).markReconciliationRequired(body));
+    } catch (error) {
+      strapi.log.error('Stripe webhook reconciliation marking failed');
+      return ctx.internalServerError('Lifecycle operation failed');
+    }
+  },
+
   async release(ctx) {
     const body = ctx.request.body as any;
     if (!validEvent(body) || !CLAIM_TOKEN.test(body.claimToken)) {

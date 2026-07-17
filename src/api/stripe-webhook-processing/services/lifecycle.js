@@ -41,9 +41,9 @@ function createLifecycleStore(knex, clock = () => new Date()) {
       if (updated === 1) return { result: 'claimed', claimToken };
 
       const current = await trx(TABLE).select('status').where({ event_id: eventId }).first();
-      return current?.status === 'completed'
-        ? { result: 'already_completed' }
-        : { result: 'currently_processing' };
+      if (current?.status === 'completed') return { result: 'already_completed' };
+      if (current?.status === 'reconciliation_required') return { result: 'reconciliation_required' };
+      return { result: 'currently_processing' };
     });
   }
 
@@ -61,7 +61,7 @@ function createLifecycleStore(knex, clock = () => new Date()) {
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
       const owner = await knex(TABLE).where({ order_number: orderNumber }).first();
-      if (owner && owner.event_id !== eventId) return { result: 'already_processed' };
+      if (owner && owner.event_id !== eventId) return orderClaimResult(owner.status);
       throw error;
     }
 
@@ -70,8 +70,9 @@ function createLifecycleStore(knex, clock = () => new Date()) {
       .where({ event_id: eventId, status: 'processing', claim_token: claimToken })
       .first();
     if (current?.order_number === orderNumber) return { result: 'claimed' };
-    if (await knex(TABLE).where({ order_number: orderNumber }).whereNot({ event_id: eventId }).first()) {
-      return { result: 'already_processed' };
+    const owner = await knex(TABLE).where({ order_number: orderNumber }).whereNot({ event_id: eventId }).first();
+    if (owner) {
+      return orderClaimResult(owner.status);
     }
     return { result: 'not_owner' };
   }
@@ -93,6 +94,25 @@ function createLifecycleStore(knex, clock = () => new Date()) {
     });
   }
 
+  async function markReconciliationRequired({ eventId, claimToken }) {
+    const nowIso = clock().toISOString();
+    return knex.transaction(async trx => {
+      const updated = await trx(TABLE)
+        .where({ event_id: eventId, status: 'processing', claim_token: claimToken })
+        .update({
+          status: 'reconciliation_required',
+          completed_at: nowIso,
+          updated_at: nowIso,
+        });
+      if (updated === 1) return { result: 'reconciliation_required' };
+
+      const current = await trx(TABLE).where({ event_id: eventId }).forUpdate().first();
+      if (current?.status === 'reconciliation_required') return { result: 'already_reconciliation_required' };
+      if (current?.status === 'completed') return { result: 'already_completed' };
+      return { result: 'not_owner' };
+    });
+  }
+
   async function release({ eventId, claimToken }) {
     return knex.transaction(async trx => {
       const deleted = await trx(TABLE)
@@ -101,11 +121,20 @@ function createLifecycleStore(knex, clock = () => new Date()) {
       if (deleted === 1) return { result: 'released' };
 
       const current = await trx(TABLE).where({ event_id: eventId }).forUpdate().first();
-      return { result: current?.status === 'completed' ? 'already_completed' : 'not_owner' };
+      if (current?.status === 'completed') return { result: 'already_completed' };
+      if (current?.status === 'reconciliation_required') return { result: 'already_reconciliation_required' };
+      return { result: 'not_owner' };
     });
   }
 
-  return { claimEvent, claimOrder, complete, release };
+  return { claimEvent, claimOrder, complete, markReconciliationRequired, release };
+}
+
+function orderClaimResult(status) {
+  if (status === 'processing') return { result: 'currently_processing' };
+  if (status === 'completed') return { result: 'already_processed' };
+  if (status === 'reconciliation_required') return { result: 'reconciliation_required' };
+  return { result: 'not_owner' };
 }
 
 function isUniqueViolation(error) {

@@ -224,14 +224,63 @@ test('PostgreSQL lifecycle operations overlap on independent connections', { ski
     const outcomes = await overlap(firstDb, secondDb,
       trx => createLifecycleStore(trx, () => new Date(now)).claimOrder({ eventId: 'evt_pg_order_1', orderNumber: 'ORDER-PG-1', claimToken: one.claimToken }),
       trx => createLifecycleStore(trx, () => new Date(now)).claimOrder({ eventId: 'evt_pg_order_2', orderNumber: 'ORDER-PG-1', claimToken: two.claimToken }));
-    assert.deepEqual(outcomes.map(value => value.result).sort(), ['already_processed', 'claimed']);
+    assert.deepEqual(outcomes.map(value => value.result).sort(), ['claimed', 'currently_processing']);
+    const winnerIndex = outcomes.findIndex(value => value.result === 'claimed');
+    const loserIndex = outcomes.findIndex(value => value.result === 'currently_processing');
+    assert.notEqual(winnerIndex, -1);
+    assert.notEqual(loserIndex, -1);
+    const winnerEventId = winnerIndex === 0 ? 'evt_pg_order_1' : 'evt_pg_order_2';
+    const loserEventId = loserIndex === 0 ? 'evt_pg_order_1' : 'evt_pg_order_2';
+    const winnerClaimToken = winnerIndex === 0 ? one.claimToken : two.claimToken;
+    const loserClaimToken = loserIndex === 0 ? one.claimToken : two.claimToken;
     const rows = await firstDb('stripe_webhook_processings')
-      .select('event_id', 'order_number')
+      .select('event_id', 'order_number', 'status', 'claim_token')
       .whereIn('event_id', ['evt_pg_order_1', 'evt_pg_order_2'])
       .orderBy('event_id');
+    const winner = rows.find(row => row.event_id === winnerEventId);
+    const loser = rows.find(row => row.event_id === loserEventId);
     assert.equal(rows.filter(row => row.order_number === 'ORDER-PG-1').length, 1);
-    assert.equal(rows.find(row => row.event_id === (outcomes[0].result === 'claimed' ? 'evt_pg_order_1' : 'evt_pg_order_2')).order_number, 'ORDER-PG-1');
-    assert.equal(rows.find(row => row.event_id === (outcomes[0].result === 'claimed' ? 'evt_pg_order_2' : 'evt_pg_order_1')).order_number, null);
+    assert.equal(winner.order_number, 'ORDER-PG-1');
+    assert.equal(winner.status, 'processing');
+    assert.equal(winner.claim_token, winnerClaimToken);
+    assert.equal(loser.order_number, null);
+    assert.equal(loser.status, 'processing');
+    assert.equal(loser.claim_token, loserClaimToken);
+
+    const loserStore = loserIndex === 0 ? firstStore : secondStore;
+    assert.equal((await loserStore.release({ eventId: loserEventId, claimToken: loserClaimToken })).result, 'released');
+    assert.equal((await firstStore.complete({ eventId: winnerEventId, claimToken: winnerClaimToken })).result, 'completed');
+    const completedLater = await firstStore.claimEvent({ eventId: 'evt_pg_order_completed_later', eventType: 'checkout.session.completed', leaseSeconds: 300 });
+    assert.equal(completedLater.result, 'claimed');
+    assert.equal((await firstStore.claimOrder({
+      eventId: 'evt_pg_order_completed_later', orderNumber: 'ORDER-PG-1', claimToken: completedLater.claimToken,
+    })).result, 'already_processed');
+    const completedWinner = await firstDb('stripe_webhook_processings').where({ event_id: winnerEventId }).first();
+    assert.equal(completedWinner.status, 'completed');
+    assert.equal(completedWinner.claim_token, winnerClaimToken);
+    assert.equal((await firstStore.release({ eventId: 'evt_pg_order_completed_later', claimToken: completedLater.claimToken })).result, 'released');
+
+    const reconciliationOwner = await secondStore.claimEvent({ eventId: 'evt_pg_order_reconciliation_owner', eventType: 'checkout.session.completed', leaseSeconds: 300 });
+    assert.equal(reconciliationOwner.result, 'claimed');
+    assert.equal((await secondStore.claimOrder({
+      eventId: 'evt_pg_order_reconciliation_owner', orderNumber: 'ORDER-PG-RECONCILIATION', claimToken: reconciliationOwner.claimToken,
+    })).result, 'claimed');
+    assert.equal((await secondStore.markReconciliationRequired({
+      eventId: 'evt_pg_order_reconciliation_owner', claimToken: reconciliationOwner.claimToken,
+    })).result, 'reconciliation_required');
+    const reconciliationLater = await firstStore.claimEvent({ eventId: 'evt_pg_order_reconciliation_later', eventType: 'checkout.session.async_payment_succeeded', leaseSeconds: 300 });
+    assert.equal(reconciliationLater.result, 'claimed');
+    assert.equal((await firstStore.claimOrder({
+      eventId: 'evt_pg_order_reconciliation_later', orderNumber: 'ORDER-PG-RECONCILIATION', claimToken: reconciliationLater.claimToken,
+    })).result, 'reconciliation_required');
+    const reconciliationWinner = await firstDb('stripe_webhook_processings').where({ event_id: 'evt_pg_order_reconciliation_owner' }).first();
+    assert.equal(reconciliationWinner.status, 'reconciliation_required');
+    assert.equal(reconciliationWinner.claim_token, reconciliationOwner.claimToken);
+    const reconciliationRows = await firstDb('stripe_webhook_processings')
+      .select('order_number')
+      .whereIn('event_id', ['evt_pg_order_reconciliation_owner', 'evt_pg_order_reconciliation_later']);
+    assert.equal(reconciliationRows.filter(row => row.order_number === 'ORDER-PG-RECONCILIATION').length, 1);
+    assert.equal((await firstStore.release({ eventId: 'evt_pg_order_reconciliation_later', claimToken: reconciliationLater.claimToken })).result, 'released');
   });
 
   await t.test('stale release racing current completion cannot remove the current claim', async () => {
@@ -251,6 +300,23 @@ test('PostgreSQL lifecycle operations overlap on independent connections', { ski
     assert.equal(final.status, 'completed');
     assert.equal(final.claim_token, current.claimToken);
     assert.equal(final.order_number, 'ORDER-PG-RELEASE-COMPLETE');
+    assert(final.completed_at instanceof Date);
+  });
+
+  await t.test('completion and reconciliation marking cannot reopen a terminal record', async () => {
+    const claim = await firstStore.claimEvent({ eventId: 'evt_pg_complete_reconcile', eventType: 'checkout.session.completed', leaseSeconds: 300 });
+    assert.equal((await firstStore.claimOrder({
+      eventId: 'evt_pg_complete_reconcile', orderNumber: 'ORDER-PG-COMPLETE-RECONCILE', claimToken: claim.claimToken,
+    })).result, 'claimed');
+    const [completed, reconciled] = await overlap(firstDb, secondDb,
+      trx => createLifecycleStore(trx, () => new Date(now)).complete({ eventId: 'evt_pg_complete_reconcile', claimToken: claim.claimToken }),
+      trx => createLifecycleStore(trx, () => new Date(now)).markReconciliationRequired({ eventId: 'evt_pg_complete_reconcile', claimToken: claim.claimToken }));
+    assert.equal(completed.result === 'completed' || completed.result === 'not_owner', true);
+    assert.equal(reconciled.result === 'reconciliation_required' || reconciled.result === 'already_completed' || reconciled.result === 'not_owner', true);
+    const final = await firstDb('stripe_webhook_processings').where({ event_id: 'evt_pg_complete_reconcile' }).first();
+    assert(final);
+    assert(['completed', 'reconciliation_required'].includes(final.status));
+    assert.equal(final.order_number, 'ORDER-PG-COMPLETE-RECONCILE');
     assert(final.completed_at instanceof Date);
   });
 

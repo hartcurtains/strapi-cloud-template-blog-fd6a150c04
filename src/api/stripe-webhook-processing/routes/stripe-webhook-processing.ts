@@ -20,6 +20,12 @@ export default {
     },
     {
       method: 'POST',
+      path: '/stripe-webhook-processing/reconciliation-required',
+      handler: 'stripe-webhook-processing.markReconciliationRequired',
+      config: { auth: false, policies: ['global::stripe-webhook-lifecycle-auth'] },
+    },
+    {
+      method: 'POST',
       path: '/stripe-webhook-processing/release',
       handler: 'stripe-webhook-processing.release',
       config: { auth: false, policies: ['global::stripe-webhook-lifecycle-auth'] },

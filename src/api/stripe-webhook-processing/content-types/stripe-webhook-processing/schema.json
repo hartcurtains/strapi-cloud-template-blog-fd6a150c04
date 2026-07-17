@@ -25,7 +25,8 @@
       "required": true,
       "enum": [
         "processing",
-        "completed"
+        "completed",
+        "reconciliation_required"
       ]
     },
     "claimedAt": {

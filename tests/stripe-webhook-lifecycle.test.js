@@ -74,6 +74,13 @@ test('event lease behavior is atomic in SQL, owner-guarded, completed, and retry
   assert.equal((await store.complete({ eventId: 'evt_same', claimToken: recovered.claimToken })).result, 'completed');
   assert.equal((await store.claimEvent({ eventId: 'evt_same', eventType: 'checkout.session.completed', leaseSeconds: 300 })).result, 'already_completed');
 
+  const reconciliation = await store.claimEvent({ eventId: 'evt_reconciliation', eventType: 'checkout.session.completed', leaseSeconds: 300 });
+  await store.claimOrder({ eventId: 'evt_reconciliation', orderNumber: 'ORD-RECONCILIATION', claimToken: reconciliation.claimToken });
+  assert.equal((await store.markReconciliationRequired({ eventId: 'evt_reconciliation', claimToken: first.claimToken })).result, 'not_owner');
+  assert.equal((await store.markReconciliationRequired({ eventId: 'evt_reconciliation', claimToken: reconciliation.claimToken })).result, 'reconciliation_required');
+  assert.equal((await store.claimEvent({ eventId: 'evt_reconciliation', eventType: 'checkout.session.completed', leaseSeconds: 300 })).result, 'reconciliation_required');
+  assert.equal((await store.markReconciliationRequired({ eventId: 'evt_reconciliation', claimToken: first.claimToken })).result, 'already_reconciliation_required');
+
   const failed = await store.claimEvent({ eventId: 'evt_retry', eventType: 'checkout.session.completed', leaseSeconds: 300 });
   assert.equal((await store.release({ eventId: 'evt_retry', claimToken: failed.claimToken })).result, 'released');
   assert.equal((await store.claimEvent({ eventId: 'evt_retry', eventType: 'checkout.session.completed', leaseSeconds: 300 })).result, 'claimed');
@@ -84,7 +91,7 @@ test('order reservation is unique, released on failure, and retained after compl
   const first = await store.claimEvent({ eventId: 'evt_order_1', eventType: 'checkout.session.completed', leaseSeconds: 300 });
   const second = await store.claimEvent({ eventId: 'evt_order_2', eventType: 'checkout.session.async_payment_succeeded', leaseSeconds: 300 });
   assert.equal((await store.claimOrder({ eventId: 'evt_order_1', orderNumber: 'ORD-1', claimToken: first.claimToken })).result, 'claimed');
-  assert.equal((await store.claimOrder({ eventId: 'evt_order_2', orderNumber: 'ORD-1', claimToken: second.claimToken })).result, 'already_processed');
+  assert.equal((await store.claimOrder({ eventId: 'evt_order_2', orderNumber: 'ORD-1', claimToken: second.claimToken })).result, 'currently_processing');
   assert.equal((await store.release({ eventId: 'evt_order_1', claimToken: first.claimToken })).result, 'released');
 
   const third = await store.claimEvent({ eventId: 'evt_order_3', eventType: 'checkout.session.completed', leaseSeconds: 300 });
@@ -94,6 +101,12 @@ test('order reservation is unique, released on failure, and retained after compl
 
   const fourth = await store.claimEvent({ eventId: 'evt_order_4', eventType: 'checkout.session.completed', leaseSeconds: 300 });
   assert.equal((await store.claimOrder({ eventId: 'evt_order_4', orderNumber: 'ORD-1', claimToken: fourth.claimToken })).result, 'already_processed');
+
+  const recon = await store.claimEvent({ eventId: 'evt_order_recon', eventType: 'checkout.session.completed', leaseSeconds: 300 });
+  await store.claimOrder({ eventId: 'evt_order_recon', orderNumber: 'ORD-RECON', claimToken: recon.claimToken });
+  await store.markReconciliationRequired({ eventId: 'evt_order_recon', claimToken: recon.claimToken });
+  const later = await store.claimEvent({ eventId: 'evt_order_later', eventType: 'checkout.session.completed', leaseSeconds: 300 });
+  assert.equal((await store.claimOrder({ eventId: 'evt_order_later', orderNumber: 'ORD-RECON', claimToken: later.claimToken })).result, 'reconciliation_required');
 
   const invalid = await store.claimEvent({ eventId: 'evt_invalid', eventType: 'checkout.session.completed', leaseSeconds: 300 });
   await store.complete({ eventId: 'evt_invalid', claimToken: invalid.claimToken });
@@ -109,7 +122,7 @@ test('migration adds missing deterministic indexes, verifies them, preserves rec
   const knex = await databaseFixture(t);
   await createSynchronizedTable(knex);
   await knex('stripe_webhook_processings').insert({
-    document_id: 'doc-1', event_id: 'evt_existing', order_number: null, status: 'processing',
+    document_id: 'doc-1', event_id: 'evt_existing', order_number: null, status: 'reconciliation_required',
     claimed_at: '2026-07-15T10:00:00.000Z', completed_at: null, event_type: 'checkout.session.completed',
     claim_token: '11111111-1111-1111-1111-111111111111', created_at: '2026-07-15T10:00:00.000Z', updated_at: '2026-07-15T10:00:00.000Z',
   });
@@ -120,6 +133,7 @@ test('migration adds missing deterministic indexes, verifies them, preserves rec
   await migration.up(knex);
   assert.deepEqual((await sqliteIndexes(knex)).map(index => index.name).sort(), first);
   assert.equal((await knex('stripe_webhook_processings').where({ event_id: 'evt_existing' }).first()).document_id, 'doc-1');
+  assert.equal((await knex('stripe_webhook_processings').where({ event_id: 'evt_existing' }).first()).status, 'reconciliation_required');
 });
 
 test('migration accepts equivalent existing unique indexes without replacing them', async t => {
@@ -229,7 +243,7 @@ async function authServer(t, store) {
 }
 
 test('all lifecycle routes use the dedicated server-only policy', () => {
-  assert.equal(routes.routes.length, 4);
+  assert.equal(routes.routes.length, 5);
   for (const route of routes.routes) {
     assert.equal(route.config.auth, false);
     assert.deepEqual(route.config.policies, ['global::stripe-webhook-lifecycle-auth']);
