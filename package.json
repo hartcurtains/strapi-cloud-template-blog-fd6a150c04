@@ -4,6 +4,7 @@
   "private": true,
   "description": "A Strapi application",
   "scripts": {
+    "test": "node --test tests/*.test.js",
     "build": "strapi build",
     "console": "strapi console",
     "deploy": "strapi deploy",
@@ -11,6 +12,9 @@
     "develop": "strapi develop",
     "start": "strapi start",
     "strapi": "strapi",
+    "test:pb07": "npm run build && node --test tests/stripe-webhook-lifecycle.test.js",
+    "test:pb07:postgres": "node --test tests/stripe-webhook-postgres.test.js",
+    "test:stripe-webhook-lifecycle": "node --test tests/stripe-webhook-lifecycle.test.js",
     "upgrade": "npx @strapi/upgrade latest",
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
@@ -40,6 +44,7 @@
     "@types/node": "^22",
     "@types/react": "^18",
     "@types/react-dom": "^18",
+    "pg": "^8.16.3",
     "shadcn": "^4.2.0",
     "typescript": "^5"
   },

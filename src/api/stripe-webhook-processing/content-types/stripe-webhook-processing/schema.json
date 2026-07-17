@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "stripe_webhook_processings",
+  "info": {
+    "singularName": "stripe-webhook-processing",
+    "pluralName": "stripe-webhook-processings",
+    "displayName": "Stripe Webhook Processing"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "eventId": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "orderNumber": {
+      "type": "string",
+      "unique": true
+    },
+    "status": {
+      "type": "enumeration",
+      "required": true,
+      "enum": [
+        "processing",
+        "completed"
+      ]
+    },
+    "claimedAt": {
+      "type": "datetime",
+      "required": true
+    },
+    "completedAt": {
+      "type": "datetime"
+    },
+    "eventType": {
+      "type": "string"
+    },
+    "claimToken": {
+      "type": "string",
+      "required": true,
+      "private": true
+    }
+  }
+}
