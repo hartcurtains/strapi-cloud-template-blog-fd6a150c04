@@ -1,0 +1,92 @@
+{
+  "kind": "collectionType",
+  "collectionName": "fabric_colour_identities",
+  "info": {
+    "singularName": "fabric-colour-identity",
+    "pluralName": "fabric-colour-identities",
+    "displayName": "Fabric colour identity"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "displayName": {
+      "type": "string",
+      "required": true
+    },
+    "identityKey": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "private": true
+    },
+    "supplier": {
+      "type": "string",
+      "required": true
+    },
+    "fabric": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::fabric.fabric",
+      "inversedBy": "fabricColourIdentities",
+      "required": true
+    },
+    "fabricDocumentId": {
+      "type": "string",
+      "required": true,
+      "private": true
+    },
+    "supplierProductCode": {
+      "type": "string",
+      "required": true
+    },
+    "supplierColourCode": {
+      "type": "string",
+      "required": true
+    },
+    "fabricColourCode": {
+      "type": "string",
+      "required": true
+    },
+    "officialColourName": {
+      "type": "string"
+    },
+    "internalColourCode": {
+      "type": "string"
+    },
+    "mappingStatus": {
+      "type": "enumeration",
+      "required": true,
+      "default": "pending",
+      "enum": ["pending", "verified", "rejected", "promoted"]
+    },
+    "evidenceStatus": {
+      "type": "enumeration",
+      "required": true,
+      "default": "pending_manual",
+      "enum": ["pending_manual", "verified_manual", "verified_official", "unresolved"]
+    },
+    "notes": {
+      "type": "text"
+    },
+    "source": {
+      "type": "string"
+    },
+    "mappingVersion": {
+      "type": "string",
+      "private": true
+    },
+    "promotedColour": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::colour.colour"
+    },
+    "assets": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::fabric-colour-asset.fabric-colour-asset",
+      "mappedBy": "fabricColourIdentity"
+    }
+  }
+}

@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+const { customMutationPolicyConfig, mutationPolicyConfig } = require('../../../catalog/catalog-mutation-surface');
 
 export default {
   routes: [
@@ -26,33 +27,25 @@ export default {
       method: 'POST',
       path: '/fabrics',
       handler: 'fabric.create',
-      config: {
-        auth: false, // Allow admin access for creating
-      },
+      config: mutationPolicyConfig('api::fabric.fabric'),
     },
     {
       method: 'PUT',
       path: '/fabrics/:id',
       handler: 'fabric.update',
-      config: {
-        auth: false, // Allow admin access for updating
-      },
+      config: mutationPolicyConfig('api::fabric.fabric'),
     },
     {
       method: 'DELETE',
       path: '/fabrics/:id',
       handler: 'fabric.delete',
-      config: {
-        auth: false, // Allow admin access for deleting
-      },
+      config: mutationPolicyConfig('api::fabric.fabric'),
     },
     {
       method: 'POST',
       path: '/fabrics/import',
       handler: 'fabric.importFabrics',
-      config: {
-        auth: false, // Allow admin access for importing
-      },
+      config: customMutationPolicyConfig(),
     },
   ],
 };

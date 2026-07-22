@@ -119,6 +119,12 @@
       "target": "api::colour.colour",
       "mappedBy": "fabrics"
     },
+    "fabricColourIdentities": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::fabric-colour-identity.fabric-colour-identity",
+      "mappedBy": "fabric"
+    },
     "is_curtain": {
       "type": "boolean",
       "required": true,

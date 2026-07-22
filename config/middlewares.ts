@@ -1,3 +1,5 @@
+const catalogUploadConfig = require('../src/catalog/catalog-upload-config');
+
 export default [
   'strapi::logger',
   'strapi::errors',
@@ -5,16 +7,19 @@ export default [
   'strapi::cors',
   'strapi::poweredBy',
   'strapi::query',
+  // Must remain before strapi::body: it rejects sensitive requests without parsing payloads.
+  'global::catalog-write-prebody-auth',
   {
     name: 'strapi::body',
     config: {
-      formLimit: '2gb', // Allow large file uploads for bulk image import
+      // The admin uploader sends files sequentially; 50MB/file and 100MB/request are sufficient.
+      formLimit: '100mb',
       jsonLimit: '50mb',
       textLimit: '50mb',
       formidable: {
-        maxFileSize: 1 * 1024 * 1024 * 1024, // 1GB per file (matches controller validation)
-        maxFields: 10,
-        maxFieldsSize: 2 * 1024 * 1024,
+        maxFileSize: catalogUploadConfig.maxFileSize,
+        maxFields: 20,
+        maxFieldsSize: 1 * 1024 * 1024,
       },
     },
   },

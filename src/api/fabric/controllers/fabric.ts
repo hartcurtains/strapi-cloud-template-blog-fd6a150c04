@@ -167,13 +167,16 @@ export default factories.createCoreController('api::fabric.fabric', ({ strapi })
       }
     }
     
-    const { results, pagination } = await strapi.entityService.findPage('api::fabric.fabric', sanitizedQuery)
-    
-    // If we got fewer results than the pageSize and there might be more, log a warning
-    if (results.length < pagination.pageSize && pagination.total > pagination.pageSize) {
-      console.log(`[Fabric Controller] Retrieved ${results.length} fabrics, but total is ${pagination.total}. Consider using pagination[pageSize]=${pagination.total} to get all items.`)
-    }
-    
+    const requestedPagination = sanitizedQuery.pagination as { page: number; pageSize: number }
+    const page = requestedPagination.page
+    const pageSize = requestedPagination.pageSize
+    delete sanitizedQuery.pagination
+    const { results, pagination } = await strapi.entityService.findPage('api::fabric.fabric', {
+      ...sanitizedQuery,
+      page,
+      pageSize,
+      sort: sanitizedQuery.sort || ['id:asc'],
+    })
     return this.transformResponse(results, { pagination })
   },
   

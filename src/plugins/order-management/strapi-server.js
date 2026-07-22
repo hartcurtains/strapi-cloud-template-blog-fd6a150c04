@@ -6,5 +6,6 @@ module.exports = {
     // Any bootstrap logic here
   },
   controllers: require('./server/controllers'),
+  services: require('./server/services'),
   routes: require('./server/routes'),
 };

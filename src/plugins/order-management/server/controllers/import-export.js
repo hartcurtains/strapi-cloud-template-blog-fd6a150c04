@@ -1,3 +1,35 @@
+function hasAuthenticatedAdmin(ctx) {
+  const catalogWriteAuth = ctx?.state?.catalogWriteAuth;
+  if (catalogWriteAuth?.kind === 'admin' && catalogWriteAuth.user?.isActive !== false) {
+    return true;
+  }
+
+  return Boolean(
+    ctx?.state?.isAuthenticated === true &&
+    ctx?.state?.auth?.strategy?.name === 'admin' &&
+    ctx?.state?.user?.isActive === true
+  );
+}
+
+function rejectAshleyWildeUnauthorized(ctx) {
+  ctx.status = 401;
+  ctx.body = {
+    success: false,
+    error: { status: 401, name: 'UnauthorizedError', message: 'Unauthorized' },
+  };
+}
+
+function hasAshleyWildePromotionPermission(ctx) {
+  const ability = ctx?.state?.catalogWriteAuth?.ability;
+  if (!ability || typeof ability.can !== 'function') return true;
+  const subjects = [
+    'api::colour.colour',
+    'api::fabric-colour-identity.fabric-colour-identity',
+    'api::fabric-colour-asset.fabric-colour-asset',
+  ];
+  return subjects.every((subject) => ability.can('create', subject) || ability.can('update', subject));
+}
+
 module.exports = {
   // Simple test endpoint
   async test(ctx) {
@@ -1220,6 +1252,177 @@ module.exports = {
       ctx.status = 500;
       ctx.body = { error: error.message || 'Failed to create fabric' };
     }
+  },
+
+  async bulkImageUpload(ctx) {
+    const isAshleyWildeFolder = ctx.request.body?.ashleyWilde === 'true' || ctx.request.body?.ashleyWilde === true;
+    if (isAshleyWildeFolder && !hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    const controller = strapi.controller('api::order-management.order-management');
+    return controller.bulkImageUpload(ctx);
+  },
+
+  async analyseAshleyWildeFolder(ctx) {
+    const importer = require('../services/ashley-wilde-import');
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      ctx.body = { success: true, data: await importer.analyseFolder(strapi, ctx.request.body) };
+    } catch (error) {
+      ctx.status = error?.code === 'ASHLEY_WILDE_MAPPING_INVALID' ? 503 : 400;
+      ctx.body = { success: false, error: importer.safeMessage(error) };
+    }
+  },
+
+  async getAshleyWildeHistory(ctx) {
+    const importer = require('../services/ashley-wilde-import');
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      ctx.body = { success: true, data: await importer.getHistory(strapi) };
+    } catch (error) {
+      ctx.status = 500;
+      ctx.body = { success: false, error: importer.safeMessage(error) };
+    }
+  },
+
+  async getAshleyWildeMode(ctx) {
+    const { resolveMappingMode } = require('../../shared/ashley-wilde-mapping');
+    const importer = require('../services/ashley-wilde-import');
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mode = resolveMappingMode();
+      const mappings = await importer.loadAshleyImporterMappings(strapi);
+      ctx.body = {
+        success: true,
+        data: {
+          mode: mappings.mode || mode,
+          source: mappings.source || 'repository-fallback',
+          mappingVersion: mappings.mappingVersion || null,
+          pilot: (mappings.mode || mode) === 'pilot',
+          label: (mappings.mode || mode) === 'pilot' ? 'Pilot mapping — local testing only' : null,
+          schemaVersion: mappings.colourMap.schemaVersion,
+          generatedAt: mappings.colourMap.generatedAt,
+        },
+      };
+    } catch (error) {
+      ctx.status = error?.code === 'ASHLEY_WILDE_MAPPING_INVALID' ? 503 : 500;
+      ctx.body = { success: false, error: error.message || 'Ashley Wilde mapping mode unavailable' };
+    }
+  },
+
+  async promoteAshleyWilde(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const promotion = require('../services/ashley-wilde-promotion');
+      const body = ctx.request.body || {};
+      ctx.body = { success: true, preview: true, data: await promotion.previewPromotion(strapi, body) };
+    } catch (error) {
+      ctx.status = error.status === 403 ? 403 : 400;
+      ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Ashley Wilde promotion preview could not be completed safely' } };
+    }
+  },
+
+  async previewAshleyWildePromotion(ctx) {
+    return module.exports.promoteAshleyWilde(ctx);
+  },
+
+  async applyAshleyWildePromotion(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    if (!hasAshleyWildePromotionPermission(ctx)) {
+      ctx.status = 403;
+      ctx.body = { success: false, error: { status: 403, message: 'The signed-in administrator lacks permission to promote staged colours.' } };
+      return;
+    }
+    try {
+      const body = ctx.request.body || {};
+      if (!(body.confirm === true || body.confirm === 'true')) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: { status: 400, message: 'Explicit confirmation is required to apply the reviewed promotion preview.' } };
+        return;
+      }
+      const promotion = require('../services/ashley-wilde-promotion');
+      ctx.body = { success: true, preview: false, data: await promotion.promoteVerified(strapi, { ...body, commit: true }) };
+    } catch (error) {
+      ctx.status = error.status === 403 ? 403 : 409;
+      ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Ashley Wilde promotion could not be applied safely' } };
+    }
+  },
+
+  async uploadSupplierMapping(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mappings = require('../services/supplier-mapping');
+      ctx.body = { success: true, data: await mappings.uploadMapping(strapi, ctx) };
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: error.message || 'Supplier mapping upload could not be validated' };
+    }
+  },
+
+  async applySupplierMapping(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mappings = require('../services/supplier-mapping');
+      ctx.body = { success: true, data: await mappings.applyMapping(strapi, ctx) };
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: error.message || 'Supplier mapping version could not be activated' };
+    }
+  },
+
+  async getActiveSupplierMappings(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mappings = require('../services/supplier-mapping');
+      const supplier = String(ctx.query?.supplier || 'Ashley Wilde').trim();
+      ctx.body = { success: true, data: await mappings.getActiveMappings(strapi, supplier) };
+    } catch (error) {
+      ctx.status = 500;
+      ctx.body = { success: false, error: error.message || 'Active supplier mappings could not be loaded' };
+    }
+  },
+
+  async exportSupplierMapping(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mappings = require('../services/supplier-mapping');
+      let documentId = String(ctx.query?.documentId || '').trim();
+      if (!documentId) {
+        const active = await mappings.getActiveVersion(strapi, String(ctx.query?.supplier || 'Ashley Wilde').trim());
+        documentId = active?.documentId || '';
+      }
+      if (!documentId) throw new Error('No mapping version was selected and no active version exists.');
+      const payload = await mappings.exportMapping(strapi, documentId);
+      ctx.type = 'application/json';
+      ctx.set('Content-Disposition', `attachment; filename="${payload.supplier || 'supplier'}-${payload.mappingVersion || 'mapping'}.json"`);
+      ctx.body = payload;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: error.message || 'Supplier mapping export could not be created' };
+    }
+  },
+
+  async exportSupplierMappingFallback(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mappings = require('../services/supplier-mapping');
+      const result = await mappings.exportRepositoryFallback(strapi);
+      ctx.type = 'application/json';
+      ctx.set('Content-Disposition', 'attachment; filename="ashley-wilde-complete-mapping.json"');
+      ctx.body = result.document;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: error.message || 'Repository supplier mapping export could not be created' };
+    }
+  },
+
+  async reenrichSupplierMappings(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mappings = require('../services/supplier-mapping');
+      ctx.body = { success: true, data: await mappings.reenrichSupplierMappings(strapi, ctx) };
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: error.message || 'Supplier mapping re-enrichment could not be completed' };
+    }
   }
 };
 
@@ -1476,4 +1679,3 @@ function extractCareInstructions(text) {
   
   return null;
 }
-

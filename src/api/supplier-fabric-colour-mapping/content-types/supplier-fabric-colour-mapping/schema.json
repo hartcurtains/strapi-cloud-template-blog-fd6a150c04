@@ -1,0 +1,46 @@
+{
+  "kind": "collectionType",
+  "collectionName": "supplier_fabric_colour_mappings",
+  "info": {
+    "singularName": "supplier-fabric-colour-mapping",
+    "pluralName": "supplier-fabric-colour-mappings",
+    "displayName": "Supplier fabric colour mapping"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "mappingImport": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::supplier-mapping-import.supplier-mapping-import",
+      "inversedBy": "mappings",
+      "required": true
+    },
+    "supplier": { "type": "string", "required": true },
+    "fabric": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::fabric.fabric",
+      "required": true
+    },
+    "fabricDocumentId": { "type": "string", "required": true },
+    "fabricName": { "type": "string", "required": true },
+    "supplierProductCode": { "type": "string", "required": true },
+    "supplierColourCode": { "type": "string", "required": true },
+    "fabricColourCode": { "type": "string", "required": true },
+    "officialColourName": { "type": "string" },
+    "internalColourCode": { "type": "string" },
+    "evidenceStatus": {
+      "type": "enumeration",
+      "required": true,
+      "default": "pending_manual",
+      "enum": ["pending_manual", "verified_manual", "verified_official", "unresolved"]
+    },
+    "source": { "type": "string" },
+    "notes": { "type": "text" },
+    "isActive": { "type": "boolean", "default": true }
+  }
+}

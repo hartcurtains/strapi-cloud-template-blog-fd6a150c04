@@ -137,6 +137,11 @@ export default {
    * run jobs, or perform some special logic.
    */
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    // The migration can run before Strapi synchronizes new content types on a
+    // fresh database. Re-run its idempotent index step after schema sync so
+    // the composite staging uniqueness is present on the first boot as well.
+    const stagingMigration = require('../database/migrations/2026.07.21T00.00.00.fabric-colour-staging.js');
+    await stagingMigration.ensureIndexes(strapi.db.connection);
     // Import data from git on first startup
     await importData({ strapi });
   },

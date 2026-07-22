@@ -1,0 +1,1536 @@
+{
+  "codes": {
+    "A": {
+      "colourName": "Aluminium",
+      "sources": [
+        {
+          "supplierColourCode": "AL",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "AE": {
+      "colourName": "Aegean",
+      "sources": [
+        {
+          "supplierColourCode": "AE",
+          "supplierProductCode": "GALATZO"
+        }
+      ]
+    },
+    "AL": {
+      "colourName": "Alpine 612",
+      "sources": [
+        {
+          "supplierColourCode": "AL",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "AQ": {
+      "colourName": "Aqua",
+      "sources": [
+        {
+          "supplierColourCode": "AQ",
+          "supplierProductCode": "ALASKA"
+        },
+        {
+          "supplierColourCode": "AQ",
+          "supplierProductCode": "BALTIC"
+        },
+        {
+          "supplierColourCode": "AQ",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "AU": {
+      "colourName": "Aubergine 703",
+      "sources": [
+        {
+          "supplierColourCode": "AU",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "AUB": {
+      "colourName": "Aubergine",
+      "sources": [
+        {
+          "supplierColourCode": "AU",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "B": {
+      "colourName": "Blush",
+      "sources": [
+        {
+          "supplierColourCode": "BL",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "BA": {
+      "colourName": "Bark 111",
+      "sources": [
+        {
+          "supplierColourCode": "BA",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "BAB": {
+      "colourName": "Babypink",
+      "sources": [
+        {
+          "supplierColourCode": "BA",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "BE": {
+      "colourName": "Berry",
+      "sources": [
+        {
+          "supplierColourCode": "BE",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "BL": {
+      "colourName": "Blue",
+      "sources": [
+        {
+          "supplierColourCode": "BL",
+          "supplierProductCode": "BIRDSANDROSES"
+        }
+      ]
+    },
+    "BLA": {
+      "colourName": "Black (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "BL",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "BR": {
+      "colourName": "Bronze",
+      "sources": [
+        {
+          "supplierColourCode": "BR",
+          "supplierProductCode": "GALATZO"
+        }
+      ]
+    },
+    "BU": {
+      "colourName": "Buttercup (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "BU",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "C": {
+      "colourName": "Caramel 107",
+      "sources": [
+        {
+          "supplierColourCode": "CA",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "CA": {
+      "colourName": "Caramel",
+      "sources": [
+        {
+          "supplierColourCode": "CA",
+          "supplierProductCode": "BERKELEY"
+        },
+        {
+          "supplierColourCode": "CA",
+          "supplierProductCode": "FOXLEY"
+        },
+        {
+          "supplierColourCode": "CA",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "CA",
+          "supplierProductCode": "HADLOW"
+        }
+      ]
+    },
+    "CAS": {
+      "colourName": "Cashew",
+      "sources": [
+        {
+          "supplierColourCode": "CA",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "CH": {
+      "colourName": "Champagne",
+      "sources": [
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "FLITTON"
+        },
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "FOXLEY"
+        },
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "FURLEY"
+        },
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "HAVELOCK"
+        },
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "HENRI"
+        }
+      ]
+    },
+    "CHA": {
+      "colourName": "Charcoal 801",
+      "sources": [
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "CHAM": {
+      "colourName": "Champagne (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "CHAR": {
+      "colourName": "Charcoal",
+      "sources": [
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "CH",
+          "supplierProductCode": "HASTINGS"
+        }
+      ]
+    },
+    "CL": {
+      "colourName": "Claret 204",
+      "sources": [
+        {
+          "supplierColourCode": "CL",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "CLA": {
+      "colourName": "Claret",
+      "sources": [
+        {
+          "supplierColourCode": "CL",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "CO": {
+      "colourName": "Coral",
+      "sources": [
+        {
+          "supplierColourCode": "CO",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "CR": {
+      "colourName": "Cream",
+      "sources": [
+        {
+          "supplierColourCode": "CR",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "CRA": {
+      "colourName": "Cranberry",
+      "sources": [
+        {
+          "supplierColourCode": "CR",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "CRE": {
+      "colourName": "Cream (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "CR",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "D": {
+      "colourName": "Danube",
+      "sources": [
+        {
+          "supplierColourCode": "DA",
+          "supplierProductCode": "FURLEY"
+        },
+        {
+          "supplierColourCode": "DA",
+          "supplierProductCode": "HASTINGS"
+        },
+        {
+          "supplierColourCode": "DA",
+          "supplierProductCode": "HAVELOCK"
+        }
+      ]
+    },
+    "DA": {
+      "colourName": "Danube 613",
+      "sources": [
+        {
+          "supplierColourCode": "DA",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "DE": {
+      "colourName": "Denim 605",
+      "sources": [
+        {
+          "supplierColourCode": "DE",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "DEN": {
+      "colourName": "Denim",
+      "sources": [
+        {
+          "supplierColourCode": "DE",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "DE",
+          "supplierProductCode": "HAMPTON"
+        }
+      ]
+    },
+    "DO": {
+      "colourName": "Dove",
+      "sources": [
+        {
+          "supplierColourCode": "DO",
+          "supplierProductCode": "BERKELEY"
+        },
+        {
+          "supplierColourCode": "DO",
+          "supplierProductCode": "CHERINGTON"
+        },
+        {
+          "supplierColourCode": "DO",
+          "supplierProductCode": "HADLOW"
+        }
+      ]
+    },
+    "DOV": {
+      "colourName": "Dove (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "DO",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "E": {
+      "colourName": "Emerald",
+      "sources": [
+        {
+          "supplierColourCode": "EM",
+          "supplierProductCode": "HENRI"
+        }
+      ]
+    },
+    "EB": {
+      "colourName": "Ebony 800",
+      "sources": [
+        {
+          "supplierColourCode": "EB",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "EM": {
+      "colourName": "Emerald 502",
+      "sources": [
+        {
+          "supplierColourCode": "EM",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "ES": {
+      "colourName": "Espresso",
+      "sources": [
+        {
+          "supplierColourCode": "ES",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "F": {
+      "colourName": "Fawn",
+      "sources": [
+        {
+          "supplierColourCode": "FA",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "FA",
+          "supplierProductCode": "HAMPTON"
+        },
+        {
+          "supplierColourCode": "FA",
+          "supplierProductCode": "HASTINGS"
+        }
+      ]
+    },
+    "FA": {
+      "colourName": "Fawn 906",
+      "sources": [
+        {
+          "supplierColourCode": "FA",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "FL": {
+      "colourName": "Flint",
+      "sources": [
+        {
+          "supplierColourCode": "FL",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "FO": {
+      "colourName": "Forest 505",
+      "sources": [
+        {
+          "supplierColourCode": "FO",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "FOG": {
+      "colourName": "Fog (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "FO",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "FOR": {
+      "colourName": "Forest",
+      "sources": [
+        {
+          "supplierColourCode": "FO",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "FO",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "FU": {
+      "colourName": "Fuschia",
+      "sources": [
+        {
+          "supplierColourCode": "FU",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "G": {
+      "colourName": "Grape",
+      "sources": [
+        {
+          "supplierColourCode": "GR",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "GI": {
+      "colourName": "Ginger",
+      "sources": [
+        {
+          "supplierColourCode": "GI",
+          "supplierProductCode": "FURLEY"
+        }
+      ]
+    },
+    "GO": {
+      "colourName": "Gold",
+      "sources": [
+        {
+          "supplierColourCode": "GO",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "GOL": {
+      "colourName": "Gold (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "GO",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "GR": {
+      "colourName": "Grape 705",
+      "sources": [
+        {
+          "supplierColourCode": "GR",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "GRE": {
+      "colourName": "Grey",
+      "sources": [
+        {
+          "supplierColourCode": "GR",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "H": {
+      "colourName": "Hessian",
+      "sources": [
+        {
+          "supplierColourCode": "HE",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "HA": {
+      "colourName": "Haze",
+      "sources": [
+        {
+          "supplierColourCode": "HA",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "HA",
+          "supplierProductCode": "HASTINGS"
+        }
+      ]
+    },
+    "HE": {
+      "colourName": "Hessian 104",
+      "sources": [
+        {
+          "supplierColourCode": "HE",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "HY": {
+      "colourName": "Hydro",
+      "sources": [
+        {
+          "supplierColourCode": "HY",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "I": {
+      "colourName": "Indigo 607",
+      "sources": [
+        {
+          "supplierColourCode": "IN",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "IC": {
+      "colourName": "Ice",
+      "sources": [
+        {
+          "supplierColourCode": "IC",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "IN": {
+      "colourName": "Ink",
+      "sources": [
+        {
+          "supplierColourCode": "IN",
+          "supplierProductCode": "AREZZO"
+        },
+        {
+          "supplierColourCode": "IN",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "IND": {
+      "colourName": "Indigo",
+      "sources": [
+        {
+          "supplierColourCode": "IN",
+          "supplierProductCode": "GALATZO"
+        },
+        {
+          "supplierColourCode": "IN",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "IN",
+          "supplierProductCode": "HAMPTON"
+        }
+      ]
+    },
+    "INDI": {
+      "colourName": "Indigo (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "IN",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "IR": {
+      "colourName": "Iris",
+      "sources": [
+        {
+          "supplierColourCode": "IR",
+          "supplierProductCode": "FURLEY"
+        },
+        {
+          "supplierColourCode": "IR",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "IV": {
+      "colourName": "Ivory",
+      "sources": [
+        {
+          "supplierColourCode": "IV",
+          "supplierProductCode": "FLITTON"
+        },
+        {
+          "supplierColourCode": "IV",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "IV",
+          "supplierProductCode": "HAVELOCK"
+        }
+      ]
+    },
+    "IVO": {
+      "colourName": "Ivory 903",
+      "sources": [
+        {
+          "supplierColourCode": "IV",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "KH": {
+      "colourName": "Khaki",
+      "sources": [
+        {
+          "supplierColourCode": "KH",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "KI": {
+      "colourName": "Kingfisher",
+      "sources": [
+        {
+          "supplierColourCode": "KI",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "L": {
+      "colourName": "Linen (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "LI",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "LA": {
+      "colourName": "Lavender 704",
+      "sources": [
+        {
+          "supplierColourCode": "LA",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "LAT": {
+      "colourName": "Latte",
+      "sources": [
+        {
+          "supplierColourCode": "LA",
+          "supplierProductCode": "HENRI"
+        }
+      ]
+    },
+    "LI": {
+      "colourName": "Linen 905",
+      "sources": [
+        {
+          "supplierColourCode": "LI",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "M": {
+      "colourName": "Mocha 101",
+      "sources": [
+        {
+          "supplierColourCode": "MO",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "MA": {
+      "colourName": "Maize",
+      "sources": [
+        {
+          "supplierColourCode": "MA",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "ME": {
+      "colourName": "Mercury",
+      "sources": [
+        {
+          "supplierColourCode": "ME",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "MI": {
+      "colourName": "Mist",
+      "sources": [
+        {
+          "supplierColourCode": "MI",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "MIN": {
+      "colourName": "Mineral",
+      "sources": [
+        {
+          "supplierColourCode": "MI",
+          "supplierProductCode": "HADLOW"
+        }
+      ]
+    },
+    "MO": {
+      "colourName": "Mole",
+      "sources": [
+        {
+          "supplierColourCode": "MO",
+          "supplierProductCode": "FLITTON"
+        },
+        {
+          "supplierColourCode": "MO",
+          "supplierProductCode": "FURLEY"
+        }
+      ]
+    },
+    "MU": {
+      "colourName": "Multi",
+      "sources": [
+        {
+          "supplierColourCode": "MU",
+          "supplierProductCode": "BIRDSANDROSES"
+        }
+      ]
+    },
+    "MUL": {
+      "colourName": "Mulberry 203",
+      "sources": [
+        {
+          "supplierColourCode": "MU",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "MULB": {
+      "colourName": "Mulberry",
+      "sources": [
+        {
+          "supplierColourCode": "MU",
+          "supplierProductCode": "GLINT"
+        },
+        {
+          "supplierColourCode": "MU",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "MUS": {
+      "colourName": "Mustard",
+      "sources": [
+        {
+          "supplierColourCode": "MU",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "NO": {
+      "colourName": "Nougat",
+      "sources": [
+        {
+          "supplierColourCode": "NO",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "NU": {
+      "colourName": "Nude 304",
+      "sources": [
+        {
+          "supplierColourCode": "NU",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "O": {
+      "colourName": "Ocean",
+      "sources": [
+        {
+          "supplierColourCode": "OC",
+          "supplierProductCode": "GALATZO"
+        },
+        {
+          "supplierColourCode": "OC",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "OC": {
+      "colourName": "Ochre 403",
+      "sources": [
+        {
+          "supplierColourCode": "OC",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "OCH": {
+      "colourName": "Ochre",
+      "sources": [
+        {
+          "supplierColourCode": "OC",
+          "supplierProductCode": "HASTINGS"
+        },
+        {
+          "supplierColourCode": "OC",
+          "supplierProductCode": "HENRI"
+        }
+      ]
+    },
+    "OL": {
+      "colourName": "Olive",
+      "sources": [
+        {
+          "supplierColourCode": "OL",
+          "supplierProductCode": "GALATZO"
+        }
+      ]
+    },
+    "OR": {
+      "colourName": "Orchid",
+      "sources": [
+        {
+          "supplierColourCode": "OR",
+          "supplierProductCode": "FURLEY"
+        }
+      ]
+    },
+    "ORA": {
+      "colourName": "Orange",
+      "sources": [
+        {
+          "supplierColourCode": "OR",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "OT": {
+      "colourName": "Otter (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "OT",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "OY": {
+      "colourName": "Oyster 900",
+      "sources": [
+        {
+          "supplierColourCode": "OY",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "OYS": {
+      "colourName": "Oyster",
+      "sources": [
+        {
+          "supplierColourCode": "OY",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "P": {
+      "colourName": "Pine 503",
+      "sources": [
+        {
+          "supplierColourCode": "PI",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "PE": {
+      "colourName": "Pebble 809",
+      "sources": [
+        {
+          "supplierColourCode": "PE",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "PEA": {
+      "colourName": "Peacock",
+      "sources": [
+        {
+          "supplierColourCode": "PE",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "PE",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "PEAR": {
+      "colourName": "Pearl (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "PE",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "PEB": {
+      "colourName": "Pebble",
+      "sources": [
+        {
+          "supplierColourCode": "PE",
+          "supplierProductCode": "HAMPTON"
+        },
+        {
+          "supplierColourCode": "PE",
+          "supplierProductCode": "HASTINGS"
+        }
+      ]
+    },
+    "PEW": {
+      "colourName": "Pewter",
+      "sources": [
+        {
+          "supplierColourCode": "PE",
+          "supplierProductCode": "FURLEY"
+        }
+      ]
+    },
+    "PI": {
+      "colourName": "Pink",
+      "sources": [
+        {
+          "supplierColourCode": "PI",
+          "supplierProductCode": "ANTIQUEROSE"
+        }
+      ]
+    },
+    "PIS": {
+      "colourName": "Pistachio",
+      "sources": [
+        {
+          "supplierColourCode": "PI",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "PL": {
+      "colourName": "Platinum 807",
+      "sources": [
+        {
+          "supplierColourCode": "PL",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "PLA": {
+      "colourName": "Platinum",
+      "sources": [
+        {
+          "supplierColourCode": "PL",
+          "supplierProductCode": "FURLEY"
+        },
+        {
+          "supplierColourCode": "PL",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "PL",
+          "supplierProductCode": "HAVELOCK"
+        }
+      ]
+    },
+    "PO": {
+      "colourName": "Pollen",
+      "sources": [
+        {
+          "supplierColourCode": "PO",
+          "supplierProductCode": "HAMPTON"
+        }
+      ]
+    },
+    "PR": {
+      "colourName": "Praline",
+      "sources": [
+        {
+          "supplierColourCode": "PR",
+          "supplierProductCode": "HENRI"
+        }
+      ]
+    },
+    "R": {
+      "colourName": "Rose",
+      "sources": [
+        {
+          "supplierColourCode": "RO",
+          "supplierProductCode": "GALATZO"
+        }
+      ]
+    },
+    "RA": {
+      "colourName": "Raspberry 200",
+      "sources": [
+        {
+          "supplierColourCode": "RA",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "RO": {
+      "colourName": "Rose 701",
+      "sources": [
+        {
+          "supplierColourCode": "RO",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "ROS": {
+      "colourName": "Rose (recylced)",
+      "sources": [
+        {
+          "supplierColourCode": "RO",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "ROSE": {
+      "colourName": "Rosewood",
+      "sources": [
+        {
+          "supplierColourCode": "RO",
+          "supplierProductCode": "HAWTHORN"
+        }
+      ]
+    },
+    "RU": {
+      "colourName": "Rust 306",
+      "sources": [
+        {
+          "supplierColourCode": "RU",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "RUS": {
+      "colourName": "Rust",
+      "sources": [
+        {
+          "supplierColourCode": "RU",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "RUST": {
+      "colourName": "Rust (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "RU",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "S": {
+      "colourName": "Silver 805",
+      "sources": [
+        {
+          "supplierColourCode": "SI",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "SA": {
+      "colourName": "Sage 602",
+      "sources": [
+        {
+          "supplierColourCode": "SA",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "SAG": {
+      "colourName": "Sage",
+      "sources": [
+        {
+          "supplierColourCode": "SA",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "SAP": {
+      "colourName": "Sapphire",
+      "sources": [
+        {
+          "supplierColourCode": "SA",
+          "supplierProductCode": "HENRI"
+        }
+      ]
+    },
+    "SC": {
+      "colourName": "Scarlet",
+      "sources": [
+        {
+          "supplierColourCode": "SC",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "SE": {
+      "colourName": "Sesame",
+      "sources": [
+        {
+          "supplierColourCode": "SE",
+          "supplierProductCode": "HADLOW"
+        }
+      ]
+    },
+    "SEA": {
+      "colourName": "Seafoam",
+      "sources": [
+        {
+          "supplierColourCode": "SE",
+          "supplierProductCode": "HAMPTON"
+        }
+      ]
+    },
+    "SH": {
+      "colourName": "Shell 708",
+      "sources": [
+        {
+          "supplierColourCode": "SH",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "SHA": {
+      "colourName": "Shadow",
+      "sources": [
+        {
+          "supplierColourCode": "SH",
+          "supplierProductCode": "HADLOW"
+        }
+      ]
+    },
+    "SHE": {
+      "colourName": "Shell (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "SH",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "SI": {
+      "colourName": "Silver",
+      "sources": [
+        {
+          "supplierColourCode": "SI",
+          "supplierProductCode": "FLITTON"
+        },
+        {
+          "supplierColourCode": "SI",
+          "supplierProductCode": "FOXLEY"
+        },
+        {
+          "supplierColourCode": "SI",
+          "supplierProductCode": "HENRI"
+        }
+      ]
+    },
+    "SK": {
+      "colourName": "Sky 611",
+      "sources": [
+        {
+          "supplierColourCode": "SK",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "SKY": {
+      "colourName": "Sky",
+      "sources": [
+        {
+          "supplierColourCode": "SK",
+          "supplierProductCode": "FURLEY"
+        }
+      ]
+    },
+    "SM": {
+      "colourName": "Smoke",
+      "sources": [
+        {
+          "supplierColourCode": "SM",
+          "supplierProductCode": "GALATZO"
+        },
+        {
+          "supplierColourCode": "SM",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "SMO": {
+      "colourName": "Smoke (recycled)",
+      "sources": [
+        {
+          "supplierColourCode": "SM",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "SP": {
+      "colourName": "Spa 608",
+      "sources": [
+        {
+          "supplierColourCode": "SP",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "SPA": {
+      "colourName": "Spa",
+      "sources": [
+        {
+          "supplierColourCode": "SP",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "SPR": {
+      "colourName": "Spruce",
+      "sources": [
+        {
+          "supplierColourCode": "SP",
+          "supplierProductCode": "HAMPTON"
+        }
+      ]
+    },
+    "ST": {
+      "colourName": "Stone 901",
+      "sources": [
+        {
+          "supplierColourCode": "ST",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "STE": {
+      "colourName": "Steel",
+      "sources": [
+        {
+          "supplierColourCode": "ST",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "SU": {
+      "colourName": "Sunflower 400",
+      "sources": [
+        {
+          "supplierColourCode": "SU",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "SUN": {
+      "colourName": "Sunflower",
+      "sources": [
+        {
+          "supplierColourCode": "SU",
+          "supplierProductCode": "FURLEY"
+        }
+      ]
+    },
+    "T": {
+      "colourName": "Terracotta",
+      "sources": [
+        {
+          "supplierColourCode": "TE",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "TA": {
+      "colourName": "Taupe",
+      "sources": [
+        {
+          "supplierColourCode": "TA",
+          "supplierProductCode": "FURLEY"
+        }
+      ]
+    },
+    "TE": {
+      "colourName": "Terracotta 305",
+      "sources": [
+        {
+          "supplierColourCode": "TE",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "TEA": {
+      "colourName": "Teal (recyled)",
+      "sources": [
+        {
+          "supplierColourCode": "TE",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "TO": {
+      "colourName": "Toffee 102",
+      "sources": [
+        {
+          "supplierColourCode": "TO",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "V": {
+      "colourName": "Vintage",
+      "sources": [
+        {
+          "supplierColourCode": "VI",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "VI": {
+      "colourName": "Vintage 700",
+      "sources": [
+        {
+          "supplierColourCode": "VI",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "VO": {
+      "colourName": "Vole",
+      "sources": [
+        {
+          "supplierColourCode": "VO",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "WA": {
+      "colourName": "Walnut",
+      "sources": [
+        {
+          "supplierColourCode": "WA",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "WE": {
+      "colourName": "Wedgewood",
+      "sources": [
+        {
+          "supplierColourCode": "WE",
+          "supplierProductCode": "HADLOW"
+        }
+      ]
+    },
+    "WH": {
+      "colourName": "Wheat 811",
+      "sources": [
+        {
+          "supplierColourCode": "WH",
+          "supplierProductCode": "FLORENZO"
+        }
+      ]
+    },
+    "WI": {
+      "colourName": "Willow",
+      "sources": [
+        {
+          "supplierColourCode": "WI",
+          "supplierProductCode": "FURLEY"
+        },
+        {
+          "supplierColourCode": "WI",
+          "supplierProductCode": "GALAXY"
+        }
+      ]
+    },
+    "ZE": {
+      "colourName": "Zest",
+      "sources": [
+        {
+          "supplierColourCode": "ZE",
+          "supplierProductCode": "GALAXY"
+        },
+        {
+          "supplierColourCode": "ZE",
+          "supplierProductCode": "GLINT"
+        }
+      ]
+    },
+    "BAR": {
+      "colourName": "Bark",
+      "sources": [{ "supplierColourCode": "BA", "supplierProductCode": "ALASKA" }]
+    },
+    "CI": {
+      "colourName": "Cinnamon",
+      "sources": [{ "supplierColourCode": "CI", "supplierProductCode": "ALASKA" }]
+    },
+    "FE": {
+      "colourName": "Fern",
+      "sources": [{ "supplierColourCode": "FE", "supplierProductCode": "ALASKA" }]
+    },
+    "FOG2": {
+      "colourName": "Fog",
+      "sources": [{ "supplierColourCode": "FO", "supplierProductCode": "ALASKA" }]
+    },
+    "FUS": {
+      "colourName": "Fuschia",
+      "sources": [{ "supplierColourCode": "FU", "supplierProductCode": "ALASKA" }]
+    },
+    "GU": {
+      "colourName": "Gunmetal",
+      "sources": [{ "supplierColourCode": "GU", "supplierProductCode": "ALASKA" }]
+    },
+    "HEA": {
+      "colourName": "Heather",
+      "sources": [{ "supplierColourCode": "HE", "supplierProductCode": "ALASKA" }]
+    },
+    "HO": {
+      "colourName": "Hollyhock",
+      "sources": [{ "supplierColourCode": "HO", "supplierProductCode": "ALASKA" }]
+    },
+    "LIM": {
+      "colourName": "Lime",
+      "sources": [{ "supplierColourCode": "LI", "supplierProductCode": "ALASKA" }]
+    },
+    "MAU": {
+      "colourName": "Mauve",
+      "sources": [{ "supplierColourCode": "MA", "supplierProductCode": "ALASKA" }]
+    },
+    "NA": {
+      "colourName": "Navy",
+      "sources": [{ "supplierColourCode": "NA", "supplierProductCode": "ALASKA" }]
+    },
+    "N": {
+      "colourName": "Noir",
+      "sources": [{ "supplierColourCode": "NO", "supplierProductCode": "ALASKA" }]
+    },
+    "OTT": {
+      "colourName": "Otter",
+      "sources": [{ "supplierColourCode": "OT", "supplierProductCode": "ALASKA" }]
+    },
+    "PEARL": {
+      "colourName": "Pearl",
+      "sources": [{ "supplierColourCode": "PE", "supplierProductCode": "ALASKA" }]
+    },
+    "POW": {
+      "colourName": "Powder Blue",
+      "sources": [{ "supplierColourCode": "PO", "supplierProductCode": "ALASKA" }]
+    },
+    "SHEL": {
+      "colourName": "Shell",
+      "sources": [{ "supplierColourCode": "SH", "supplierProductCode": "ALASKA" }]
+    },
+    "SL": {
+      "colourName": "Slate",
+      "sources": [{ "supplierColourCode": "SL", "supplierProductCode": "ALASKA" }]
+    },
+    "TEAL": {
+      "colourName": "Teal",
+      "sources": [{ "supplierColourCode": "TE", "supplierProductCode": "ALASKA" }]
+    },
+    "TOP": {
+      "colourName": "Topaz",
+      "sources": [{ "supplierColourCode": "TO", "supplierProductCode": "ALASKA" }]
+    },
+    "W": {
+      "colourName": "Wine",
+      "sources": [{ "supplierColourCode": "WI", "supplierProductCode": "ALASKA" }]
+    }
+  },
+  "generatedAt": "2026-07-21T12:55:42.580Z",
+  "schemaVersion": 1,
+  "supplier": "Ashley Wilde",
+  "unresolved": []
+}

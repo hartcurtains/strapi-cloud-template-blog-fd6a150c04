@@ -27,6 +27,17 @@ export default {
       permissions: [],
     });
 
+    app.addMenuLink({
+      to: `plugins/${pluginId}/supplier-mappings`,
+      icon: () => <span style={{ fontSize: '18px' }}>🎨</span>,
+      intlLabel: {
+        id: `${pluginId}.supplier-mappings.name`,
+        defaultMessage: 'Supplier colour mappings',
+      },
+      Component: () => import('./pages/SupplierColourMappingsPage.jsx'),
+      permissions: [],
+    });
+
     app.registerPlugin({
       id: pluginId,
       name: 'Order Management',

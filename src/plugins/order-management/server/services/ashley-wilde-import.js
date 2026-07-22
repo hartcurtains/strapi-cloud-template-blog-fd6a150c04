@@ -1,0 +1,343 @@
+'use strict';
+
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const {
+  SUPPLIER, canonicalManifestLines, loadProductionMappings, normalizeCanonicalColourName, normalizeRelativePath,
+  normalizeStem, normalizeToken, parseFilename,
+} = require('../../shared/ashley-wilde-mapping');
+const supplierMappings = require('./supplier-mapping');
+
+const BATCH_UID = 'api::image-import-batch.image-import-batch';
+const FABRIC_UID = 'api::fabric.fabric';
+const IDENTITY_UID = 'api::fabric-colour-identity.fabric-colour-identity';
+const ASSET_UID = 'api::fabric-colour-asset.fabric-colour-asset';
+const FILE_UID = 'plugin::upload.file';
+const COLOUR_STATUSES = new Set(['matched', 'mapped', 'pending_manual_mapping', 'would_stage_identity', 'would_stage_asset', 'already_staged', 'staged', 'exact_duplicate', 'conflicting_image']);
+
+function safeMessage(error) {
+  if (error?.code === 'ASHLEY_WILDE_MAPPING_INVALID') return error.message;
+  return 'The folder import could not be processed safely.';
+}
+
+function normalizeManifest(input) {
+  if (!Array.isArray(input) || input.length === 0) throw new Error('Folder manifest must contain at least one file');
+  return input.map((entry, index) => {
+    const relativePath = normalizeRelativePath(entry?.relativePath);
+    const sha256 = String(entry?.sha256 || '').toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(sha256)) throw new Error(`Manifest item ${index + 1} has an invalid SHA-256`);
+    const size = Number(entry?.size);
+    if (!Number.isSafeInteger(size) || size < 0) throw new Error(`Manifest item ${index + 1} has an invalid size`);
+    return { relativePath, sha256, size };
+  });
+}
+
+function manifestFingerprint(manifest) {
+  return crypto.createHash('sha256').update(canonicalManifestLines(manifest).join('\n'), 'utf8').digest('hex');
+}
+
+function logicalRows(rows) {
+  const byDocument = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    const key = row.documentId || row.id;
+    const current = byDocument.get(key);
+    if (!current || (current.publishedAt && !row.publishedAt)) byDocument.set(key, row);
+  }
+  return [...byDocument.values()];
+}
+
+function normalizedFabricName(value) {
+  return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+function brandIsAshleyWilde(fabric) {
+  const brands = Array.isArray(fabric?.brand) ? fabric.brand : [fabric?.brand];
+  return brands.some((brand) => normalizedFabricName(brand?.name) === normalizedFabricName(SUPPLIER));
+}
+
+async function fabricCandidatesByName(strapi, name) {
+  const rows = await strapi.entityService.findMany(FABRIC_UID, { filters: { name: { $eqi: name } }, populate: ['brand'], limit: 100 });
+  return logicalRows(rows.filter((fabric) => normalizedFabricName(fabric.name) === normalizedFabricName(name) && brandIsAshleyWilde(fabric)));
+}
+
+async function resolveAshleyFabric(strapi, parsed) {
+  if (!COLOUR_STATUSES.has(parsed.status)) return { parsed, fabric: null };
+  if (parsed.fabricDocumentId) {
+    const exact = await strapi.entityService.findMany(FABRIC_UID, { filters: { documentId: parsed.fabricDocumentId }, populate: ['brand'], limit: 2 });
+    const branded = logicalRows((exact || []).filter(brandIsAshleyWilde));
+    if (branded.length === 1) {
+      const fabric = branded[0];
+      return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
+    }
+    if (!branded.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `The mapped Fabric ${parsed.fabricDocumentId} does not exist in the current Ashley Wilde catalog.` }, fabric: null };
+    return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `The mapped Fabric ${parsed.fabricDocumentId} resolved to multiple catalogue records.` }, fabric: null };
+  }
+  const names = [parsed.fabricName, ...(parsed.approvedAliases || [])].filter(Boolean);
+  let candidates = [];
+  for (const name of names) {
+    candidates = await fabricCandidatesByName(strapi, name);
+    if (candidates.length) break;
+  }
+  if (!candidates.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `No Ashley Wilde fabric named ${parsed.fabricName} exists in the current catalog.` }, fabric: null };
+  if (candidates.length !== 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `Multiple Ashley Wilde fabrics match ${parsed.fabricName}; resolution was refused.` }, fabric: null };
+  const fabric = candidates[0];
+  return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
+}
+
+function identityKey(parsed) {
+  return [normalizeToken(SUPPLIER), String(parsed.fabricDocumentId || '').normalize('NFKC').trim(), normalizeToken(parsed.supplierProductCode), normalizeToken(parsed.supplierColourCode)].join('|');
+}
+
+function assetKey(parsed, sha256) {
+  return `${identityKey(parsed)}|${String(sha256 || '').toLowerCase()}`;
+}
+
+function blockedAssetKey(relativePath, sha256) {
+  return `${normalizeToken(SUPPLIER)}|blocked|${normalizeRelativePath(relativePath)}|${String(sha256).toLowerCase()}`;
+}
+
+function normalizedAssetFilename(filename) {
+  return normalizeStem(path.basename(String(filename || ''))).toLocaleLowerCase();
+}
+
+function conflictGroupFor(parsed, filename) {
+  return `aw-conflict-${crypto.createHash('sha256').update(`${identityKey(parsed)}|${normalizedAssetFilename(filename)}`, 'utf8').digest('hex').slice(0, 24)}`;
+}
+
+async function findStagedIdentity(strapi, parsed, populate = []) {
+  const rows = await strapi.entityService.findMany(IDENTITY_UID, { filters: { identityKey: { $eq: identityKey(parsed) } }, populate, limit: 20 });
+  return logicalRows(rows)[0] || null;
+}
+
+async function findStagedAsset(strapi, parsed, sha256, populate = []) {
+  const rows = await strapi.entityService.findMany(ASSET_UID, { filters: { assetKey: { $eq: assetKey(parsed, sha256) } }, populate, limit: 20 });
+  return logicalRows(rows)[0] || null;
+}
+
+async function findIdentityFilenameAssets(strapi, identity, filename) {
+  const rows = await strapi.entityService.findMany(ASSET_UID, { filters: { normalizedFilename: normalizedAssetFilename(filename) }, populate: ['fabricColourIdentity'], limit: 100 });
+  const id = String(identity.documentId || identity.id);
+  return rows.filter((row) => String(row.fabricColourIdentity?.documentId || row.fabricColourIdentity?.id || row.fabricColourIdentity) === id);
+}
+
+async function findMedia(strapi, filename, sha256, size) {
+  const marker = `aw-sha256:${sha256}`;
+  const byHash = await strapi.entityService.findMany(FILE_UID, { filters: { caption: marker }, limit: 2 });
+  if (byHash?.length) return { media: byHash[0], exact: true };
+  const rows = await strapi.entityService.findMany(FILE_UID, { filters: { name: filename }, sort: ['createdAt:desc'], limit: 5 });
+  const publicRoot = path.resolve(strapi.dirs?.static?.public || path.join(process.cwd(), 'public'));
+  for (const file of rows || []) {
+    if (file.provider !== 'local' || !file.url || Math.abs(Number(file.size || 0) * 1024 - size) >= 2048) continue;
+    const localPath = path.resolve(publicRoot, String(file.url).replace(/^[/\\]+/, ''));
+    if (localPath !== publicRoot && !localPath.startsWith(`${publicRoot}${path.sep}`)) continue;
+    try {
+      if (crypto.createHash('sha256').update(await fs.promises.readFile(localPath)).digest('hex') === sha256) return { media: file, exact: true };
+    } catch { /* unavailable legacy media is not assumed identical */ }
+  }
+  return { media: null, exact: false };
+}
+
+async function inspectMatch(strapi, parsed, manifestEntry) {
+  if (!COLOUR_STATUSES.has(parsed.status)) return parsed;
+  const resolution = await resolveAshleyFabric(strapi, parsed);
+  if (!resolution.fabric) return resolution.parsed;
+  parsed = resolution.parsed;
+  const identity = await findStagedIdentity(strapi, parsed, ['assets']);
+  if (identity?.officialColourName && parsed.supplierColourName && normalizeToken(identity.officialColourName) !== normalizeToken(parsed.supplierColourName)) {
+    return { ...parsed, status: 'identity_conflict', warning: 'A staged identity already exists with a different approved official colour name.' };
+  }
+  const stagedAsset = await findStagedAsset(strapi, parsed, manifestEntry.sha256);
+  if (stagedAsset) return { ...parsed, status: 'already_staged', identityDocumentId: identity?.documentId, assetDocumentId: stagedAsset.documentId, duplicateStatus: stagedAsset.duplicateStatus };
+  if (!identity) return { ...parsed, status: 'would_stage_identity' };
+  const sameLogical = await findIdentityFilenameAssets(strapi, identity, manifestEntry.relativePath);
+  if (sameLogical.some((item) => String(item.sha256).toLowerCase() !== manifestEntry.sha256)) return { ...parsed, status: 'conflicting_image', conflictGroup: conflictGroupFor(parsed, manifestEntry.relativePath), warning: 'The same logical asset name already exists with a different SHA-256.' };
+  return { ...parsed, status: 'would_stage_asset', identityDocumentId: identity.documentId };
+}
+
+function summaryForRows(rows) {
+  const unresolved = new Set(['unknown_mapping_product', 'fabric_not_found_in_current_catalog', 'ambiguous_catalog_fabric', 'ambiguous_filename', 'identity_conflict', 'conflicting_image']);
+  const blocked = new Set(['unsupported_file', 'classified_asset', 'duplicate_in_folder', 'exact_duplicate']);
+  const ready = new Set(['matched', 'mapped', 'pending_manual_mapping', 'would_stage_identity', 'would_stage_asset', 'already_staged', 'staged']);
+  return {
+    totalFiles: rows.length,
+    matchedFiles: rows.filter((row) => ready.has(row.status)).length,
+    readyFiles: rows.filter((row) => ready.has(row.status)).length,
+    alreadyCompleteFiles: rows.filter((row) => row.status === 'already_staged').length,
+    skippedFiles: rows.filter((row) => blocked.has(row.status)).length,
+    unresolvedFiles: rows.filter((row) => unresolved.has(row.status)).length,
+    conflictFiles: rows.filter((row) => row.status === 'identity_conflict' || row.status === 'conflicting_image').length,
+  };
+}
+
+async function upsertHistory(strapi, data) {
+  const existing = await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: data.folderFingerprint }, limit: 1 });
+  const previous = existing?.[0];
+  const priorSummary = previous?.manifestSummary || {};
+  const manifestSummary = { ...priorSummary, ...data.manifestSummary, attemptCount: Number(priorSummary.attemptCount || 0) + (data.incrementAttempt ? 1 : 0), lastAttemptAt: new Date().toISOString() };
+  const payload = { ...data, manifestSummary };
+  delete payload.incrementAttempt;
+  return previous ? strapi.entityService.update(BATCH_UID, previous.id, { data: payload }) : strapi.entityService.create(BATCH_UID, { data: payload });
+}
+
+async function loadAshleyImporterMappings(strapi, options = {}) {
+  if (options.mappings) return { ...loadProductionMappings(options.mappings), source: 'repository-fallback' };
+  const active = await supplierMappings.getActiveImporterMappings(strapi, SUPPLIER);
+  if (active) {
+    return {
+      mode: 'strapi-active',
+      source: active.source,
+      colourMap: active.colourMap,
+      mappingVersion: active.version.version,
+      mappingImportDocumentId: active.version.documentId,
+      codeRegistry: null,
+      imageIndex: null,
+    };
+  }
+  return { ...loadProductionMappings(), source: 'repository-fallback', mappingVersion: null, mappingImportDocumentId: null };
+}
+
+async function analyseFolder(strapi, body) {
+  const mappings = await loadAshleyImporterMappings(strapi);
+  const manifest = normalizeManifest(body?.manifest);
+  const completeManifest = body?.queueBatch ? normalizeManifest(body?.folderManifest) : manifest;
+  const fingerprint = manifestFingerprint(completeManifest);
+  if (body?.folderFingerprint && body.folderFingerprint !== fingerprint) throw new Error('Folder fingerprint does not match the manifest');
+  const folderName = String(body?.folderName || '').normalize('NFKC').trim().slice(0, 255);
+  if (!folderName || /[\\/]/.test(folderName)) throw new Error('Folder name is invalid');
+
+  const seenHashes = new Set();
+  const rows = [];
+  for (const entry of manifest) {
+    const filename = path.basename(entry.relativePath);
+    let parsed = parseFilename(filename, mappings.colourMap);
+    if (seenHashes.has(entry.sha256) && COLOUR_STATUSES.has(parsed.status)) parsed = { ...parsed, status: 'exact_duplicate', duplicateStatus: 'exact_duplicate', warning: 'Identical content appears more than once in this folder.' };
+    else parsed = await inspectMatch(strapi, parsed, entry);
+    seenHashes.add(entry.sha256);
+    rows.push({ ...entry, ...parsed });
+  }
+  const summary = summaryForRows(rows);
+  if (body?.queueBatch) return { supplier: SUPPLIER, folderName, folderFingerprint: fingerprint, mappingSchemaVersion: mappings.colourMap.schemaVersion, mappingGeneratedAt: mappings.colourMap.generatedAt, mappingMode: mappings.mode, mappingSource: mappings.source, mappingVersion: mappings.mappingVersion || null, rows, summary };
+  const previousRows = await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: fingerprint }, limit: 1 });
+  const previous = previousRows?.[0];
+  const noRemainingWork = summary.readyFiles === 0;
+  const analysisStatus = noRemainingWork ? ((summary.conflictFiles || summary.unresolvedFiles || summary.skippedFiles) ? 'completed_with_skips' : 'completed') : 'ready';
+  const history = await upsertHistory(strapi, { supplier: SUPPLIER, folderName, folderFingerprint: fingerprint, status: analysisStatus, totalFiles: summary.totalFiles, matchedFiles: summary.matchedFiles, uploadedFiles: Number(previous?.uploadedFiles || 0), alreadyCompleteFiles: summary.alreadyCompleteFiles, skippedFiles: summary.skippedFiles + summary.unresolvedFiles, conflictFiles: summary.conflictFiles, failedFiles: Number(previous?.failedFiles || 0), firstUploadedAt: previous?.firstUploadedAt || null, lastUploadedAt: previous?.lastUploadedAt || null, completedAt: noRemainingWork ? (previous?.completedAt || new Date().toISOString()) : null, mappingSchemaVersion: mappings.colourMap.schemaVersion, manifestSummary: { summary, paths: manifest.map((item) => item.relativePath), fingerprint }, incrementAttempt: true });
+  return { supplier: SUPPLIER, mappingMode: mappings.mode, mappingSource: mappings.source, mappingVersion: mappings.mappingVersion || null, mappingSchemaVersion: mappings.colourMap.schemaVersion, mappingGeneratedAt: mappings.colourMap.generatedAt, folderName, folderFingerprint: fingerprint, rows, summary, history };
+}
+
+async function uploadMedia(strapi, descriptor, sha256) {
+  const ext = path.extname(descriptor.name).toLowerCase() || '.jpg';
+  const temporary = path.join(os.tmpdir(), `aw_${crypto.randomUUID()}${ext}`);
+  await fs.promises.writeFile(temporary, descriptor.buffer);
+  try {
+    const result = await strapi.plugins.upload.services.upload.upload({ data: { fileInfo: { name: descriptor.name, alternativeText: descriptor.name, caption: `aw-sha256:${sha256}` } }, files: { filepath: temporary, path: temporary, originalFilename: descriptor.name, mimetype: descriptor.mimeType, type: descriptor.mimeType, size: descriptor.buffer.length } });
+    return Array.isArray(result) ? result[0] : result;
+  } finally { await fs.promises.unlink(temporary).catch(() => undefined); }
+}
+
+function evidenceFor(parsed) {
+  if (!parsed.supplierColourName || !parsed.internalColourCode) return { mappingStatus: 'pending', evidenceStatus: 'pending_manual' };
+  const source = String(parsed.mappingSource || 'approved Ashley Wilde mapping');
+  return { mappingStatus: 'verified', evidenceStatus: /official supplier|official ashley wilde/i.test(source) ? 'verified_official' : 'verified_manual', source };
+}
+
+async function ensureStagedIdentity(strapi, parsed, fabric) {
+  const existing = await findStagedIdentity(strapi, parsed, ['assets', 'fabric']);
+  const evidence = evidenceFor(parsed);
+  if (existing) {
+    if (existing.officialColourName && parsed.supplierColourName && normalizeCanonicalColourName(existing.officialColourName) !== normalizeCanonicalColourName(parsed.supplierColourName)) return { identity: existing, conflict: true };
+    if (existing.mappingStatus === 'verified' && evidence.mappingStatus !== 'verified') return { identity: existing, conflict: false };
+    if (existing.mappingStatus === 'verified' && parsed.internalColourCode && normalizeToken(existing.internalColourCode) !== normalizeToken(parsed.internalColourCode) && normalizeCanonicalColourName(existing.officialColourName) !== normalizeCanonicalColourName(parsed.supplierColourName)) return { identity: existing, conflict: true };
+    if (evidence.mappingStatus === 'verified' && existing.mappingStatus === 'verified' && existing.mappingVersion !== (parsed.mappingVersion || null)) {
+      const updated = await strapi.entityService.update(IDENTITY_UID, existing.id, { data: { displayName: `${fabric.name} - ${parsed.supplierColourName}`, officialColourName: parsed.supplierColourName, internalColourCode: parsed.internalColourCode, mappingStatus: 'verified', evidenceStatus: evidence.evidenceStatus, source: evidence.source, mappingVersion: parsed.mappingVersion || null } });
+      return { identity: updated, conflict: false };
+    }
+    if (evidence.mappingStatus === 'verified') {
+      const updated = await strapi.entityService.update(IDENTITY_UID, existing.id, { data: { displayName: `${fabric.name} — ${parsed.supplierColourName}`, officialColourName: parsed.supplierColourName, internalColourCode: parsed.internalColourCode, mappingStatus: 'verified', evidenceStatus: evidence.evidenceStatus, source: evidence.source, mappingVersion: parsed.mappingVersion || null } });
+      return { identity: updated, conflict: false };
+    }
+    return { identity: existing, conflict: false };
+  }
+  const data = { displayName: `${fabric.name} — ${parsed.supplierColourName || `Colour ${parsed.supplierColourCode}`}`, identityKey: identityKey(parsed), supplier: SUPPLIER, fabric: fabric.documentId, fabricDocumentId: fabric.documentId, supplierProductCode: parsed.supplierProductCode, supplierColourCode: parsed.supplierColourCode, fabricColourCode: `${parsed.supplierProductCode}${parsed.supplierColourCode}`, officialColourName: parsed.supplierColourName || null, internalColourCode: parsed.internalColourCode || null, mappingStatus: evidence.mappingStatus, evidenceStatus: evidence.evidenceStatus, source: evidence.source || null, mappingVersion: parsed.mappingVersion || null };
+  try { return { identity: await strapi.entityService.create(IDENTITY_UID, { data }), conflict: false }; }
+  catch (error) {
+    const raced = await findStagedIdentity(strapi, parsed, ['assets', 'fabric']);
+    if (raced) return { identity: raced, conflict: Boolean(raced.officialColourName && parsed.supplierColourName && normalizeCanonicalColourName(raced.officialColourName) !== normalizeCanonicalColourName(parsed.supplierColourName)) };
+    throw error;
+  }
+}
+
+async function createBlockedAsset(strapi, descriptor, metadata, parsed, batchContext) {
+  const key = blockedAssetKey(metadata.relativePath || descriptor.name, metadata.sha256);
+  const existing = await strapi.entityService.findMany(ASSET_UID, { filters: { assetKey: key }, limit: 1 });
+  if (existing?.[0]) return { filename: descriptor.name, status: existing[0].duplicateStatus === 'exact_duplicate' ? 'exact_duplicate' : 'blocked', skipped: true, uploaded: false, assetDocumentId: existing[0].documentId };
+  const asset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: key, originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: parsed.assetType || 'unknown', duplicateStatus: 'unique', importStatus: 'blocked', notes: parsed.warning || 'Classified as non-colour or unresolved filename.', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier: SUPPLIER } } });
+  return { filename: descriptor.name, status: parsed.status, assetType: parsed.assetType || 'unknown', skipped: true, uploaded: false, assetDocumentId: asset.documentId, warning: parsed.warning };
+}
+
+async function processFile(strapi, descriptor, metadata, mappings, batchContext = {}) {
+  const parsed = parseFilename(descriptor.name, mappings.colourMap);
+  const actualHash = crypto.createHash('sha256').update(descriptor.buffer).digest('hex');
+  if (actualHash !== metadata.sha256) return { filename: descriptor.name, status: 'failed', uploaded: false, failed: true, warning: 'Server SHA-256 verification failed.' };
+  if (!COLOUR_STATUSES.has(parsed.status)) return createBlockedAsset(strapi, descriptor, metadata, parsed, batchContext);
+  const inspected = await inspectMatch(strapi, parsed, metadata);
+  if (['identity_conflict', 'fabric_not_found_in_current_catalog', 'ambiguous_catalog_fabric', 'conflicting_image'].includes(inspected.status)) return { filename: descriptor.name, ...inspected, uploaded: false, failed: true };
+  if (inspected.status === 'exact_duplicate' || inspected.status === 'already_staged') return { filename: descriptor.name, ...inspected, uploaded: false, linked: false, skipped: true };
+  const resolution = await resolveAshleyFabric(strapi, parsed);
+  if (!resolution.fabric) return { filename: descriptor.name, ...resolution.parsed, uploaded: false, failed: true };
+  const resolvedParsed = resolution.parsed;
+  const staged = await ensureStagedIdentity(strapi, resolvedParsed, resolution.fabric);
+  if (staged.conflict) return { filename: descriptor.name, ...resolvedParsed, status: 'identity_conflict', uploaded: false, failed: true, warning: 'A staged identity already exists with conflicting approved mapping data.' };
+  const identity = staged.identity;
+  const existingSameKey = await findStagedAsset(strapi, resolvedParsed, metadata.sha256);
+  if (existingSameKey) return { filename: descriptor.name, status: 'already_staged', uploaded: false, linked: false, skipped: true, identityDocumentId: identity.documentId, assetDocumentId: existingSameKey.documentId };
+  const sameLogical = await findIdentityFilenameAssets(strapi, identity, descriptor.name);
+  const conflicting = sameLogical.find((item) => String(item.sha256).toLowerCase() !== metadata.sha256);
+  if (conflicting) {
+    const group = conflictGroupFor(resolvedParsed, descriptor.name);
+    for (const prior of sameLogical) await strapi.entityService.update(ASSET_UID, prior.id, { data: { duplicateStatus: 'conflicting_image', conflictGroup: group, importStatus: 'blocked' } });
+    const conflictAsset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: assetKey(resolvedParsed, metadata.sha256), originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: resolvedParsed.assetType || 'ordinary_colour', duplicateStatus: 'conflicting_image', conflictGroup: group, importStatus: 'blocked', fabricColourIdentity: identity.documentId, notes: 'Conflicting image hash; media upload and promotion are blocked.', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier: SUPPLIER } } });
+    return { filename: descriptor.name, ...resolvedParsed, status: 'conflicting_image', uploaded: false, failed: true, assetDocumentId: conflictAsset.documentId, conflictGroup: group };
+  }
+  const mediaState = await findMedia(strapi, descriptor.name, metadata.sha256, metadata.size);
+  let media = mediaState.media;
+  let uploaded = false;
+  if (!media) { media = await uploadMedia(strapi, descriptor, metadata.sha256); uploaded = true; }
+  const asset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: assetKey(resolvedParsed, metadata.sha256), originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: resolvedParsed.assetType || 'ordinary_colour', fabricColourIdentity: identity.documentId, ...(mediaState.media ? { existingMedia: media.id, duplicateStatus: 'exact_duplicate' } : { media: media.id, duplicateStatus: 'unique' }), importStatus: 'staged', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier: SUPPLIER, supplierProductCode: resolvedParsed.supplierProductCode, supplierColourCode: resolvedParsed.supplierColourCode } } });
+  return { filename: descriptor.name, status: 'staged', uploaded, linked: true, skipped: false, mediaId: media.id, identityDocumentId: identity.documentId, assetDocumentId: asset.documentId, ...resolvedParsed };
+}
+
+async function processBatch(strapi, descriptors, body, options = {}) {
+  const mappings = await loadAshleyImporterMappings(strapi, options);
+  const manifest = normalizeManifest(JSON.parse(body?.folderManifest || '[]'));
+  const fingerprint = manifestFingerprint(manifest);
+  if (fingerprint !== body?.folderFingerprint) throw new Error('Folder fingerprint does not match the manifest');
+  const batchMetadata = JSON.parse(body?.fileMetadata || '[]');
+  const byPath = new Map(batchMetadata.map((item) => [normalizeRelativePath(item.relativePath), item]));
+  const results = [];
+  for (const descriptor of descriptors) {
+    const relativePath = normalizeRelativePath(descriptor.relativePath || descriptor.name);
+    const metadata = byPath.get(relativePath);
+    if (!metadata || metadata.size !== descriptor.size || path.basename(relativePath) !== descriptor.name) { results.push({ filename: descriptor.name, status: 'failed', failed: true, warning: 'Batch metadata did not match the uploaded file.' }); continue; }
+    results.push(await processFile(strapi, descriptor, metadata, mappings, { folderName: body.folderName, folderFingerprint: fingerprint }));
+  }
+  const prior = await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: fingerprint }, limit: 1 });
+  const old = prior?.[0] || {};
+  const uploadedDelta = results.filter((item) => item.uploaded).length;
+  const failedDelta = results.filter((item) => item.failed).length;
+  const skippedDelta = results.filter((item) => item.skipped).length;
+  const finalBatch = body?.finalBatch === 'true' || body?.finalBatch === true;
+  const totals = { uploadedFiles: Math.min(manifest.length, Number(old.uploadedFiles || 0) + uploadedDelta), failedFiles: Math.min(manifest.length, Number(old.failedFiles || 0) + failedDelta), skippedFiles: Math.min(manifest.length, Number(old.skippedFiles || 0) + skippedDelta) };
+  const status = finalBatch ? (totals.failedFiles ? 'partial' : (totals.skippedFiles ? 'completed_with_skips' : 'completed')) : 'uploading';
+  const now = new Date().toISOString();
+  const history = await upsertHistory(strapi, { supplier: SUPPLIER, folderName: String(body.folderName || '').slice(0, 255), folderFingerprint: fingerprint, status, totalFiles: manifest.length, matchedFiles: Number(old.matchedFiles || 0) + results.filter((item) => COLOUR_STATUSES.has(item.status)).length, ...totals, alreadyCompleteFiles: Number(old.alreadyCompleteFiles || 0) + results.filter((item) => item.status === 'already_staged').length, conflictFiles: Number(old.conflictFiles || 0) + results.filter((item) => item.status === 'conflicting_image' || item.status === 'identity_conflict').length, firstUploadedAt: old.firstUploadedAt || (uploadedDelta ? now : null), lastUploadedAt: uploadedDelta ? now : old.lastUploadedAt, completedAt: finalBatch ? now : null, mappingSchemaVersion: mappings.colourMap.schemaVersion, manifestSummary: { ...(old.manifestSummary || {}), lastBatch: results }, incrementAttempt: false });
+  return { results, history, mappingMode: mappings.mode, status, uploaded: uploadedDelta, failed: failedDelta, skipped: skippedDelta };
+}
+
+async function getHistory(strapi) {
+  return strapi.entityService.findMany(BATCH_UID, { sort: ['updatedAt:desc'], limit: 50 });
+}
+
+module.exports = { analyseFolder, getHistory, loadAshleyImporterMappings, logicalRows, manifestFingerprint, normalizeManifest, processBatch, resolveAshleyFabric, safeMessage, summaryForRows, upsertHistory };

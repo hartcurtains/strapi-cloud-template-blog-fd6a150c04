@@ -58,20 +58,12 @@ export default ({ env }) => {
     },
   };
 
-  // Disable automatic migrations - database schema should be managed manually
-  // This prevents Strapi from running any database scripts on startup
-  // Try multiple ways to disable migrations for Strapi Cloud compatibility
-  if (env.bool('DATABASE_AUTO_MIGRATE', false) === false) {
-    config.settings = {
-      runMigrations: false,
-      autoMigrate: false,
-    };
-    // Also set at connection level for some Strapi versions
-    config.connection.settings = {
-      runMigrations: false,
-      autoMigrate: false,
-    };
-  }
+  // Production keeps both disabled by default. Tests may enable schema sync while
+  // independently disabling repository user migrations on a brand-new database.
+  const autoMigrate = env.bool('DATABASE_AUTO_MIGRATE', false);
+  const runMigrations = env.bool('DATABASE_RUN_MIGRATIONS', autoMigrate);
+  config.settings = { runMigrations, autoMigrate };
+  config.connection.settings = { runMigrations, autoMigrate };
 
   return config;
 };

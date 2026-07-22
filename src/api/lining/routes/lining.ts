@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+const { mutationPolicyConfig } = require('../../../catalog/catalog-mutation-surface');
 
 export default {
   routes: [
@@ -26,25 +27,19 @@ export default {
       method: 'POST',
       path: '/linings',
       handler: 'lining.create',
-      config: {
-        auth: false, // Allow admin access for creating
-      },
+      config: mutationPolicyConfig('api::lining.lining'),
     },
     {
       method: 'PUT',
       path: '/linings/:id',
       handler: 'lining.update',
-      config: {
-        auth: false, // Allow admin access for updating
-      },
+      config: mutationPolicyConfig('api::lining.lining'),
     },
     {
       method: 'DELETE',
       path: '/linings/:id',
       handler: 'lining.delete',
-      config: {
-        auth: false, // Allow admin access for deleting
-      },
+      config: mutationPolicyConfig('api::lining.lining'),
     },
   ],
 };

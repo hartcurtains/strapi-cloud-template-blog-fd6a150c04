@@ -1,0 +1,36 @@
+{
+  "kind": "collectionType",
+  "collectionName": "image_import_batches",
+  "info": {
+    "singularName": "image-import-batch",
+    "pluralName": "image-import-batches",
+    "displayName": "Image import batch"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "supplier": { "type": "string", "required": true },
+    "folderName": { "type": "string", "required": true },
+    "folderFingerprint": { "type": "string", "required": true, "unique": true },
+    "status": {
+      "type": "enumeration",
+      "required": true,
+      "enum": ["analysing", "ready", "uploading", "completed", "completed_with_skips", "partial", "failed"]
+    },
+    "totalFiles": { "type": "integer", "default": 0 },
+    "matchedFiles": { "type": "integer", "default": 0 },
+    "uploadedFiles": { "type": "integer", "default": 0 },
+    "alreadyCompleteFiles": { "type": "integer", "default": 0 },
+    "skippedFiles": { "type": "integer", "default": 0 },
+    "conflictFiles": { "type": "integer", "default": 0 },
+    "failedFiles": { "type": "integer", "default": 0 },
+    "firstUploadedAt": { "type": "datetime" },
+    "lastUploadedAt": { "type": "datetime" },
+    "completedAt": { "type": "datetime" },
+    "mappingSchemaVersion": { "type": "integer", "required": true },
+    "manifestSummary": { "type": "json" }
+  }
+}

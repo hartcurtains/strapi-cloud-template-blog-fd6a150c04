@@ -3,7 +3,7 @@
  * via Strapi Content API. No Strapi restart needed.
  *
  * Usage:
- *   STRAPI_URL=https://your-strapi.com STRAPI_TOKEN=your_token node hcbDBWIP/scripts/set-fabric-flags.js your-file.json
+ *   STRAPI_URL=https://your-strapi.com STRAPI_API_TOKEN=your_token node hcbDBWIP/scripts/set-fabric-flags.js your-file.json
  *
  * The JSON should be an array of objects:
  *   [{ "productId": "FAB-AREZZO-9020", "is_cushion": true }, ...]
@@ -18,16 +18,16 @@ const fs = require('fs');
 const path = require('path');
 
 const STRAPI_URL = process.env.STRAPI_URL || 'https://energized-paradise-70d35b3d01.strapiapp.com';
-const API_TOKEN = process.env.STRAPI_TOKEN;
+const API_TOKEN = process.env.STRAPI_API_TOKEN;
 
 if (!API_TOKEN) {
-  console.error('Set STRAPI_TOKEN env var (API token from Strapi Admin > Settings > API Tokens)');
+  console.error('Set STRAPI_API_TOKEN env var (API token from Strapi Admin > Settings > API Tokens)');
   process.exit(1);
 }
 
 const jsonFile = process.argv[2];
 if (!jsonFile) {
-  console.error('Usage: STRAPI_TOKEN=xxx node set-fabric-flags.js <json-file>');
+  console.error('Usage: STRAPI_API_TOKEN=xxx node set-fabric-flags.js <json-file>');
   process.exit(1);
 }
 

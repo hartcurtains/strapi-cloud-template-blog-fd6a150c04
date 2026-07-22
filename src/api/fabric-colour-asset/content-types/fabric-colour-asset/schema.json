@@ -1,0 +1,95 @@
+{
+  "kind": "collectionType",
+  "collectionName": "fabric_colour_assets",
+  "info": {
+    "singularName": "fabric-colour-asset",
+    "pluralName": "fabric-colour-assets",
+    "displayName": "Fabric colour asset"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true
+    },
+    "assetKey": {
+      "type": "string",
+      "required": true,
+      "unique": true,
+      "private": true
+    },
+    "originalFilename": {
+      "type": "string",
+      "required": true
+    },
+    "normalizedFilename": {
+      "type": "string",
+      "required": true
+    },
+    "relativePath": {
+      "type": "string",
+      "required": true
+    },
+    "sha256": {
+      "type": "string",
+      "required": true
+    },
+    "fileSize": {
+      "type": "biginteger",
+      "required": true
+    },
+    "mimeType": {
+      "type": "string"
+    },
+    "fabricColourIdentity": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::fabric-colour-identity.fabric-colour-identity",
+      "inversedBy": "assets",
+      "required": false
+    },
+    "media": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images", "files"]
+    },
+    "existingMedia": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images", "files"]
+    },
+    "assetType": {
+      "type": "enumeration",
+      "required": true,
+      "default": "unknown",
+      "enum": ["ordinary_colour", "full_colour_name", "numbered_alternate", "lifestyle", "cameo", "roomset", "moodboard", "main_image", "non_colour", "unknown"]
+    },
+    "duplicateStatus": {
+      "type": "enumeration",
+      "required": true,
+      "default": "unique",
+      "enum": ["unique", "exact_duplicate", "logical_duplicate", "conflicting_image"]
+    },
+    "conflictGroup": {
+      "type": "string"
+    },
+    "importStatus": {
+      "type": "enumeration",
+      "required": true,
+      "default": "staged",
+      "enum": ["staged", "blocked", "failed", "promoted"]
+    },
+    "notes": {
+      "type": "text"
+    },
+    "batchMetadata": {
+      "type": "json"
+    },
+    "referenceMetadata": {
+      "type": "json"
+    }
+  }
+}

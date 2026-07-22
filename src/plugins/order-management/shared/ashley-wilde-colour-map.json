@@ -1,0 +1,2683 @@
+{
+  "generatedAt": "2026-07-21T12:55:42.571Z",
+  "products": {
+    "alaska": {
+      "colours": {
+        "AQ": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Aqua", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-aqua/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "AQ", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAAQ.jpg", "supplierColourCode": "AQ", "supplierColourName": "Aqua" },
+        "AU": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Aubergine", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-aubergine/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "AUB", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAAU.jpg", "supplierColourCode": "AU", "supplierColourName": "Aubergine" },
+        "BA": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Bark", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-bark/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "BAR", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKABA.jpg", "supplierColourCode": "BA", "supplierColourName": "Bark" },
+        "BE": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Berry", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-berry/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "BE", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKABE.jpg", "supplierColourCode": "BE", "supplierColourName": "Berry" },
+        "CA": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Caramel", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-caramel/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "CA", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKACA.jpg", "supplierColourCode": "CA", "supplierColourName": "Caramel" },
+        "CI": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Cinnamon", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-cinnamon/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "CI", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKACI.jpg", "supplierColourCode": "CI", "supplierColourName": "Cinnamon" },
+        "CR": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Cream", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-cream/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "CR", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKACR.jpg", "supplierColourCode": "CR", "supplierColourName": "Cream" },
+        "DO": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Dove", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-dove/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "DO", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKADO.jpg", "supplierColourCode": "DO", "supplierColourName": "Dove" },
+        "EM": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Emerald", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-emerald/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "E", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAEM.jpg", "supplierColourCode": "EM", "supplierColourName": "Emerald" },
+        "ES": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Espresso", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-espresso/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "ES", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAES.jpg", "supplierColourCode": "ES", "supplierColourName": "Espresso" },
+        "FE": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Fern", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-fern/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "FE", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAFE.jpg", "supplierColourCode": "FE", "supplierColourName": "Fern" },
+        "FO": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Fog", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-fog/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "FOG2", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAFO.jpg", "supplierColourCode": "FO", "supplierColourName": "Fog" },
+        "FU": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Fuschia", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-fushcia/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "FUS", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAFU.jpg", "supplierColourCode": "FU", "supplierColourName": "Fuschia" },
+        "GR": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Grey", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-grey/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "GRE", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAGR.jpg", "supplierColourCode": "GR", "supplierColourName": "Grey" },
+        "GU": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Gunmetal", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-gunmetal/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "GU", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAGU.jpg", "supplierColourCode": "GU", "supplierColourName": "Gunmetal" },
+        "HE": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Heather", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-heather/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "HEA", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAHE.jpg", "supplierColourCode": "HE", "supplierColourName": "Heather" },
+        "HO": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Hollyhock", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-hollyhock/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "HO", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAHO.jpg", "supplierColourCode": "HO", "supplierColourName": "Hollyhock" },
+        "LA": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Latte", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-latte/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "LAT", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKALA.jpg", "supplierColourCode": "LA", "supplierColourName": "Latte" },
+        "LI": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Lime", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-lime/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "LIM", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKALI.jpg", "supplierColourCode": "LI", "supplierColourName": "Lime" },
+        "MA": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Mauve", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-mauve/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "MAU", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAMA.jpg", "supplierColourCode": "MA", "supplierColourName": "Mauve" },
+        "MO": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Mole", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-mole/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "MO", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAMO.jpg", "supplierColourCode": "MO", "supplierColourName": "Mole" },
+        "NA": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Navy", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-navy/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "NA", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKANA.jpg", "supplierColourCode": "NA", "supplierColourName": "Navy" },
+        "NO": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Noir", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-noir/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "N", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKANO.jpg", "supplierColourCode": "NO", "supplierColourName": "Noir" },
+        "OT": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Otter", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-otter/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "OTT", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAOT.jpg", "supplierColourCode": "OT", "supplierColourName": "Otter" },
+        "OY": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Oyster", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-oyster/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "OYS", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAOY.jpg", "supplierColourCode": "OY", "supplierColourName": "Oyster" },
+        "PE": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Pearl", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-pearl/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "PEARL", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAPE.jpg", "supplierColourCode": "PE", "supplierColourName": "Pearl" },
+        "PO": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Powder+Blue", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-powder-blue/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "POW", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAPO.jpg", "supplierColourCode": "PO", "supplierColourName": "Powder Blue" },
+        "RU": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Rust", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-rust/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "RUS", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKARU.jpg", "supplierColourCode": "RU", "supplierColourName": "Rust" },
+        "SC": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Scarlet", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-scarlet/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "SC", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKASC.jpg", "supplierColourCode": "SC", "supplierColourName": "Scarlet" },
+        "SE": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Sea+Foam", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-sea-foam/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "SEA", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKASE.jpg", "supplierColourCode": "SE", "supplierColourName": "Sea Foam" },
+        "SH": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Shell", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-shell/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "SHEL", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKASH.jpg", "supplierColourCode": "SH", "supplierColourName": "Shell" },
+        "SI": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Silver", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-silver/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "SI", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKASI.jpg", "supplierColourCode": "SI", "supplierColourName": "Silver" },
+        "SL": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Slate", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-slate/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "SL", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKASL.jpg", "supplierColourCode": "SL", "supplierColourName": "Slate" },
+        "TE": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Teal", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-teal/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "TEAL", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKATE.jpg", "supplierColourCode": "TE", "supplierColourName": "Teal" },
+        "TO": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Topaz", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-topaz/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "TOP", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKATO.jpg", "supplierColourCode": "TO", "supplierColourName": "Topaz" },
+        "VI": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Vintage", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-vintage/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "V", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAVI.jpg", "supplierColourCode": "VI", "supplierColourName": "Vintage" },
+        "WE": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Wedgewood", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-wedgewood/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "WE", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAWE.jpg", "supplierColourCode": "WE", "supplierColourName": "Wedgewood" },
+        "WI": { "evidence": { "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Alaska+Wine", "confidence": 1, "imageUrl": null, "productUrl": "https://ashleywildegroup.com/alaska-wine/", "source": "official Ashley Wilde swatch search and Alaska collection" }, "internalColourCode": "W", "resolved": true, "sourceImage": "Alaska Flat Shots/ALASKAWI.jpg", "supplierColourCode": "WI", "supplierColourName": "Wine" }
+      },
+      "fabricDocumentId": "okwshze5maa8f02rmu0v5azq",
+      "fabricName": "Alaska",
+      "filenamePrefixes": ["ALASKA"],
+      "productName": "Alaska",
+      "supplierProductCode": "ALASKA"
+    },
+    "antiquerose": {
+      "colours": {
+        "PI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/antique-rose-pink/",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/antique-rose-pink/",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PI",
+          "resolved": true,
+          "sourceImage": "Cath Kidston Volume 1 Flat Shots/ANTIQUEROSEPI.jpg",
+          "supplierColourCode": "PI",
+          "supplierColourName": "Pink"
+        }
+      },
+      "fabricDocumentId": "qchosc04lf5ahrjlsrrqk4hu",
+      "fabricName": "Antiquerose",
+      "filenamePrefixes": [
+        "ANTIQUEROSE"
+      ],
+      "productName": "Antiquerose",
+      "supplierProductCode": "ANTIQUEROSE"
+    },
+    "birdsandroses": {
+      "colours": {
+        "BL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/birds-and-roses-blue/",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/birds-and-roses-blue/",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "BL",
+          "resolved": true,
+          "sourceImage": "Cath Kidston Volume 1 Flat Shots/BIRDSANDROSESBL.jpg",
+          "supplierColourCode": "BL",
+          "supplierColourName": "Blue"
+        },
+        "MU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/birds-and-roses-multi/",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/birds-and-roses-multi/",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MU",
+          "resolved": true,
+          "sourceImage": "Cath Kidston Volume 1 Flat Shots/BIRDSANDROSESMU.jpg",
+          "supplierColourCode": "MU",
+          "supplierColourName": "Multi"
+        }
+      },
+      "fabricDocumentId": "yty99a5duhb338v04gf1gegn",
+      "fabricName": "Birdsandroses",
+      "filenamePrefixes": [
+        "BIRDSANDROSES"
+      ],
+      "productName": "Birdsandroses",
+      "supplierProductCode": "BIRDSANDROSES"
+    },
+    "flitton": {
+      "colours": {
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Champagne",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Champagne",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CH",
+          "resolved": true,
+          "sourceImage": "ESSENTIAL WEAVES VOL iii COLLECTION/FLITTONCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Champagne"
+        },
+        "IV": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Ivory",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Ivory",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IV",
+          "resolved": true,
+          "sourceImage": "ESSENTIAL WEAVES VOL iii COLLECTION/FLITTONIV.jpg",
+          "supplierColourCode": "IV",
+          "supplierColourName": "Ivory"
+        },
+        "MO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Mole",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Mole",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MO",
+          "resolved": true,
+          "sourceImage": "ESSENTIAL WEAVES VOL iii COLLECTION/FLITTONMO.jpg",
+          "supplierColourCode": "MO",
+          "supplierColourName": "Mole"
+        },
+        "SI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Silver",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Flitton+Silver",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SI",
+          "resolved": true,
+          "sourceImage": "ESSENTIAL WEAVES VOL iii COLLECTION/FLITTONSI.jpg",
+          "supplierColourCode": "SI",
+          "supplierColourName": "Silver"
+        }
+      },
+      "fabricDocumentId": "m5oaqekx8it7s5jzhpkncpim",
+      "fabricName": "Flitton",
+      "filenamePrefixes": [
+        "FLITTON"
+      ],
+      "productName": "Flitton",
+      "supplierProductCode": "FLITTON"
+    },
+    "florenzo": {
+      "colours": {
+        "AL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Alpine+612",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Alpine+612",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "AL",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZOAL.jpg",
+          "supplierColourCode": "AL",
+          "supplierColourName": "Alpine 612"
+        },
+        "AU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Aubergine+703",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Aubergine+703",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "AU",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOAU.jpg",
+          "supplierColourCode": "AU",
+          "supplierColourName": "Aubergine 703"
+        },
+        "BA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Bark+111",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Bark+111",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "BA",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOBA.jpg",
+          "supplierColourCode": "BA",
+          "supplierColourName": "Bark 111"
+        },
+        "CA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Caramel+107",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Caramel+107",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "C",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOCA.jpg",
+          "supplierColourCode": "CA",
+          "supplierColourName": "Caramel 107"
+        },
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Charcoal+801",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Charcoal+801",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CHA",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Charcoal 801"
+        },
+        "CL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Claret+204",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Claret+204",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CL",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOCL.jpg",
+          "supplierColourCode": "CL",
+          "supplierColourName": "Claret 204"
+        },
+        "DA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Danube+613",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Danube+613",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "DA",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZODA.jpg",
+          "supplierColourCode": "DA",
+          "supplierColourName": "Danube 613"
+        },
+        "DE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Denim+605",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Denim+605",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "DE",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZODE.jpg",
+          "supplierColourCode": "DE",
+          "supplierColourName": "Denim 605"
+        },
+        "EB": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Ebony+800",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Ebony+800",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "EB",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOEB.jpg",
+          "supplierColourCode": "EB",
+          "supplierColourName": "Ebony 800"
+        },
+        "EM": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Emerald+502",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Emerald+502",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "EM",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOEM.jpg",
+          "supplierColourCode": "EM",
+          "supplierColourName": "Emerald 502"
+        },
+        "FA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Fawn+906",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Fawn+906",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "FA",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZOFA.jpg",
+          "supplierColourCode": "FA",
+          "supplierColourName": "Fawn 906"
+        },
+        "FO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Forest+505",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Forest+505",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "FO",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOFO.jpg",
+          "supplierColourCode": "FO",
+          "supplierColourName": "Forest 505"
+        },
+        "GR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Grape+705",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Grape+705",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "GR",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOGR.jpg",
+          "supplierColourCode": "GR",
+          "supplierColourName": "Grape 705"
+        },
+        "HE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Hessian+104",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Hessian+104",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "HE",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOHE.jpg",
+          "supplierColourCode": "HE",
+          "supplierColourName": "Hessian 104"
+        },
+        "IN": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Indigo+607",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Indigo+607",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "I",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOIN.jpg",
+          "supplierColourCode": "IN",
+          "supplierColourName": "Indigo 607"
+        },
+        "IV": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Ivory+903",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Ivory+903",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IVO",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZOIV.jpg",
+          "supplierColourCode": "IV",
+          "supplierColourName": "Ivory 903"
+        },
+        "LA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Lavender+704",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Lavender+704",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "LA",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOLA.jpg",
+          "supplierColourCode": "LA",
+          "supplierColourName": "Lavender 704"
+        },
+        "LI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Linen+905",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Linen+905",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "LI",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOLI.jpg",
+          "supplierColourCode": "LI",
+          "supplierColourName": "Linen 905"
+        },
+        "MO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Mocha+101",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Mocha+101",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "M",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOMO.jpg",
+          "supplierColourCode": "MO",
+          "supplierColourName": "Mocha 101"
+        },
+        "MU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Mulberry+203",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Mulberry+203",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MUL",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOMU.jpg",
+          "supplierColourCode": "MU",
+          "supplierColourName": "Mulberry 203"
+        },
+        "NU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Nude+304",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Nude+304",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "NU",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZONU.jpg",
+          "supplierColourCode": "NU",
+          "supplierColourName": "Nude 304"
+        },
+        "OC": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Ochre+403",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Ochre+403",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OC",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOOC.jpg",
+          "supplierColourCode": "OC",
+          "supplierColourName": "Ochre 403"
+        },
+        "OY": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Oyster+900",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Oyster+900",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OY",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOOY.jpg",
+          "supplierColourCode": "OY",
+          "supplierColourName": "Oyster 900"
+        },
+        "PE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Pebble+809",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Pebble+809",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PE",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOPE.jpg",
+          "supplierColourCode": "PE",
+          "supplierColourName": "Pebble 809"
+        },
+        "PI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Pine+503",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Pine+503",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "P",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOPI.jpg",
+          "supplierColourCode": "PI",
+          "supplierColourName": "Pine 503"
+        },
+        "PL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Platinum+807",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Platinum+807",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PL",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOPL.jpg",
+          "supplierColourCode": "PL",
+          "supplierColourName": "Platinum 807"
+        },
+        "RA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Raspberry+200",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Raspberry+200",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "RA",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZORA.jpg",
+          "supplierColourCode": "RA",
+          "supplierColourName": "Raspberry 200"
+        },
+        "RO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Rose+701",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Rose+701",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "RO",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZORO.jpg",
+          "supplierColourCode": "RO",
+          "supplierColourName": "Rose 701"
+        },
+        "RU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Rust+306",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Rust+306",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "RU",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZORU.jpg",
+          "supplierColourCode": "RU",
+          "supplierColourName": "Rust 306"
+        },
+        "SA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Sage+602",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Sage+602",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SA",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZOSA.jpg",
+          "supplierColourCode": "SA",
+          "supplierColourName": "Sage 602"
+        },
+        "SH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Shell+708",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Shell+708",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SH",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOSH.jpg",
+          "supplierColourCode": "SH",
+          "supplierColourName": "Shell 708"
+        },
+        "SI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Silver+805",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Silver+805",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "S",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZOSI.jpg",
+          "supplierColourCode": "SI",
+          "supplierColourName": "Silver 805"
+        },
+        "SK": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Sky+611",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Sky+611",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SK",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOSK.jpg",
+          "supplierColourCode": "SK",
+          "supplierColourName": "Sky 611"
+        },
+        "SP": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Spa+608",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Spa+608",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SP",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOSP.jpg",
+          "supplierColourCode": "SP",
+          "supplierColourName": "Spa 608"
+        },
+        "ST": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Stone+901",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Stone+901",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ST",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZOST.jpg",
+          "supplierColourCode": "ST",
+          "supplierColourName": "Stone 901"
+        },
+        "SU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Sunflower+400",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Sunflower+400",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SU",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOSU.jpg",
+          "supplierColourCode": "SU",
+          "supplierColourName": "Sunflower 400"
+        },
+        "TE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Terracotta+305",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Terracotta+305",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "TE",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOTE.jpg",
+          "supplierColourCode": "TE",
+          "supplierColourName": "Terracotta 305"
+        },
+        "TO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Toffee+102",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Toffee+102",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "TO",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOTO.jpg",
+          "supplierColourCode": "TO",
+          "supplierColourName": "Toffee 102"
+        },
+        "VI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Vintage+700",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Vintage+700",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "VI",
+          "resolved": true,
+          "sourceImage": "Chantilly Flat Shots/FLORENZOVI.jpg",
+          "supplierColourCode": "VI",
+          "supplierColourName": "Vintage 700"
+        },
+        "WH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Wheat+811",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Florenzo+Wheat+811",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "WH",
+          "resolved": true,
+          "sourceImage": "Tuscany Flat Shots/FLORENZOWH.jpg",
+          "supplierColourCode": "WH",
+          "supplierColourName": "Wheat 811"
+        }
+      },
+      "fabricDocumentId": "d4p1zlorrvsu4lx4vmz091c1",
+      "fabricName": "Florenzo",
+      "filenamePrefixes": [
+        "FLORENZO"
+      ],
+      "productName": "Florenzo",
+      "supplierProductCode": "FLORENZO"
+    },
+    "foxley": {
+      "colours": {
+        "CA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Foxley+Caramel",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Foxley+Caramel",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CA",
+          "resolved": true,
+          "sourceImage": "ESSENTIAL WEAVES VOL iii COLLECTION/FOXLEYCA.jpg",
+          "supplierColourCode": "CA",
+          "supplierColourName": "Caramel"
+        },
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Foxley+Champagne",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Foxley+Champagne",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CH",
+          "resolved": true,
+          "sourceImage": "ESSENTIAL WEAVES VOL iii COLLECTION/FOXLEYCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Champagne"
+        },
+        "SI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Foxley+Silver",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Foxley+Silver",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SI",
+          "resolved": true,
+          "sourceImage": "ESSENTIAL WEAVES VOL iii COLLECTION/FOXLEYSI.jpg",
+          "supplierColourCode": "SI",
+          "supplierColourName": "Silver"
+        }
+      },
+      "fabricDocumentId": "nq8uvcmwf5phh728zhmr1w3q",
+      "fabricName": "Foxley",
+      "filenamePrefixes": [
+        "FOXLEY"
+      ],
+      "productName": "Foxley",
+      "supplierProductCode": "FOXLEY"
+    },
+    "furley": {
+      "colours": {
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Champagne",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Champagne",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CH",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/FURLEYCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Champagne"
+        },
+        "DA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Danube",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Danube",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "D",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/FURLEYDA.jpg",
+          "supplierColourCode": "DA",
+          "supplierColourName": "Danube"
+        },
+        "GI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Ginger",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Ginger",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "GI",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/FURLEYGI.jpg",
+          "supplierColourCode": "GI",
+          "supplierColourName": "Ginger"
+        },
+        "IR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Iris",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Iris",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IR",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/FURLEYIR.jpg",
+          "supplierColourCode": "IR",
+          "supplierColourName": "Iris"
+        },
+        "MO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Mole",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Mole",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MO",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/FURLEYMO.jpg",
+          "supplierColourCode": "MO",
+          "supplierColourName": "Mole"
+        },
+        "OR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Orchid",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Orchid",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OR",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/FURLEYOR.jpg",
+          "supplierColourCode": "OR",
+          "supplierColourName": "Orchid"
+        },
+        "PE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Pewter",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Pewter",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PEW",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/FURLEYPE.jpg",
+          "supplierColourCode": "PE",
+          "supplierColourName": "Pewter"
+        },
+        "PL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Platinum",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Platinum",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PLA",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/FURLEYPL.jpg",
+          "supplierColourCode": "PL",
+          "supplierColourName": "Platinum"
+        },
+        "SK": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Sky",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Sky",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SKY",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/FURLEYSK.jpg",
+          "supplierColourCode": "SK",
+          "supplierColourName": "Sky"
+        },
+        "SU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Sunflower",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Sunflower",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SUN",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/FURLEYSU.jpg",
+          "supplierColourCode": "SU",
+          "supplierColourName": "Sunflower"
+        },
+        "TA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Taupe",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Taupe",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "TA",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/FURLEYTA.jpg",
+          "supplierColourCode": "TA",
+          "supplierColourName": "Taupe"
+        },
+        "WI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Willow",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Furley+Willow",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "WI",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/FURLEYWI.jpg",
+          "supplierColourCode": "WI",
+          "supplierColourName": "Willow"
+        }
+      },
+      "fabricDocumentId": "a0urj71253ltx6um3084f2d4",
+      "fabricName": "Furley",
+      "filenamePrefixes": [
+        "FURLEY"
+      ],
+      "productName": "Furley",
+      "supplierProductCode": "FURLEY"
+    },
+    "galatzo": {
+      "colours": {
+        "AE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Aegean",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Aegean",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "AE",
+          "resolved": true,
+          "sourceImage": "Palma Collection/GALATZOAE.jpg",
+          "supplierColourCode": "AE",
+          "supplierColourName": "Aegean"
+        },
+        "BR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Bronze",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Bronze",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "BR",
+          "resolved": true,
+          "sourceImage": "Palma Collection/GALATZOBR.jpg",
+          "supplierColourCode": "BR",
+          "supplierColourName": "Bronze"
+        },
+        "IN": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Indigo",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Indigo",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IND",
+          "resolved": true,
+          "sourceImage": "Palma Collection/GALATZOIN.jpg",
+          "supplierColourCode": "IN",
+          "supplierColourName": "Indigo"
+        },
+        "OC": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Ocean",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Ocean",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "O",
+          "resolved": true,
+          "sourceImage": "Palma Collection/GALATZOOC.jpg",
+          "supplierColourCode": "OC",
+          "supplierColourName": "Ocean"
+        },
+        "OL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Olive",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Olive",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OL",
+          "resolved": true,
+          "sourceImage": "Palma Collection/GALATZOOL.jpg",
+          "supplierColourCode": "OL",
+          "supplierColourName": "Olive"
+        },
+        "RO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Rose",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Rose",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "R",
+          "resolved": true,
+          "sourceImage": "Palma Collection/GALATZORO.jpg",
+          "supplierColourCode": "RO",
+          "supplierColourName": "Rose"
+        },
+        "SM": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Smoke",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galatzo+Smoke",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SM",
+          "resolved": true,
+          "sourceImage": "Palma Collection/GALATZOSM.jpg",
+          "supplierColourCode": "SM",
+          "supplierColourName": "Smoke"
+        }
+      },
+      "fabricDocumentId": "gmexmo7oyaxe649hxrwbrion",
+      "fabricName": "Galatzo",
+      "filenamePrefixes": [
+        "GALATZO"
+      ],
+      "productName": "Galatzo",
+      "supplierProductCode": "GALATZO"
+    },
+    "galaxy": {
+      "colours": {
+        "AL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Aluminium",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Aluminium",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "A",
+          "resolved": true,
+          "sourceImage": "Delamere Flat Shots/GALAXYAL.jpg",
+          "supplierColourCode": "AL",
+          "supplierColourName": "Aluminium"
+        },
+        "BE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Berry",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Berry",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "BE",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYBE.jpg",
+          "supplierColourCode": "BE",
+          "supplierColourName": "Berry"
+        },
+        "BL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Blush",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Blush",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "B",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYBL.jpg",
+          "supplierColourCode": "BL",
+          "supplierColourName": "Blush"
+        },
+        "CA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Caramel",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Caramel",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CA",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYCA.jpg",
+          "supplierColourCode": "CA",
+          "supplierColourName": "Caramel"
+        },
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Charcoal",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Charcoal",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CHAR",
+          "resolved": true,
+          "sourceImage": "DIFFUSION COLLECTION/GALAXYCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Charcoal"
+        },
+        "CL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Claret",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Claret",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CLA",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYCL.jpg",
+          "supplierColourCode": "CL",
+          "supplierColourName": "Claret"
+        },
+        "CO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Coral",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Coral",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CO",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYCO.jpg",
+          "supplierColourCode": "CO",
+          "supplierColourName": "Coral"
+        },
+        "CR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Cream",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Cream",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CR",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYCR.jpg",
+          "supplierColourCode": "CR",
+          "supplierColourName": "Cream"
+        },
+        "DE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Denim",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Denim",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "DEN",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYDE.jpg",
+          "supplierColourCode": "DE",
+          "supplierColourName": "Denim"
+        },
+        "ES": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Espresso",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Espresso",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ES",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYES.jpg",
+          "supplierColourCode": "ES",
+          "supplierColourName": "Espresso"
+        },
+        "FA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Fawn",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Fawn",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "F",
+          "resolved": true,
+          "sourceImage": "Delamere Flat Shots/GALAXYFA.jpg",
+          "supplierColourCode": "FA",
+          "supplierColourName": "Fawn"
+        },
+        "FO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Forest",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Forest",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "FOR",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYFO.jpg",
+          "supplierColourCode": "FO",
+          "supplierColourName": "Forest"
+        },
+        "GO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Gold",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Gold",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "GO",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYGO.jpg",
+          "supplierColourCode": "GO",
+          "supplierColourName": "Gold"
+        },
+        "GR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Grape",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Grape",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "G",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYGR.jpg",
+          "supplierColourCode": "GR",
+          "supplierColourName": "Grape"
+        },
+        "HA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Haze",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Haze",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "HA",
+          "resolved": true,
+          "sourceImage": "Delamere Flat Shots/GALAXYHA.jpg",
+          "supplierColourCode": "HA",
+          "supplierColourName": "Haze"
+        },
+        "HE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Hessian",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Hessian",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "H",
+          "resolved": true,
+          "sourceImage": "DIFFUSION COLLECTION/GALAXYHE.jpg",
+          "supplierColourCode": "HE",
+          "supplierColourName": "Hessian"
+        },
+        "HY": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Hydro",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Hydro",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "HY",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYHY.jpg",
+          "supplierColourCode": "HY",
+          "supplierColourName": "Hydro"
+        },
+        "IN": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Indigo",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Indigo",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IND",
+          "resolved": true,
+          "sourceImage": "DIFFUSION COLLECTION/GALAXYIN.jpg",
+          "supplierColourCode": "IN",
+          "supplierColourName": "Indigo"
+        },
+        "IR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Iris",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Iris",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IR",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYIR.jpg",
+          "supplierColourCode": "IR",
+          "supplierColourName": "Iris"
+        },
+        "IV": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Ivory",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Ivory",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IV",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYIV.jpg",
+          "supplierColourCode": "IV",
+          "supplierColourName": "Ivory"
+        },
+        "KH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Khaki",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Khaki",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "KH",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYKH.jpg",
+          "supplierColourCode": "KH",
+          "supplierColourName": "Khaki"
+        },
+        "MU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Mustard",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Mustard",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MUS",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYMU.jpg",
+          "supplierColourCode": "MU",
+          "supplierColourName": "Mustard"
+        },
+        "NO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Nougat",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Nougat",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "NO",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYNO.jpg",
+          "supplierColourCode": "NO",
+          "supplierColourName": "Nougat"
+        },
+        "OC": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Ocean",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Ocean",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "O",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYOC.jpg",
+          "supplierColourCode": "OC",
+          "supplierColourName": "Ocean"
+        },
+        "OY": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Oyster",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Oyster",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OYS",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYOY.jpg",
+          "supplierColourCode": "OY",
+          "supplierColourName": "Oyster"
+        },
+        "PE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Peacock",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Peacock",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PEA",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYPE.jpg",
+          "supplierColourCode": "PE",
+          "supplierColourName": "Peacock"
+        },
+        "PL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Platinum",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Platinum",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PLA",
+          "resolved": true,
+          "sourceImage": "DIFFUSION COLLECTION/GALAXYPL.jpg",
+          "supplierColourCode": "PL",
+          "supplierColourName": "Platinum"
+        },
+        "RU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Rust",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Rust",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "RUS",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYRU.jpg",
+          "supplierColourCode": "RU",
+          "supplierColourName": "Rust"
+        },
+        "SA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Sage",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Sage",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SAG",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYSA.jpg",
+          "supplierColourCode": "SA",
+          "supplierColourName": "Sage"
+        },
+        "SM": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Smoke",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Smoke",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SM",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYSM.jpg",
+          "supplierColourCode": "SM",
+          "supplierColourName": "Smoke"
+        },
+        "SP": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Spa",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Spa",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SPA",
+          "resolved": true,
+          "sourceImage": "Delamere Flat Shots/GALAXYSP.jpg",
+          "supplierColourCode": "SP",
+          "supplierColourName": "Spa"
+        },
+        "TE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Terracotta",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Terracotta",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "T",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYTE.jpg",
+          "supplierColourCode": "TE",
+          "supplierColourName": "Terracotta"
+        },
+        "VI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Vintage",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Vintage",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "V",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYVI.jpg",
+          "supplierColourCode": "VI",
+          "supplierColourName": "Vintage"
+        },
+        "WA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Walnut",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Walnut",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "WA",
+          "resolved": true,
+          "sourceImage": "DIFFUSION COLLECTION/GALAXYWA.jpg",
+          "supplierColourCode": "WA",
+          "supplierColourName": "Walnut"
+        },
+        "WI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Willow",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Willow",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "WI",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYWI.jpg",
+          "supplierColourCode": "WI",
+          "supplierColourName": "Willow"
+        },
+        "ZE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Zest",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Galaxy+Zest",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ZE",
+          "resolved": true,
+          "sourceImage": "Galaxy Flat Shots/GALAXYZE.jpg",
+          "supplierColourCode": "ZE",
+          "supplierColourName": "Zest"
+        }
+      },
+      "fabricDocumentId": "qbwygxlaen23eo0o0fdm7223",
+      "fabricName": "Galaxy",
+      "filenamePrefixes": [
+        "GALAXY"
+      ],
+      "productName": "Galaxy",
+      "supplierProductCode": "GALAXY"
+    },
+    "glint": {
+      "colours": {
+        "AQ": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Aqua",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Aqua",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "AQ",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTAQ.jpg",
+          "supplierColourCode": "AQ",
+          "supplierColourName": "Aqua"
+        },
+        "AU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Aubergine",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Aubergine",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "AUB",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTAU.jpg",
+          "supplierColourCode": "AU",
+          "supplierColourName": "Aubergine"
+        },
+        "BA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Babypink",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Babypink",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "BAB",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTBA.jpg",
+          "supplierColourCode": "BA",
+          "supplierColourName": "Babypink"
+        },
+        "BL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Black+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Black+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "BLA",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTBL.jpg",
+          "supplierColourCode": "BL",
+          "supplierColourName": "Black (recycled)"
+        },
+        "BU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Buttercup+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Buttercup+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "BU",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTBU.jpg",
+          "supplierColourCode": "BU",
+          "supplierColourName": "Buttercup (recycled)"
+        },
+        "CA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Cashew",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Cashew",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CAS",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTCA.jpg",
+          "supplierColourCode": "CA",
+          "supplierColourName": "Cashew"
+        },
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Champagne+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Champagne+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CHAM",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Champagne (recycled)"
+        },
+        "CR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Cream+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Cream+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CRE",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTCR.jpg",
+          "supplierColourCode": "CR",
+          "supplierColourName": "Cream (recycled)"
+        },
+        "DO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Dove+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Dove+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "DOV",
+          "resolved": true,
+          "sourceImage": "Sakura/GLINTDO.jpg",
+          "supplierColourCode": "DO",
+          "supplierColourName": "Dove (recycled)"
+        },
+        "FL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Flint",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Flint",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "FL",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTFL.jpg",
+          "supplierColourCode": "FL",
+          "supplierColourName": "Flint"
+        },
+        "FO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Fog+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Fog+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "FOG",
+          "resolved": true,
+          "sourceImage": "Sakura/GLINTFO.jpg",
+          "supplierColourCode": "FO",
+          "supplierColourName": "Fog (recycled)"
+        },
+        "FU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Fuschia",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Fuschia",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "FU",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTFU.jpg",
+          "supplierColourCode": "FU",
+          "supplierColourName": "Fuschia"
+        },
+        "GO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Gold+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Gold+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "GOL",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTGO.jpg",
+          "supplierColourCode": "GO",
+          "supplierColourName": "Gold (recycled)"
+        },
+        "GR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Grey",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Grey",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "GRE",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTGR.jpg",
+          "supplierColourCode": "GR",
+          "supplierColourName": "Grey"
+        },
+        "IC": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Ice",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Ice",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IC",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTIC.jpg",
+          "supplierColourCode": "IC",
+          "supplierColourName": "Ice"
+        },
+        "IN": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Indigo+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Indigo+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "INDI",
+          "resolved": true,
+          "sourceImage": "Sakura/GLINTIN.jpg",
+          "supplierColourCode": "IN",
+          "supplierColourName": "Indigo (recycled)"
+        },
+        "LI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Linen+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Linen+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "L",
+          "resolved": true,
+          "sourceImage": "Sakura/GLINTLI.jpg",
+          "supplierColourCode": "LI",
+          "supplierColourName": "Linen (recycled)"
+        },
+        "ME": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Mercury",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Mercury",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ME",
+          "resolved": true,
+          "sourceImage": "Sakura/GLINTME.jpg",
+          "supplierColourCode": "ME",
+          "supplierColourName": "Mercury"
+        },
+        "MI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Mist",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Mist",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MI",
+          "resolved": true,
+          "sourceImage": "Sakura/GLINTMI.jpg",
+          "supplierColourCode": "MI",
+          "supplierColourName": "Mist"
+        },
+        "MU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Mulberry",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Mulberry",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MULB",
+          "resolved": true,
+          "sourceImage": "Sakura/GLINTMU.jpg",
+          "supplierColourCode": "MU",
+          "supplierColourName": "Mulberry"
+        },
+        "OR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Orange",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Orange",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ORA",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTOR.jpg",
+          "supplierColourCode": "OR",
+          "supplierColourName": "Orange"
+        },
+        "OT": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Otter+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Otter+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OT",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTOT.jpg",
+          "supplierColourCode": "OT",
+          "supplierColourName": "Otter (recycled)"
+        },
+        "PE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Pearl+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Pearl+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PEAR",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTPE.jpg",
+          "supplierColourCode": "PE",
+          "supplierColourName": "Pearl (recycled)"
+        },
+        "PI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Pistachio",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Pistachio",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PIS",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTPI.jpg",
+          "supplierColourCode": "PI",
+          "supplierColourName": "Pistachio"
+        },
+        "RO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Rose+(recylced)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Rose+(recylced)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ROS",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTRO.jpg",
+          "supplierColourCode": "RO",
+          "supplierColourName": "Rose (recylced)"
+        },
+        "RU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Rust+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Rust+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "RUST",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTRU.jpg",
+          "supplierColourCode": "RU",
+          "supplierColourName": "Rust (recycled)"
+        },
+        "SC": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Scarlet",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Scarlet",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SC",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTSC.jpg",
+          "supplierColourCode": "SC",
+          "supplierColourName": "Scarlet"
+        },
+        "SH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Shell+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Shell+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SHE",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTSH.jpg",
+          "supplierColourCode": "SH",
+          "supplierColourName": "Shell (recycled)"
+        },
+        "SM": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Smoke+(recycled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Smoke+(recycled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SMO",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTSM.jpg",
+          "supplierColourCode": "SM",
+          "supplierColourName": "Smoke (recycled)"
+        },
+        "ST": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Steel",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Steel",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "STE",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTST.jpg",
+          "supplierColourCode": "ST",
+          "supplierColourName": "Steel"
+        },
+        "TE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Teal+(recyled)",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Teal+(recyled)",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "TEA",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTTE.jpg",
+          "supplierColourCode": "TE",
+          "supplierColourName": "Teal (recyled)"
+        },
+        "VO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Vole",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Vole",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "VO",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTVO.jpg",
+          "supplierColourCode": "VO",
+          "supplierColourName": "Vole"
+        },
+        "ZE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Zest",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Glint+Zest",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ZE",
+          "resolved": true,
+          "sourceImage": "Textures Flat shots/GLINTZE.jpg",
+          "supplierColourCode": "ZE",
+          "supplierColourName": "Zest"
+        }
+      },
+      "fabricDocumentId": "cff4c8d8sfifkgoqpb2g85g6",
+      "fabricName": "Glint",
+      "filenamePrefixes": [
+        "GLINT"
+      ],
+      "productName": "Glint",
+      "supplierProductCode": "GLINT"
+    },
+    "hadlow": {
+      "colours": {
+        "CA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Caramel",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Caramel",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CA",
+          "resolved": true,
+          "sourceImage": "Caversham/Flats/HADLOWCA copy.jpg",
+          "supplierColourCode": "CA",
+          "supplierColourName": "Caramel"
+        },
+        "DO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Dove",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Dove",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "DO",
+          "resolved": true,
+          "sourceImage": "Caversham/Flats/HADLOWDO copy.jpg",
+          "supplierColourCode": "DO",
+          "supplierColourName": "Dove"
+        },
+        "MI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Mineral",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Mineral",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MIN",
+          "resolved": true,
+          "sourceImage": "Caversham/Flats/HADLOWMI copy.jpg",
+          "supplierColourCode": "MI",
+          "supplierColourName": "Mineral"
+        },
+        "SE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Sesame",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Sesame",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SE",
+          "resolved": true,
+          "sourceImage": "Caversham/Flats/HADLOWSE copy.jpg",
+          "supplierColourCode": "SE",
+          "supplierColourName": "Sesame"
+        },
+        "SH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Shadow",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Shadow",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SHA",
+          "resolved": true,
+          "sourceImage": "Caversham/Flats/HADLOWSH copy.jpg",
+          "supplierColourCode": "SH",
+          "supplierColourName": "Shadow"
+        },
+        "WE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Wedgewood",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hadlow+Wedgewood",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "WE",
+          "resolved": true,
+          "sourceImage": "Caversham/Flats/HADLOWWE copy.jpg",
+          "supplierColourCode": "WE",
+          "supplierColourName": "Wedgewood"
+        }
+      },
+      "fabricDocumentId": "csv5jjk1tchl1jvn1nu67ms9",
+      "fabricName": "Hadlow",
+      "filenamePrefixes": [
+        "HADLOW"
+      ],
+      "productName": "Hadlow",
+      "supplierProductCode": "HADLOW"
+    },
+    "hampton": {
+      "colours": {
+        "DE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Denim",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Denim",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "DEN",
+          "resolved": true,
+          "sourceImage": "Monterey Collection/Flat Shots/HAMPTONDE.jpg",
+          "supplierColourCode": "DE",
+          "supplierColourName": "Denim"
+        },
+        "FA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Fawn",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Fawn",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "F",
+          "resolved": true,
+          "sourceImage": "Monterey Collection/Flat Shots/HAMPTONFA.jpg",
+          "supplierColourCode": "FA",
+          "supplierColourName": "Fawn"
+        },
+        "IN": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Indigo",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Indigo",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IND",
+          "resolved": true,
+          "sourceImage": "Monterey Collection/Flat Shots/HAMPTONIN.jpg",
+          "supplierColourCode": "IN",
+          "supplierColourName": "Indigo"
+        },
+        "PE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Pebble",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Pebble",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PEB",
+          "resolved": true,
+          "sourceImage": "Monterey Collection/Flat Shots/HAMPTONPE.jpg",
+          "supplierColourCode": "PE",
+          "supplierColourName": "Pebble"
+        },
+        "PO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Pollen",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Pollen",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PO",
+          "resolved": true,
+          "sourceImage": "Monterey Collection/Flat Shots/HAMPTONPO.jpg",
+          "supplierColourCode": "PO",
+          "supplierColourName": "Pollen"
+        },
+        "SE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Seafoam",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Seafoam",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SEA",
+          "resolved": true,
+          "sourceImage": "Monterey Collection/Flat Shots/HAMPTONSE.jpg",
+          "supplierColourCode": "SE",
+          "supplierColourName": "Seafoam"
+        },
+        "SP": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Spruce",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hampton+Spruce",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SPR",
+          "resolved": true,
+          "sourceImage": "Monterey Collection/Flat Shots/HAMPTONSP.jpg",
+          "supplierColourCode": "SP",
+          "supplierColourName": "Spruce"
+        }
+      },
+      "fabricDocumentId": "rqss2c98e0jmadvojv6w9ug4",
+      "fabricName": "Hampton",
+      "filenamePrefixes": [
+        "HAMPTON"
+      ],
+      "productName": "Hampton",
+      "supplierProductCode": "HAMPTON"
+    },
+    "hastings": {
+      "colours": {
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Charcoal",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Charcoal",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CHAR",
+          "resolved": true,
+          "sourceImage": "Belvoir Flat Shots/HASTINGSCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Charcoal"
+        },
+        "DA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Danube",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Danube",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "D",
+          "resolved": true,
+          "sourceImage": "Belvoir Flat Shots/HASTINGSDA.jpg",
+          "supplierColourCode": "DA",
+          "supplierColourName": "Danube"
+        },
+        "FA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Fawn",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Fawn",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "F",
+          "resolved": true,
+          "sourceImage": "Belvoir Flat Shots/HASTINGSFA.jpg",
+          "supplierColourCode": "FA",
+          "supplierColourName": "Fawn"
+        },
+        "HA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Haze",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Haze",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "HA",
+          "resolved": true,
+          "sourceImage": "Belvoir Flat Shots/HASTINGSHA.jpg",
+          "supplierColourCode": "HA",
+          "supplierColourName": "Haze"
+        },
+        "OC": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Ochre",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Ochre",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OCH",
+          "resolved": true,
+          "sourceImage": "Belvoir Flat Shots/HASTINGSOC.jpg",
+          "supplierColourCode": "OC",
+          "supplierColourName": "Ochre"
+        },
+        "PE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Pebble",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hastings+Pebble",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PEB",
+          "resolved": true,
+          "sourceImage": "Belvoir Flat Shots/HASTINGSPE.jpg",
+          "supplierColourCode": "PE",
+          "supplierColourName": "Pebble"
+        }
+      },
+      "fabricDocumentId": "r2lz8wdo5e85fzr5w8hr59y6",
+      "fabricName": "Hastings",
+      "filenamePrefixes": [
+        "HASTINGS"
+      ],
+      "productName": "Hastings",
+      "supplierProductCode": "HASTINGS"
+    },
+    "havelock": {
+      "colours": {
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Champagne",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Champagne",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CH",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/HAVELOCKCH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Champagne"
+        },
+        "DA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Danube",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Danube",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "D",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 2/HAVELOCKDA.jpg",
+          "supplierColourCode": "DA",
+          "supplierColourName": "Danube"
+        },
+        "IV": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Ivory",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Ivory",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IV",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/HAVELOCKIV.jpg",
+          "supplierColourCode": "IV",
+          "supplierColourName": "Ivory"
+        },
+        "PL": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Platinum",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Havelock+Platinum",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PLA",
+          "resolved": true,
+          "sourceImage": "Essential Weaves Volume 1/HAVELOCKPL.jpg",
+          "supplierColourCode": "PL",
+          "supplierColourName": "Platinum"
+        }
+      },
+      "fabricDocumentId": "exv43yaefsmumduxwpioajuy",
+      "fabricName": "Havelock",
+      "filenamePrefixes": [
+        "HAVELOCK"
+      ],
+      "productName": "Havelock",
+      "supplierProductCode": "HAVELOCK"
+    },
+    "hawthorn": {
+      "colours": {
+        "CR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Cranberry",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Cranberry",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CRA",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNCR.jpg",
+          "supplierColourCode": "CR",
+          "supplierColourName": "Cranberry"
+        },
+        "FO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Forest",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Forest",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "FOR",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNFO.jpg",
+          "supplierColourCode": "FO",
+          "supplierColourName": "Forest"
+        },
+        "IN": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Ink",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Ink",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "IN",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNIN.jpg",
+          "supplierColourCode": "IN",
+          "supplierColourName": "Ink"
+        },
+        "KI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Kingfisher",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Kingfisher",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "KI",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNKI.jpg",
+          "supplierColourCode": "KI",
+          "supplierColourName": "Kingfisher"
+        },
+        "MA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Maize",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Maize",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MA",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNMA.jpg",
+          "supplierColourCode": "MA",
+          "supplierColourName": "Maize"
+        },
+        "MU": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Mulberry",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Mulberry",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "MULB",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNMU.jpg",
+          "supplierColourCode": "MU",
+          "supplierColourName": "Mulberry"
+        },
+        "PE": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Peacock",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Peacock",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PEA",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNPE.jpg",
+          "supplierColourCode": "PE",
+          "supplierColourName": "Peacock"
+        },
+        "RO": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Rosewood",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Hawthorn+Rosewood",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "ROSE",
+          "resolved": true,
+          "sourceImage": "Sherwood Collection/Flat Shots/HAWTHORNRO.jpg",
+          "supplierColourCode": "RO",
+          "supplierColourName": "Rosewood"
+        }
+      },
+      "fabricDocumentId": "c3kv7tfnsi3q131dhybtwlum",
+      "fabricName": "Hawthorn",
+      "filenamePrefixes": [
+        "HAWTHORN"
+      ],
+      "productName": "Hawthorn",
+      "supplierProductCode": "HAWTHORN"
+    },
+    "henri": {
+      "colours": {
+        "CH": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Champagne",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Champagne",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "CH",
+          "resolved": true,
+          "sourceImage": "Visage Flat Shots/HENRICH.jpg",
+          "supplierColourCode": "CH",
+          "supplierColourName": "Champagne"
+        },
+        "EM": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Emerald",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Emerald",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "E",
+          "resolved": true,
+          "sourceImage": "Visage Flat Shots/HENRIEM.jpg",
+          "supplierColourCode": "EM",
+          "supplierColourName": "Emerald"
+        },
+        "LA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Latte",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Latte",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "LAT",
+          "resolved": true,
+          "sourceImage": "Visage Flat Shots/HENRILA.jpg",
+          "supplierColourCode": "LA",
+          "supplierColourName": "Latte"
+        },
+        "OC": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Ochre",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Ochre",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "OCH",
+          "resolved": true,
+          "sourceImage": "Visage Flat Shots/HENRIOC.jpg",
+          "supplierColourCode": "OC",
+          "supplierColourName": "Ochre"
+        },
+        "PR": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Praline",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Praline",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "PR",
+          "resolved": true,
+          "sourceImage": "Visage Flat Shots/HENRIPR.jpg",
+          "supplierColourCode": "PR",
+          "supplierColourName": "Praline"
+        },
+        "SA": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Sapphire",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Sapphire",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SAP",
+          "resolved": true,
+          "sourceImage": "Visage Flat Shots/HENRISA.jpg",
+          "supplierColourCode": "SA",
+          "supplierColourName": "Sapphire"
+        },
+        "SI": {
+          "evidence": {
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Silver",
+            "confidence": 1,
+            "imageUrl": null,
+            "productUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?name=Henri+Silver",
+            "source": "completed Ashley Wilde research bundle"
+          },
+          "internalColourCode": "SI",
+          "resolved": true,
+          "sourceImage": "Visage Flat Shots/HENRISI.jpg",
+          "supplierColourCode": "SI",
+          "supplierColourName": "Silver"
+        }
+      },
+      "fabricDocumentId": "zd6iz09i1uhcexv4y3kfttmt",
+      "fabricName": "Henri",
+      "filenamePrefixes": [
+        "HENRI"
+      ],
+      "productName": "Henri",
+      "supplierProductCode": "HENRI"
+    }
+  },
+  "schemaVersion": 1,
+  "supplier": "Ashley Wilde"
+}

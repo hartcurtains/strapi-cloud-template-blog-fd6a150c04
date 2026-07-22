@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useFetchClient } from '@strapi/strapi/admin';
+import adminCatalogRoutes from '../../../shared/routes';
 import ImageUploader from '../components/ImageUploader';
 import BulkImageUploader from '../components/BulkImageUploader';
 import excelHelper from '../utils/excelHelper';
 import pdfHelper from '../utils/pdfHelper';
 import { extractCodeFromName, extractAndLookupColorCode } from '../utils/colorCodeMatcher';
+import { fetchAllFabrics } from '../../../shared/fetch-all-fabrics';
 import { 
   Scissors, Blinds, Sofa, Tag, Layers, Palette, Settings, PackageSearch, 
   Plus, Download, Upload, FileText, Edit, Trash2, CheckSquare, Loader2, 
@@ -19,6 +22,7 @@ const spinnerStyle = `
 `;
 
 export default function ProductManagementPage() {
+  const { post: adminPost } = useFetchClient();
   const [activeTab, setActiveTab] = useState('fabrics');
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(false);
@@ -39,6 +43,11 @@ export default function ProductManagementPage() {
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState(null);
   const [showBulkImageUpload, setShowBulkImageUpload] = useState(false);
+  const [promotionScope, setPromotionScope] = useState({ supplier: 'Ashley Wilde', fabricName: '', supplierProductCode: '' });
+  const [promotionPreview, setPromotionPreview] = useState(null);
+  const [promotionBusy, setPromotionBusy] = useState(false);
+  const [promotionError, setPromotionError] = useState('');
+  const [promotionConfirmOpen, setPromotionConfirmOpen] = useState(false);
 
   // Product types configuration
   const productTypes = {
@@ -231,9 +240,19 @@ export default function ProductManagementPage() {
       console.log(`🔗 Full API URL: ${fullUrl}`);
       
       // Try Strapi's admin API first (bypasses permissions)
-      let response = await fetch(fullUrl, {
-        headers: getAuthHeaders(),
-      });
+      let response;
+      let data;
+      if (activeTab === 'fabrics') {
+        data = await fetchAllFabrics({
+          fetchImpl: fetch,
+          headers: getAuthHeaders(),
+          populate: ['brand', 'images', 'curtains', 'blinds', 'cushions', 'care_instructions'],
+          publicationState: 'preview',
+        });
+      } else {
+        response = await fetch(fullUrl, {
+          headers: getAuthHeaders(),
+        });
       
       // If that fails, try without publicationState (admin API doesn't need it)
       if (!response.ok) {
@@ -254,7 +273,8 @@ export default function ProductManagementPage() {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
+        data = await response.json();
+      }
       console.log(`📦 Fetched products data for ${activeTab}:`, data);
       console.log(`📦 Data length: ${data.data ? data.data.length : 'no data'}`);
       
@@ -340,13 +360,15 @@ export default function ProductManagementPage() {
         console.log('🔧 Brands: fabrics relation not available, manually fetching fabrics...');
         try {
           // Fetch all fabrics with their brands populated
-          const fabricsResponse = await fetch('/api/fabrics?populate[0]=brand&publicationState=preview', {
+          const fabricsData = await fetchAllFabrics({
+            fetchImpl: fetch,
             headers: getAuthHeaders(),
+            populate: ['brand'],
+            publicationState: 'preview',
           });
           
-          if (fabricsResponse.ok) {
-            const fabricsData = await fabricsResponse.json();
-            const fabrics = fabricsData.data || [];
+          {
+            const fabrics = fabricsData.data;
             
             // Group fabrics by brand ID
             const fabricsByBrand = {};
@@ -840,7 +862,7 @@ export default function ProductManagementPage() {
               return null;
             };
 
-            const response = await fetch('/api/order-management/create-fabric-with-colour', {
+            const response = await fetch(adminCatalogRoutes.createFabricWithColour, {
               method: 'POST',
               headers: getAuthHeaders(),
               body: JSON.stringify({
@@ -1263,11 +1285,12 @@ export default function ProductManagementPage() {
     
     try {
       // Fetch fabrics
-      const fabricsResponse = await fetch('/api/fabrics?populate=*', {
-        headers: getAuthHeaders()
+      const fabricsData = await fetchAllFabrics({
+        fetchImpl: fetch,
+        headers: getAuthHeaders(),
+        populate: '*',
       });
-      if (fabricsResponse.ok) {
-        const fabricsData = await fabricsResponse.json();
+      {
         relationData.fabrics = {
           byName: {},
           byId: {}
@@ -1533,6 +1556,45 @@ export default function ProductManagementPage() {
     setJsonError(null);
   };
 
+  const promotionErrorMessage = (error) => error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || 'Promotion request failed.';
+
+  const previewAshleyWildePromotion = async () => {
+    setPromotionBusy(true);
+    setPromotionError('');
+    setPromotionPreview(null);
+    try {
+      const response = await adminPost(adminCatalogRoutes.ashleyWildePromotionPreview, promotionScope);
+      setPromotionPreview(response.data?.data || response.data);
+    } catch (error) {
+      setPromotionError(promotionErrorMessage(error));
+    } finally {
+      setPromotionBusy(false);
+    }
+  };
+
+  const applyAshleyWildePromotion = async () => {
+    if (!promotionPreview) return;
+    setPromotionBusy(true);
+    setPromotionError('');
+    try {
+      await adminPost(adminCatalogRoutes.ashleyWildePromotionApply, {
+        ...promotionScope,
+        confirm: true,
+        planFingerprint: promotionPreview.planFingerprint,
+        planExpiresAt: promotionPreview.planExpiresAt,
+        identityDocumentIds: promotionPreview.identityDocumentIds,
+      });
+      setPromotionConfirmOpen(false);
+      setPromotionPreview(null);
+      await fetchProducts();
+      await previewAshleyWildePromotion();
+    } catch (error) {
+      setPromotionError(promotionErrorMessage(error));
+    } finally {
+      setPromotionBusy(false);
+    }
+  };
+
   return (
     <div>
       <style>{spinnerStyle}</style>
@@ -1606,6 +1668,53 @@ export default function ProductManagementPage() {
           <BulkImageUploader productType={activeTab} />
         </div>
       )}
+
+      {/* Staged fabric-colour promotion workflow */}
+      <div style={{ background: '#ffffff', borderRadius: '16px', padding: '24px', marginBottom: '32px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '1px solid #dbeafe' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: '0 0 6px', color: '#1e3a8a', fontSize: '20px' }}>Staged fabric colours</h2>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>Review an exact supplier/Fabric/product scope before promoting verified staged identities.</p>
+          </div>
+          <div style={{ color: '#475569', fontSize: '12px' }}>Preview expires after 10 minutes or any staging/mapping change.</div>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginTop: '18px' }}>
+          <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Supplier
+            <select value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
+              <option value="Ashley Wilde">Ashley Wilde</option>
+            </select>
+          </label>
+          <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Fabric
+            <select value={promotionScope.fabricName} onChange={(event) => { setPromotionScope({ ...promotionScope, fabricName: event.target.value }); setPromotionPreview(null); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
+              <option value="">All Fabrics</option>
+              {(products.fabrics || []).map((fabric) => <option key={fabric.documentId || fabric.id} value={fabric.name}>{fabric.name}</option>)}
+            </select>
+          </label>
+          <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Supplier product code
+            <input value={promotionScope.supplierProductCode} onChange={(event) => { setPromotionScope({ ...promotionScope, supplierProductCode: event.target.value }); setPromotionPreview(null); }} placeholder="Optional" style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px' }} />
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginTop: '18px' }}>
+          <button type="button" onClick={previewAshleyWildePromotion} disabled={promotionBusy || !promotionScope.fabricName || !promotionScope.supplierProductCode} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionBusy ? 'wait' : 'pointer', opacity: promotionBusy || !promotionScope.fabricName || !promotionScope.supplierProductCode ? 0.55 : 1 }}>Preview promotion</button>
+          <button type="button" onClick={() => setPromotionConfirmOpen(true)} disabled={promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible} style={{ background: '#047857', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionPreview ? 'pointer' : 'not-allowed', opacity: promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible ? 0.55 : 1 }}>Promote verified</button>
+          {promotionError && <span style={{ color: '#b91c1c', fontSize: '13px' }}>{promotionError}</span>}
+        </div>
+        {promotionPreview && <div style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '13px', color: '#334155' }}>
+            <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Blocked: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
+          </div>
+          <div style={{ marginTop: '10px', fontSize: '11px', color: '#64748b' }}>Plan fingerprint: {promotionPreview.planFingerprint}</div>
+          {promotionPreview.results?.length > 0 && <div style={{ marginTop: '12px', maxHeight: '220px', overflow: 'auto', fontSize: '12px' }}>{promotionPreview.results.map((item) => <div key={item.identityDocumentId} style={{ padding: '6px 0', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', gap: '8px' }}><span>{item.fabricColourCode} — {item.officialColourName}</span><span style={{ color: item.eligible ? '#047857' : '#b91c1c', fontWeight: 700 }}>{item.eligible ? item.colourDecision : `Blocked: ${(item.skippedReasons || []).join(', ')}`}</span></div>)}</div>}
+        </div>}
+      </div>
+
+      {promotionConfirmOpen && promotionPreview && <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+        <div style={{ background: '#fff', borderRadius: '14px', padding: '24px', maxWidth: '520px', width: '100%' }}>
+          <h3 style={{ marginTop: 0, color: '#0f172a' }}>Confirm exact promotion scope</h3>
+          <p style={{ color: '#475569', fontSize: '14px' }}>Promote {promotionPreview.summary?.eligible || 0} verified staged identities for {promotionScope.supplier}, Fabric “{promotionScope.fabricName}”, product code “{promotionScope.supplierProductCode}”. The reviewed plan will reuse staged media and will not overwrite existing Colours or images.</p>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}><button type="button" onClick={() => setPromotionConfirmOpen(false)} style={{ padding: '9px 13px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>Cancel</button><button type="button" onClick={applyAshleyWildePromotion} disabled={promotionBusy} style={{ padding: '9px 13px', border: 0, borderRadius: '8px', background: '#047857', color: '#fff', fontWeight: 700 }}>Confirm promotion</button></div>
+        </div>
+      </div>}
 
         {/* Product Type Tabs removed - activeTab fixed to 'fabrics' for import/bulk workflows */}
         <div style={{ height: '8px', marginBottom: '20px' }} />

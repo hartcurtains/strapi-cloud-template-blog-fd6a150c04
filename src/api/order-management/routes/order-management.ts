@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+const { customMutationPolicyConfig } = require('../../../catalog/catalog-mutation-surface');
 
 export default {
   routes: [
@@ -18,9 +19,7 @@ export default {
       method: 'POST',
       path: '/order-management/import',
       handler: 'order-management.bulkImport',
-      config: {
-        auth: false,
-      },
+      config: customMutationPolicyConfig(),
     },
     {
       method: 'POST',
@@ -42,10 +41,7 @@ export default {
       method: 'POST',
       path: '/order-management/bulk-image-upload',
       handler: 'order-management.bulkImageUpload',
-      config: {
-        auth: false,
-      },
+      config: customMutationPolicyConfig(),
     },
   ],
 };
-

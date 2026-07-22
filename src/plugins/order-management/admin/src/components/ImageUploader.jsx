@@ -32,7 +32,7 @@ export default function ImageUploader({
     });
 
     try {
-      const response = await fetch('/api/upload', {
+      const response = await fetch('/upload', {
         method: 'POST',
         headers: getAuthHeaders(),
         body: formData

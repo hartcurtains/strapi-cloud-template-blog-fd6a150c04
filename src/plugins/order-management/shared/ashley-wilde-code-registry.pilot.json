@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "supplier": "Ashley Wilde",
+  "generatedAt": "2026-07-19T00:00:00.000Z",
+  "mode": "pilot",
+  "codes": {
+    "AQ": {
+      "colourName": "Aqua",
+      "sources": [
+        { "supplierProductCode": "ALASKA", "supplierColourCode": "AQ" },
+        { "supplierProductCode": "BALTIC", "supplierColourCode": "AQ" }
+      ]
+    },
+    "CA": {
+      "colourName": "Caramel",
+      "sources": [
+        { "supplierProductCode": "BERKELEY", "supplierColourCode": "CA" }
+      ]
+    },
+    "DO": {
+      "colourName": "Dove",
+      "sources": [
+        { "supplierProductCode": "BERKELEY", "supplierColourCode": "DO" },
+        { "supplierProductCode": "CHERINGTON", "supplierColourCode": "DO" }
+      ]
+    },
+    "IN": {
+      "colourName": "Ink",
+      "sources": [
+        { "supplierProductCode": "AREZZO", "supplierColourCode": "IN" }
+      ]
+    }
+  },
+  "unresolved": [
+    {
+      "supplierProductCode": "ALASKA",
+      "supplierColourCode": "MA",
+      "reason": "Official Alaska Maize evidence was not found; no automatic mapping is approved."
+    }
+  ]
+}

@@ -1,12 +1,14 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Upload, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon } from 'lucide-react';
 import { extractColorId, matchImageToProduct, parseColorIdFromFilename } from '../utils/imageMatching';
+import adminCatalogRoutes from '../../../shared/routes';
+import { fetchAllFabrics } from '../../../shared/fetch-all-fabrics';
+import AshleyWildeFolderImporter from './AshleyWildeFolderImporter';
 
 export default function BulkImageUploader({ productType = 'fabrics' }) {
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [matchBy, setMatchBy] = useState('colorId'); // Default to color ID matching
-  const [createAsColour, setCreateAsColour] = useState(false);
   const [results, setResults] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({
@@ -39,6 +41,11 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
     const fetchProducts = async () => {
       try {
         const apiPath = `/api/${productType}`;
+        if (productType === 'fabrics') {
+          const data = await fetchAllFabrics({ fetchImpl: fetch, headers: getAuthHeaders(), populate: '*' });
+          setProducts(data.data);
+          return;
+        }
         const response = await fetch(`${apiPath}?populate=*`, {
           headers: getAuthHeaders()
         });
@@ -182,7 +189,6 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
             formData.append('files', file);
             formData.append('productType', productType);
             formData.append('matchBy', matchBy);
-            formData.append('createAsColour', createAsColour ? 'true' : 'false');
 
             // Add color ID matching data if in color ID mode
             if (matchBy === 'colorId' && imageMatches[globalIndex - 1]) {
@@ -192,7 +198,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
               formData.append('colorName', colorMappings[match.colorId] || '');
             }
 
-            const response = await fetch('/api/order-management/bulk-image-upload', {
+            const response = await fetch(adminCatalogRoutes.bulkImageUpload, {
               method: 'POST',
               headers: getAuthHeaders(),
               body: formData,
@@ -281,22 +287,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
         </p>
       </div>
 
-      {/* Create as Colour Option */}
-      {productType === 'fabrics' && (
-        <div style={{ marginBottom: '24px', padding: '16px', background: '#f0f9ff', borderRadius: '8px', border: '1px solid #bae6fd' }}>
-          <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={createAsColour}
-              onChange={(e) => setCreateAsColour(e.target.checked)}
-              style={{ marginRight: '8px', width: '16px', height: '16px' }}
-            />
-            <span style={{ fontSize: '14px', color: '#374151' }}>
-              <strong>Create as Colour Item:</strong> Create/add image as a colour item and auto-link to matching fabric
-            </span>
-          </label>
-        </div>
-      )}
+      {productType === 'fabrics' && <AshleyWildeFolderImporter />}
 
       {/* Match By Selection */}
       <div style={{ marginBottom: '24px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
@@ -891,11 +882,6 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
     </div>
   );
 }
-
-
-
-
-
 
 
 

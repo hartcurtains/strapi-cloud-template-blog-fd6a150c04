@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+const { mutationPolicyConfig } = require('../../../catalog/catalog-mutation-surface');
 
 export default {
   routes: [
@@ -26,25 +27,19 @@ export default {
       method: 'POST',
       path: '/curtain-types',
       handler: 'curtain-type.create',
-      config: {
-        auth: false, // Allow admin access for creating
-      },
+      config: mutationPolicyConfig('api::curtain-type.curtain-type'),
     },
     {
       method: 'PUT',
       path: '/curtain-types/:id',
       handler: 'curtain-type.update',
-      config: {
-        auth: false, // Allow admin access for updating
-      },
+      config: mutationPolicyConfig('api::curtain-type.curtain-type'),
     },
     {
       method: 'DELETE',
       path: '/curtain-types/:id',
       handler: 'curtain-type.delete',
-      config: {
-        auth: false, // Allow admin access for deleting
-      },
+      config: mutationPolicyConfig('api::curtain-type.curtain-type'),
     },
   ],
 };

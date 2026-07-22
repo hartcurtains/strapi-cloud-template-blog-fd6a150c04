@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+const { mutationPolicyConfig } = require('../../../catalog/catalog-mutation-surface');
 
 export default {
   routes: [
@@ -26,25 +27,19 @@ export default {
       method: 'POST',
       path: '/cushion-types',
       handler: 'cushion-type.create',
-      config: {
-        auth: false, // Allow admin access for creating
-      },
+      config: mutationPolicyConfig('api::cushion-type.cushion-type'),
     },
     {
       method: 'PUT',
       path: '/cushion-types/:id',
       handler: 'cushion-type.update',
-      config: {
-        auth: false, // Allow admin access for updating
-      },
+      config: mutationPolicyConfig('api::cushion-type.cushion-type'),
     },
     {
       method: 'DELETE',
       path: '/cushion-types/:id',
       handler: 'cushion-type.delete',
-      config: {
-        auth: false, // Allow admin access for deleting
-      },
+      config: mutationPolicyConfig('api::cushion-type.cushion-type'),
     },
   ],
 };

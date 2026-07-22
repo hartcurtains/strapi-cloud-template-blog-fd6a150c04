@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+const catalogUploadConfig = require('../../../catalog/catalog-upload-config');
 
 export default factories.createCoreController('api::order-management.order-management', ({ strapi }) => ({
   // Simple test endpoint
@@ -76,7 +77,7 @@ export default factories.createCoreController('api::order-management.order-manag
         for (const brandName of brandNamesToCreate) {
           try {
             const existingBrands = await strapi.entityService.findMany('api::brand.brand' as any, {
-              filters: { name: { $eqi: brandName } }
+              filters: { name: { $eqi: brandName } } as any
             }) as any[];
 
             if (!existingBrands || existingBrands.length === 0) {
@@ -109,7 +110,7 @@ export default factories.createCoreController('api::order-management.order-manag
         for (const careName of careInstructionNamesToCreate) {
           try {
             const existingCareInstructions = await strapi.entityService.findMany('api::care-instruction.care-instruction' as any, {
-              filters: { name: { $eqi: careName } }
+              filters: { name: { $eqi: careName } } as any
             }) as any[];
 
             if (!existingCareInstructions || existingCareInstructions.length === 0) {
@@ -733,8 +734,15 @@ export default factories.createCoreController('api::order-management.order-manag
 // Bulk image upload with auto-linking to products
 async bulkImageUpload(ctx) {
   try {
-    // Import fs at the top of the file if not already imported
     const fs = require('fs').promises;
+    const ALLOWED_TYPES = [
+      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'application/zip', 'application/x-zip-compressed',
+      'application/octet-stream', 'application/x-zip', 'multipart/x-zip'
+    ];
+    const MAX_FILE_COUNT = catalogUploadConfig.maxFileCount;
+    const MAX_FILE_SIZE = catalogUploadConfig.maxFileSize;
+    const MAX_TOTAL_SIZE = catalogUploadConfig.maxTotalSize;
 
     // Handle multipart form data
     const files = ctx.request.files?.files;
@@ -746,6 +754,17 @@ async bulkImageUpload(ctx) {
     const adminColorId = ctx.request.body?.colorId;
     const adminColorName = ctx.request.body?.colorName;
     const adminSelectedProductId = ctx.request.body?.selectedProductId;
+    const isAshleyWildeFolder = ctx.request.body?.ashleyWilde === 'true' || ctx.request.body?.ashleyWilde === true;
+    let ashleyFileMetadata: any[] = [];
+    if (isAshleyWildeFolder) {
+      try {
+        ashleyFileMetadata = JSON.parse(ctx.request.body?.fileMetadata || '[]');
+      } catch {
+        ctx.status = 400;
+        ctx.body = { error: 'Invalid folder file metadata' };
+        return;
+      }
+    }
 
     // Handle both single file and array of files
     const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
@@ -755,111 +774,79 @@ async bulkImageUpload(ctx) {
       ctx.body = { error: 'No files provided' };
       return;
     }
+    if (fileArray.length > MAX_FILE_COUNT) {
+      ctx.status = 413;
+      ctx.body = { error: `A maximum of ${MAX_FILE_COUNT} files may be uploaded at once` };
+      return;
+    }
+
+    let declaredTotalSize = 0;
+    for (const file of fileArray) {
+      const size = Number(file?.size || 0);
+      if (size > MAX_FILE_SIZE) {
+        ctx.status = 413;
+        ctx.body = { error: `Each file must be ${MAX_FILE_SIZE / 1024 / 1024}MB or smaller` };
+        return;
+      }
+      declaredTotalSize += size;
+      if (declaredTotalSize > MAX_TOTAL_SIZE) {
+        ctx.status = 413;
+        ctx.body = { error: `The total upload must be ${MAX_TOTAL_SIZE / 1024 / 1024}MB or smaller` };
+        return;
+      }
+    }
 
     console.log(`📸 Processing ${fileArray.length} files...`);
 
-    // CRITICAL: Read files into buffers IMMEDIATELY before paths are cleared
-    const fileDescriptors = await Promise.all(
-      fileArray.map(async (file) => {
-        const f = file as any;
-
-        // Get path and filename immediately
-        const path = f.path || f.filepath || f.newFilename;
-        const name = f.originalFilename || f.name || f.filename || f.originalname || 'unknown';
-        const mimeType = f.mimetype || f.type || '';
-        const size = f.size || 0;
-
-        let buffer = f.buffer; // Use existing buffer if available
-
-        // If no buffer but we have a path, read the file NOW
-        if (!buffer && path && typeof path === 'string') {
-          try {
-            console.log(`📖 Reading file into buffer: ${name}`);
-            buffer = await fs.readFile(path);
-            console.log(`✅ Buffer created for ${name}: ${buffer.length} bytes`);
-          } catch (readErr) {
-            console.error(`❌ Failed to read file ${name} from ${path}:`, readErr);
-            // Don't throw yet, let validation handle it
-          }
-        }
-
-        return {
-          name,
-          mimeType,
-          size,
-          buffer, // This is now guaranteed to be set if file was readable
-          originalPath: path, // Keep for debugging only
-          meta: {
-            colorId: adminColorId,
-            colorName: adminColorName,
-            selectedProductId: adminSelectedProductId
-          }
-        };
-      })
-    );
-
-    console.log(`📸 Created ${fileDescriptors.length} file descriptors with buffers`);
-
-    // Debug: Log first file to verify buffer exists
-    if (fileDescriptors.length > 0) {
-      const first = fileDescriptors[0];
-      console.log('First file descriptor:', {
-        name: first.name,
-        hasBuffer: !!first.buffer,
-        bufferSize: first.buffer?.length || 0,
-        mimeType: first.mimeType
-      });
-    }
-
-    // SECURITY: Validate file types and sizes
-    const ALLOWED_TYPES = [
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'application/zip', 'application/x-zip-compressed',
-      'application/octet-stream', 'application/x-zip', 'multipart/x-zip'
-    ];
-    const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB per file
-    const MAX_TOTAL_SIZE = 2 * 1024 * 1024 * 1024; // 2GB total
-
-    let totalSize = 0;
+    // Read and validate sequentially so multiple large buffers are never read concurrently.
+    const fileDescriptors = [];
     const validatedFiles = [];
     const validationErrors: { filename: string; reason: string }[] = [];
 
-    for (const descriptor of fileDescriptors) {
-      // Check if we have a buffer
+    for (let fileIndex = 0; fileIndex < fileArray.length; fileIndex += 1) {
+      const file = fileArray[fileIndex];
+      const f = file as any;
+      const filePath = f.path || f.filepath || f.newFilename;
+      const name = f.originalFilename || f.name || f.filename || f.originalname || 'unknown';
+      const mimeType = f.mimetype || f.type || '';
+      const size = Number(f.size || 0);
+      let buffer = f.buffer;
+
+      if (!ALLOWED_TYPES.includes(mimeType)) {
+        ctx.status = 400;
+        ctx.body = { error: `Invalid file type: ${mimeType}` };
+        return;
+      }
+
+      if (!buffer && filePath && typeof filePath === 'string') {
+        try {
+          buffer = await fs.readFile(filePath);
+        } catch (readErr) {
+          console.error(`Failed to read uploaded file ${name}`);
+        }
+      }
+
+      const descriptor = {
+        name,
+        relativePath: ashleyFileMetadata[fileIndex]?.relativePath,
+        mimeType,
+        size,
+        buffer,
+        originalPath: filePath,
+        meta: {
+          colorId: adminColorId,
+          colorName: adminColorName,
+          selectedProductId: adminSelectedProductId
+        }
+      };
+      fileDescriptors.push(descriptor);
+
       if (!descriptor.buffer) {
-        console.error(`❌ No buffer available for file: ${descriptor.name}`);
         validationErrors.push({
           filename: descriptor.name,
           reason: 'Failed to read file data'
         });
         continue;
-      }
-
-      // Validate MIME type
-      if (!ALLOWED_TYPES.includes(descriptor.mimeType)) {
-        ctx.status = 400;
-        ctx.body = {
-          error: `Invalid file type: ${descriptor.mimeType}. Allowed types: ${ALLOWED_TYPES.join(', ')}`
-        };
-        return;
-      }
-
-      // Validate file size
-      if (descriptor.size > MAX_FILE_SIZE) {
-        ctx.status = 400;
-        ctx.body = {
-          error: `File ${descriptor.name} exceeds maximum size of ${MAX_FILE_SIZE / 1024 / 1024}MB`
-        };
-        return;
-      }
-
-      totalSize += descriptor.size;
-      if (totalSize > MAX_TOTAL_SIZE) {
-        ctx.status = 400;
-        ctx.body = {
-          error: `Total upload size exceeds ${MAX_TOTAL_SIZE / 1024 / 1024}MB`
-        };
-        return;
       }
 
       validatedFiles.push(descriptor);
@@ -889,6 +876,23 @@ async bulkImageUpload(ctx) {
     }
 
     console.log(`📸 Bulk image upload: ${validatedFiles.length} validated files, productType: ${productType}, matchBy: ${matchBy}`);
+
+    if (isAshleyWildeFolder) {
+      const importer = strapi.plugin('order-management')?.service('ashley-wilde-import') as any;
+      try {
+        if (!importer?.processBatch) {
+          const error: any = new Error('Ashley Wilde import service is unavailable');
+          error.code = 'ASHLEY_WILDE_SERVICE_UNAVAILABLE';
+          throw error;
+        }
+        const folderResults = await importer.processBatch(strapi, validatedFiles, ctx.request.body);
+        ctx.body = { success: folderResults.failed === 0, data: folderResults };
+      } catch (error: any) {
+        ctx.status = ['ASHLEY_WILDE_MAPPING_INVALID', 'ASHLEY_WILDE_SERVICE_UNAVAILABLE'].includes(error?.code) ? 503 : 400;
+        ctx.body = { success: false, error: importer?.safeMessage ? importer.safeMessage(error) : 'The folder import could not be processed safely.' };
+      }
+      return;
+    }
 
     // Pass validated file descriptors (with buffers) to service
     const service = strapi.service('api::order-management.order-management') as any;

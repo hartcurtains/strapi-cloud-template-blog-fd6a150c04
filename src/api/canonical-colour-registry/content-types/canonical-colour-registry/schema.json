@@ -1,0 +1,30 @@
+{
+  "kind": "collectionType",
+  "collectionName": "canonical_colour_registry",
+  "info": {
+    "singularName": "canonical-colour-registry",
+    "pluralName": "canonical-colour-registries",
+    "displayName": "Canonical colour registry"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "canonicalColourName": { "type": "string", "required": true },
+    "normalizedColourName": { "type": "string", "required": true },
+    "internalColourCode": { "type": "string", "required": true },
+    "normalizedInternalCode": { "type": "string", "required": true },
+    "status": {
+      "type": "enumeration",
+      "required": true,
+      "default": "approved",
+      "enum": ["approved", "rejected"]
+    },
+    "source": { "type": "string" },
+    "notes": { "type": "text" },
+    "approvedAt": { "type": "datetime" },
+    "approvedBy": { "type": "json" }
+  }
+}

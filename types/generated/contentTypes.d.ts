@@ -467,6 +467,53 @@ export interface ApiBrandBrand extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCanonicalColourRegistryCanonicalColourRegistry
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'canonical_colour_registry';
+  info: {
+    displayName: 'Canonical colour registry';
+    pluralName: 'canonical-colour-registries';
+    singularName: 'canonical-colour-registry';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: true;
+    };
+  };
+  attributes: {
+    approvedAt: Schema.Attribute.DateTime;
+    approvedBy: Schema.Attribute.JSON;
+    canonicalColourName: Schema.Attribute.String & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    internalColourCode: Schema.Attribute.String & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::canonical-colour-registry.canonical-colour-registry'
+    > &
+      Schema.Attribute.Private;
+    normalizedColourName: Schema.Attribute.String & Schema.Attribute.Required;
+    normalizedInternalCode: Schema.Attribute.String & Schema.Attribute.Required;
+    notes: Schema.Attribute.Text;
+    publishedAt: Schema.Attribute.DateTime;
+    source: Schema.Attribute.String;
+    status: Schema.Attribute.Enumeration<['approved', 'rejected']> &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'approved'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiCareInstructionCareInstruction
   extends Struct.CollectionTypeSchema {
   collectionName: 'care_instructions';
@@ -803,6 +850,143 @@ export interface ApiCushionCushion extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiFabricColourAssetFabricColourAsset
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'fabric_colour_assets';
+  info: {
+    displayName: 'Fabric colour asset';
+    pluralName: 'fabric-colour-assets';
+    singularName: 'fabric-colour-asset';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    assetKey: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private &
+      Schema.Attribute.Unique;
+    assetType: Schema.Attribute.Enumeration<
+      [
+        'ordinary_colour',
+        'full_colour_name',
+        'numbered_alternate',
+        'lifestyle',
+        'cameo',
+        'roomset',
+        'moodboard',
+        'main_image',
+        'non_colour',
+        'unknown',
+      ]
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'unknown'>;
+    batchMetadata: Schema.Attribute.JSON;
+    conflictGroup: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    duplicateStatus: Schema.Attribute.Enumeration<
+      ['unique', 'exact_duplicate', 'logical_duplicate', 'conflicting_image']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'unique'>;
+    existingMedia: Schema.Attribute.Media<'images' | 'files'>;
+    fabricColourIdentity: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::fabric-colour-identity.fabric-colour-identity'
+    >;
+    fileSize: Schema.Attribute.BigInteger & Schema.Attribute.Required;
+    importStatus: Schema.Attribute.Enumeration<
+      ['staged', 'blocked', 'failed', 'promoted']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'staged'>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::fabric-colour-asset.fabric-colour-asset'
+    > &
+      Schema.Attribute.Private;
+    media: Schema.Attribute.Media<'images' | 'files'>;
+    mimeType: Schema.Attribute.String;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    normalizedFilename: Schema.Attribute.String & Schema.Attribute.Required;
+    notes: Schema.Attribute.Text;
+    originalFilename: Schema.Attribute.String & Schema.Attribute.Required;
+    publishedAt: Schema.Attribute.DateTime;
+    referenceMetadata: Schema.Attribute.JSON;
+    relativePath: Schema.Attribute.String & Schema.Attribute.Required;
+    sha256: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiFabricColourIdentityFabricColourIdentity
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'fabric_colour_identities';
+  info: {
+    displayName: 'Fabric colour identity';
+    pluralName: 'fabric-colour-identities';
+    singularName: 'fabric-colour-identity';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    assets: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::fabric-colour-asset.fabric-colour-asset'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    displayName: Schema.Attribute.String & Schema.Attribute.Required;
+    evidenceStatus: Schema.Attribute.Enumeration<
+      ['pending_manual', 'verified_manual', 'verified_official', 'unresolved']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending_manual'>;
+    fabric: Schema.Attribute.Relation<'manyToOne', 'api::fabric.fabric'> &
+      Schema.Attribute.Required;
+    fabricColourCode: Schema.Attribute.String & Schema.Attribute.Required;
+    fabricDocumentId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    identityKey: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private &
+      Schema.Attribute.Unique;
+    internalColourCode: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::fabric-colour-identity.fabric-colour-identity'
+    > &
+      Schema.Attribute.Private;
+    mappingStatus: Schema.Attribute.Enumeration<
+      ['pending', 'verified', 'rejected', 'promoted']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending'>;
+    mappingVersion: Schema.Attribute.String & Schema.Attribute.Private;
+    notes: Schema.Attribute.Text;
+    officialColourName: Schema.Attribute.String;
+    promotedColour: Schema.Attribute.Relation<'oneToOne', 'api::colour.colour'>;
+    publishedAt: Schema.Attribute.DateTime;
+    source: Schema.Attribute.String;
+    supplier: Schema.Attribute.String & Schema.Attribute.Required;
+    supplierColourCode: Schema.Attribute.String & Schema.Attribute.Required;
+    supplierProductCode: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
 export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
   collectionName: 'fabrics';
   info: {
@@ -831,6 +1015,10 @@ export interface ApiFabricFabric extends Struct.CollectionTypeSchema {
       Schema.Attribute.Private;
     cushions: Schema.Attribute.Relation<'manyToMany', 'api::cushion.cushion'>;
     description: Schema.Attribute.Text;
+    fabricColourIdentities: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::fabric-colour-identity.fabric-colour-identity'
+    >;
     featured_until: Schema.Attribute.DateTime;
     images: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios',
@@ -901,6 +1089,72 @@ export interface ApiFinishOptionFinishOption
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiImageImportBatchImageImportBatch
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'image_import_batches';
+  info: {
+    displayName: 'Image import batch';
+    pluralName: 'image-import-batches';
+    singularName: 'image-import-batch';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: true;
+    };
+  };
+  attributes: {
+    alreadyCompleteFiles: Schema.Attribute.Integer &
+      Schema.Attribute.DefaultTo<0>;
+    completedAt: Schema.Attribute.DateTime;
+    conflictFiles: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    failedFiles: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    firstUploadedAt: Schema.Attribute.DateTime;
+    folderFingerprint: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    folderName: Schema.Attribute.String & Schema.Attribute.Required;
+    lastUploadedAt: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::image-import-batch.image-import-batch'
+    > &
+      Schema.Attribute.Private;
+    manifestSummary: Schema.Attribute.JSON;
+    mappingSchemaVersion: Schema.Attribute.Integer & Schema.Attribute.Required;
+    matchedFiles: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    skippedFiles: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    status: Schema.Attribute.Enumeration<
+      [
+        'analysing',
+        'ready',
+        'uploading',
+        'completed',
+        'completed_with_skips',
+        'partial',
+        'failed',
+      ]
+    > &
+      Schema.Attribute.Required;
+    supplier: Schema.Attribute.String & Schema.Attribute.Required;
+    totalFiles: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    uploadedFiles: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
   };
 }
 
@@ -1033,7 +1287,7 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
     shipping: Schema.Attribute.Decimal & Schema.Attribute.Required;
     shippingAddress: Schema.Attribute.String & Schema.Attribute.Required;
     statusOrder: Schema.Attribute.Enumeration<
-      ['pending', 'processing', 'shipped', 'delivered']
+      ['pending', 'processing', 'shipped', 'delivered', 'cancelled']
     >;
     stripeCustomerId: Schema.Attribute.String;
     stripeSessionId: Schema.Attribute.String;
@@ -1103,6 +1357,178 @@ export interface ApiSiteStateSiteState extends Struct.SingleTypeSchema {
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+  };
+}
+
+export interface ApiStripeWebhookProcessingStripeWebhookProcessing
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'stripe_webhook_processings';
+  info: {
+    displayName: 'Stripe Webhook Processing';
+    pluralName: 'stripe-webhook-processings';
+    singularName: 'stripe-webhook-processing';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    claimedAt: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    claimToken: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Private;
+    completedAt: Schema.Attribute.DateTime;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    eventId: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    eventType: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::stripe-webhook-processing.stripe-webhook-processing'
+    > &
+      Schema.Attribute.Private;
+    orderNumber: Schema.Attribute.String & Schema.Attribute.Unique;
+    publishedAt: Schema.Attribute.DateTime;
+    status: Schema.Attribute.Enumeration<
+      ['processing', 'completed', 'reconciliation_required']
+    > &
+      Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiSupplierFabricColourMappingSupplierFabricColourMapping
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'supplier_fabric_colour_mappings';
+  info: {
+    displayName: 'Supplier fabric colour mapping';
+    pluralName: 'supplier-fabric-colour-mappings';
+    singularName: 'supplier-fabric-colour-mapping';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: true;
+    };
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    evidenceStatus: Schema.Attribute.Enumeration<
+      ['pending_manual', 'verified_manual', 'verified_official', 'unresolved']
+    > &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<'pending_manual'>;
+    fabric: Schema.Attribute.Relation<'manyToOne', 'api::fabric.fabric'> &
+      Schema.Attribute.Required;
+    fabricColourCode: Schema.Attribute.String & Schema.Attribute.Required;
+    fabricDocumentId: Schema.Attribute.String & Schema.Attribute.Required;
+    fabricName: Schema.Attribute.String & Schema.Attribute.Required;
+    internalColourCode: Schema.Attribute.String;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping'
+    > &
+      Schema.Attribute.Private;
+    mappingImport: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::supplier-mapping-import.supplier-mapping-import'
+    > &
+      Schema.Attribute.Required;
+    notes: Schema.Attribute.Text;
+    officialColourName: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    source: Schema.Attribute.String;
+    supplier: Schema.Attribute.String & Schema.Attribute.Required;
+    supplierColourCode: Schema.Attribute.String & Schema.Attribute.Required;
+    supplierProductCode: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiSupplierMappingImportSupplierMappingImport
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'supplier_mapping_imports';
+  info: {
+    displayName: 'Supplier mapping import';
+    pluralName: 'supplier-mapping-imports';
+    singularName: 'supplier-mapping-import';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: true;
+    };
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    fabricCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    importedAt: Schema.Attribute.DateTime;
+    importedBy: Schema.Attribute.JSON;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::supplier-mapping-import.supplier-mapping-import'
+    > &
+      Schema.Attribute.Private;
+    mappingCount: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    mappings: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping'
+    >;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    notes: Schema.Attribute.Text;
+    originalFilename: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    schemaVersion: Schema.Attribute.Integer &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<1>;
+    sha256: Schema.Attribute.String & Schema.Attribute.Required;
+    sourcePayload: Schema.Attribute.JSON & Schema.Attribute.Private;
+    sourceReference: Schema.Attribute.String;
+    sourceType: Schema.Attribute.String &
+      Schema.Attribute.DefaultTo<'json_upload'>;
+    status: Schema.Attribute.Enumeration<
+      [
+        'uploaded',
+        'validating',
+        'invalid',
+        'ready',
+        'active',
+        'superseded',
+        'rejected',
+      ]
+    > &
+      Schema.Attribute.Required;
+    supplier: Schema.Attribute.String & Schema.Attribute.Required;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    validationSummary: Schema.Attribute.JSON;
+    version: Schema.Attribute.String & Schema.Attribute.Required;
   };
 }
 
@@ -1649,6 +2075,7 @@ declare module '@strapi/strapi' {
       'admin::user': AdminUser;
       'api::blind-type.blind-type': ApiBlindTypeBlindType;
       'api::brand.brand': ApiBrandBrand;
+      'api::canonical-colour-registry.canonical-colour-registry': ApiCanonicalColourRegistryCanonicalColourRegistry;
       'api::care-instruction.care-instruction': ApiCareInstructionCareInstruction;
       'api::color-code.color-code': ApiColorCodeColorCode;
       'api::colour.colour': ApiColourColour;
@@ -1659,14 +2086,20 @@ declare module '@strapi/strapi' {
       'api::cushion-size.cushion-size': ApiCushionSizeCushionSize;
       'api::cushion-type.cushion-type': ApiCushionTypeCushionType;
       'api::cushion.cushion': ApiCushionCushion;
+      'api::fabric-colour-asset.fabric-colour-asset': ApiFabricColourAssetFabricColourAsset;
+      'api::fabric-colour-identity.fabric-colour-identity': ApiFabricColourIdentityFabricColourIdentity;
       'api::fabric.fabric': ApiFabricFabric;
       'api::finish-option.finish-option': ApiFinishOptionFinishOption;
+      'api::image-import-batch.image-import-batch': ApiImageImportBatchImageImportBatch;
       'api::lining.lining': ApiLiningLining;
       'api::mechanisation.mechanisation': ApiMechanisationMechanisation;
       'api::order-management.order-management': ApiOrderManagementOrderManagement;
       'api::order.order': ApiOrderOrder;
       'api::pricing-rule.pricing-rule': ApiPricingRulePricingRule;
       'api::site-state.site-state': ApiSiteStateSiteState;
+      'api::stripe-webhook-processing.stripe-webhook-processing': ApiStripeWebhookProcessingStripeWebhookProcessing;
+      'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping': ApiSupplierFabricColourMappingSupplierFabricColourMapping;
+      'api::supplier-mapping-import.supplier-mapping-import': ApiSupplierMappingImportSupplierMappingImport;
       'api::trimming.trimming': ApiTrimmingTrimming;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;

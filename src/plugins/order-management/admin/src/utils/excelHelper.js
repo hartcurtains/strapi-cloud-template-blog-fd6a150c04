@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import adminCatalogRoutes from '../../../shared/routes';
 
 export const excelHelper = {
   // Export all products to multi-sheet Excel
@@ -2027,7 +2028,7 @@ export const excelHelper = {
       console.log(`📤 Batch ${batchIdx + 1}/${totalBatches}: ${batchFabrics.length} fabrics...`);
       
       try {
-        const response = await fetch('/api/order-management/import', {
+        const response = await fetch(adminCatalogRoutes.import, {
           method: 'POST',
           headers: getAuthHeaders(),
           body: JSON.stringify({ data: payload })

@@ -1,0 +1,19 @@
+{
+  "base": "/order-management",
+  "import": "/order-management/import",
+  "createFabricWithColour": "/order-management/create-fabric-with-colour",
+  "bulkImageUpload": "/order-management/bulk-image-upload",
+  "ashleyWildeAnalyse": "/order-management/ashley-wilde/analyse",
+  "ashleyWildeHistory": "/order-management/ashley-wilde/history",
+  "ashleyWildeMode": "/order-management/ashley-wilde/mode",
+  "ashleyWildePromote": "/order-management/ashley-wilde/promote",
+  "ashleyWildePromotionPreview": "/order-management/ashley-wilde/promote/preview",
+  "ashleyWildePromotionApply": "/order-management/ashley-wilde/promote/apply",
+  "supplierMappings": "/order-management/supplier-colour-mappings",
+  "supplierMappingsUpload": "/order-management/supplier-colour-mappings/upload",
+  "supplierMappingsApply": "/order-management/supplier-colour-mappings/apply",
+  "supplierMappingsActive": "/order-management/supplier-colour-mappings/active",
+  "supplierMappingsExport": "/order-management/supplier-colour-mappings/export",
+  "supplierMappingsFallbackExport": "/order-management/supplier-colour-mappings/export-repository-fallback",
+  "supplierMappingsReenrich": "/order-management/supplier-colour-mappings/reenrich"
+}

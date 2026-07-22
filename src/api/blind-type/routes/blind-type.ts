@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+const { mutationPolicyConfig } = require('../../../catalog/catalog-mutation-surface');
 
 export default {
   routes: [
@@ -26,25 +27,19 @@ export default {
       method: 'POST',
       path: '/blind-types',
       handler: 'blind-type.create',
-      config: {
-        auth: false, // Allow admin access for creating
-      },
+      config: mutationPolicyConfig('api::blind-type.blind-type'),
     },
     {
       method: 'PUT',
       path: '/blind-types/:id',
       handler: 'blind-type.update',
-      config: {
-        auth: false, // Allow admin access for updating
-      },
+      config: mutationPolicyConfig('api::blind-type.blind-type'),
     },
     {
       method: 'DELETE',
       path: '/blind-types/:id',
       handler: 'blind-type.delete',
-      config: {
-        auth: false, // Allow admin access for deleting
-      },
+      config: mutationPolicyConfig('api::blind-type.blind-type'),
     },
   ],
 };

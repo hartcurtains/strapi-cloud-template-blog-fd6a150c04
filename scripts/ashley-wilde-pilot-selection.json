@@ -1,0 +1,13 @@
+{
+  "supplier": "Ashley Wilde",
+  "selectedImages": [
+    { "source": "../../Fabric-Images/ALASKAAQ.jpg", "relativePath": "ALASKAAQ.jpg", "reason": "existing root-level duplicate scenario; Alaska + AQ (Aqua)" },
+    { "source": "../../Fabric-Images/Alaska Flat Shots/ALASKAAQ.jpg", "relativePath": "Alaska Flat Shots/ALASKAAQ.jpg", "reason": "nested duplicate of the existing AQ image" },
+    { "source": "../../Fabric-Images/Alaska Flat Shots/ALASKAMA.jpg", "relativePath": "Alaska Flat Shots/ALASKAMA.jpg", "reason": "unresolved/missing official colour case; Alaska + MA" },
+    { "source": "../../Fabric-Images/Atlantic Flat Shots/BALTICAQ.jpg", "relativePath": "Atlantic Flat Shots/BALTICAQ.jpg", "reason": "second product using repeated AQ suffix (Baltic Aqua)" },
+    { "source": "../../Fabric-Images/Portofino Flat Shots/AREZZOIN.jpg", "relativePath": "Portofino Flat Shots/AREZZOIN.jpg", "reason": "existing global Ink code; Arezzo + IN" },
+    { "source": "../../Fabric-Images/Caversham/Flats/BERKELEYCA copy.jpg", "relativePath": "Caversham/Flats/BERKELEYCA copy.jpg", "reason": "overlap-safe exact prefix; Berkeley + CA (Caramel)" },
+    { "source": "../../Fabric-Images/Caversham/Flats/BERKELEYDO copy.jpg", "relativePath": "Caversham/Flats/BERKELEYDO copy.jpg", "reason": "repeated DO suffix; Berkeley + DO (Dove)" },
+    { "source": "../../Fabric-Images/Caversham/Flats/CHERINGTONDO copy.jpg", "relativePath": "Caversham/Flats/CHERINGTONDO copy.jpg", "reason": "same DO suffix under a different product; Cherington + DO (Dove)" }
+  ]
+}

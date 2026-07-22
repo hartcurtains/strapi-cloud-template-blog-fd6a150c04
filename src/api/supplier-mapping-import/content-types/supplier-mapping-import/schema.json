@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "supplier_mapping_imports",
+  "info": {
+    "singularName": "supplier-mapping-import",
+    "pluralName": "supplier-mapping-imports",
+    "displayName": "Supplier mapping import"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {
+    "content-manager": { "visible": false },
+    "content-type-builder": { "visible": true }
+  },
+  "attributes": {
+    "supplier": { "type": "string", "required": true },
+    "name": { "type": "string", "required": true },
+    "version": { "type": "string", "required": true },
+    "schemaVersion": { "type": "integer", "required": true, "default": 1 },
+    "status": {
+      "type": "enumeration",
+      "required": true,
+      "enum": ["uploaded", "validating", "invalid", "ready", "active", "superseded", "rejected"]
+    },
+    "originalFilename": { "type": "string" },
+    "sha256": { "type": "string", "required": true },
+    "importedAt": { "type": "datetime" },
+    "importedBy": { "type": "json" },
+    "mappingCount": { "type": "integer", "default": 0 },
+    "fabricCount": { "type": "integer", "default": 0 },
+    "validationSummary": { "type": "json" },
+    "notes": { "type": "text" },
+    "isActive": { "type": "boolean", "default": false },
+    "sourceType": { "type": "string", "default": "json_upload" },
+    "sourceReference": { "type": "string" },
+    "sourcePayload": { "type": "json", "private": true },
+    "mappings": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping",
+      "mappedBy": "mappingImport"
+    }
+  }
+}

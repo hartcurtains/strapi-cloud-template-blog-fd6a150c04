@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "supplier": "Ashley Wilde",
+  "generatedAt": "2026-07-19T00:00:00.000Z",
+  "mode": "pilot",
+  "products": {
+    "alaska": {
+      "supplierProductCode": "ALASKA",
+      "fabricName": "Alaska",
+      "fabricDocumentId": "okwshze5maa8f02rmu0v5azq",
+      "productName": "Alaska",
+      "filenamePrefixes": ["ALASKA"],
+      "colours": {
+        "AQ": {
+          "resolved": true,
+          "supplierColourCode": "AQ",
+          "supplierColourName": "Aqua",
+          "internalColourCode": "AQ",
+          "sourceImage": "Alaska Flat Shots/ALASKAAQ.jpg",
+          "evidence": {
+            "productUrl": "https://ashleywildegroup.com/alaska-wine/",
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?manufacturer=Ashley+Wilde",
+            "imageUrl": null,
+            "mediaBasename": "ALASKAAQ.jpg",
+            "extractionMethods": ["official swatch title", "local media basename"],
+            "sourceText": "Alaska Aqua; Product Code: ALASKA",
+            "fetchedAt": "2026-07-19T00:00:00.000Z",
+            "contentHash": null,
+            "confidence": 1
+          }
+        },
+        "MA": {
+          "resolved": false,
+          "reason": "The local ALASKAMA.jpg suffix was not found as an official Alaska colourway; it remains blocked for review."
+        }
+      }
+    },
+    "arezzo": {
+      "supplierProductCode": "AREZZO",
+      "fabricName": "Arezzo",
+      "fabricDocumentId": "nc6cfzbtg6ey0b4lq7l1r6w7",
+      "productName": "Arezzo",
+      "filenamePrefixes": ["AREZZO"],
+      "colours": {
+        "IN": {
+          "resolved": true,
+          "supplierColourCode": "IN",
+          "supplierColourName": "Ink",
+          "internalColourCode": "IN",
+          "sourceImage": "Portofino Flat Shots/AREZZOIN.jpg",
+          "evidence": {
+            "productUrl": "https://ashleywildegroup.com/arezzo/",
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?p=4",
+            "imageUrl": null,
+            "mediaBasename": "AREZZOIN.jpg",
+            "extractionMethods": ["official swatch title", "local media basename"],
+            "sourceText": "Arezzo Ink; Product Code: AREZZO",
+            "fetchedAt": "2026-07-19T00:00:00.000Z",
+            "contentHash": null,
+            "confidence": 1
+          }
+        }
+      }
+    },
+    "baltic": {
+      "supplierProductCode": "BALTIC",
+      "fabricName": "Baltic",
+      "fabricDocumentId": "zqlg5sc4srvnh7dgseu27har",
+      "productName": "Baltic",
+      "filenamePrefixes": ["BALTIC"],
+      "colours": {
+        "AQ": {
+          "resolved": true,
+          "supplierColourCode": "AQ",
+          "supplierColourName": "Aqua",
+          "internalColourCode": "AQ",
+          "sourceImage": "Atlantic Flat Shots/BALTICAQ.jpg",
+          "evidence": {
+            "productUrl": "https://ashleywildegroup.com/baltic-aqua/",
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?manufacturer=Ashley+Wilde",
+            "imageUrl": null,
+            "mediaBasename": "BALTICAQ.jpg",
+            "extractionMethods": ["official swatch title", "local media basename"],
+            "sourceText": "Baltic Aqua; Product Code: BALTIC",
+            "fetchedAt": "2026-07-19T00:00:00.000Z",
+            "contentHash": null,
+            "confidence": 1
+          }
+        }
+      }
+    },
+    "berkeley": {
+      "supplierProductCode": "BERKELEY",
+      "fabricName": "Berkeley",
+      "fabricDocumentId": "rb4rpq09c7lw7hhw3f28hsdn",
+      "productName": "Berkeley",
+      "filenamePrefixes": ["BERKELEY"],
+      "colours": {
+        "CA": {
+          "resolved": true,
+          "supplierColourCode": "CA",
+          "supplierColourName": "Caramel",
+          "internalColourCode": "CA",
+          "sourceImage": "Caversham/Flats/BERKELEYCA copy.jpg",
+          "evidence": {
+            "productUrl": "https://ashleywildegroup.com/berkeley-dove/",
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?p=2",
+            "imageUrl": null,
+            "mediaBasename": "BERKELEYCA copy.jpg",
+            "extractionMethods": ["official swatch title", "local media basename"],
+            "sourceText": "Berkeley Caramel; Product Code: BERKELEY",
+            "fetchedAt": "2026-07-19T00:00:00.000Z",
+            "contentHash": null,
+            "confidence": 1
+          }
+        },
+        "DO": {
+          "resolved": true,
+          "supplierColourCode": "DO",
+          "supplierColourName": "Dove",
+          "internalColourCode": "DO",
+          "sourceImage": "Caversham/Flats/BERKELEYDO copy.jpg",
+          "evidence": {
+            "productUrl": "https://ashleywildegroup.com/berkeley-dove/",
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?p=2",
+            "imageUrl": null,
+            "mediaBasename": "BERKELEYDO copy.jpg",
+            "extractionMethods": ["official swatch title", "local media basename"],
+            "sourceText": "Berkeley Dove; Product Code: BERKELEY",
+            "fetchedAt": "2026-07-19T00:00:00.000Z",
+            "contentHash": null,
+            "confidence": 1
+          }
+        }
+      }
+    },
+    "cherington": {
+      "supplierProductCode": "CHERINGTON",
+      "fabricName": "Cherington",
+      "fabricDocumentId": "kr8nc7336fp0uhu5qxm6e74x",
+      "productName": "Cherington",
+      "filenamePrefixes": ["CHERINGTON"],
+      "colours": {
+        "DO": {
+          "resolved": true,
+          "supplierColourCode": "DO",
+          "supplierColourName": "Dove",
+          "internalColourCode": "DO",
+          "sourceImage": "Caversham/Flats/CHERINGTONDO copy.jpg",
+          "evidence": {
+            "productUrl": "https://ashleywildegroup.com/cherington-dove/",
+            "colourwayUrl": "https://ashleywildegroup.com/fabrics/swatch-search/?p=10",
+            "imageUrl": null,
+            "mediaBasename": "CHERINGTONDO copy.jpg",
+            "extractionMethods": ["official swatch title", "local media basename"],
+            "sourceText": "Cherington Dove; Product Code: CHERINGTON",
+            "fetchedAt": "2026-07-19T00:00:00.000Z",
+            "contentHash": null,
+            "confidence": 1
+          }
+        }
+      }
+    }
+  }
+}
