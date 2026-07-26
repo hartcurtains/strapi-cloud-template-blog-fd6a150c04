@@ -15,6 +15,28 @@ function validEvent(body) {
   return body && EVENT_ID.test(body.eventId) && (!body.eventType || EVENT_TYPE.test(body.eventType));
 }
 
+function sanitiseErrorMessage(value: unknown) {
+  if (typeof value !== 'string') return 'Unknown database error';
+  return value
+    .replace(/Bearer\s+[^\s]+/gi, 'Bearer [redacted]')
+    .replace(/\b(?:evt|cs|cus|pi|tok|whsec|sk|pk)_[A-Za-z0-9_]+\b/gi, '[redacted-id]')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, '[redacted-uuid]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+    .replace(/'[^']*'/g, "'[redacted-value]'")
+    .slice(0, 500);
+}
+
+function sanitisedDatabaseError(error: unknown) {
+  const source = error && typeof error === 'object' ? error as Record<string, unknown> : {};
+  return {
+    name: typeof source.name === 'string' ? source.name.slice(0, 100) : 'Error',
+    message: sanitiseErrorMessage(source.message),
+    code: typeof source.code === 'string' || typeof source.code === 'number'
+      ? String(source.code).slice(0, 50)
+      : undefined,
+  };
+}
+
 export default factories.createCoreController('api::stripe-webhook-processing.stripe-webhook-processing' as any, ({ strapi }) => ({
   async claimEvent(ctx) {
     const body = ctx.request.body as any;
@@ -24,7 +46,7 @@ export default factories.createCoreController('api::stripe-webhook-processing.st
     try {
       return ctx.send(await lifecycle(strapi).claimEvent(body));
     } catch (error) {
-      strapi.log.error('Stripe webhook event claim failed');
+      strapi.log.error('Stripe webhook event claim failed', sanitisedDatabaseError(error));
       return ctx.internalServerError('Lifecycle operation failed');
     }
   },

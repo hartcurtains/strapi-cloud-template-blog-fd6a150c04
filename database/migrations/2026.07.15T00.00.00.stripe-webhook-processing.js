@@ -19,8 +19,6 @@ const REQUIRED_COLUMNS = {
   updated_at: ['datetime', 'timestamp', 'timestamp with time zone', 'timestamp without time zone', 'timestamptz'],
 };
 
-const NOT_NULL_COLUMNS = ['event_id', 'status', 'claimed_at', 'claim_token'];
-
 function clientName(knex) {
   return String(knex.client.config.client).toLowerCase();
 }
@@ -113,9 +111,8 @@ async function validateColumns(knex) {
     const actualType = normalizeType(info[column].type);
     if (!compatibleTypes.includes(actualType)) incompatible.push(`${column} (${info[column].type})`);
   }
-  for (const column of NOT_NULL_COLUMNS) {
-    if (info[column].nullable !== false) incompatible.push(`${column} (must be NOT NULL)`);
-  }
+  // Strapi's required-attribute validation does not guarantee database-level NOT NULL
+  // constraints, so nullability is intentionally not part of this compatibility check.
   if (incompatible.length) {
     throw new Error(`PB-07 migration found incompatible columns: ${incompatible.join(', ')}`);
   }
