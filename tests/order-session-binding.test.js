@@ -23,6 +23,7 @@ async function fixture(t, options = {}) {
     table.string('status_order').nullable();
     table.string('payment_status').nullable();
     table.string('stripe_session_id').nullable();
+    table.string('stripe_customer_id').nullable();
     table.datetime('updated_at').nullable();
   });
   return { knex, store: createSessionBindingStore(knex, options) };
@@ -31,31 +32,42 @@ async function fixture(t, options = {}) {
 async function insertOrder(knex, overrides = {}) {
   await knex('orders').insert({
     order_number: 'ORD-BIND', status_order: 'pending', payment_status: 'pending',
-    stripe_session_id: null, ...overrides,
+    stripe_session_id: null, stripe_customer_id: null, ...overrides,
   });
 }
 
-test('binds and confirms the Stripe-created Session ID; identical binding is idempotent', async t => {
+test('binds and confirms the Stripe-created Session and customer IDs; identical binding is idempotent', async t => {
   const { knex, store } = await fixture(t);
   await insertOrder(knex);
-  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION }), { result: 'bound' });
+  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'bound' });
   assert.equal((await knex('orders').first()).stripe_session_id, SESSION);
-  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION }), { result: 'already_bound' });
+  assert.equal((await knex('orders').first()).stripe_customer_id, 'cus_test_customer_123');
+  assert.equal((await knex('orders').first()).payment_status, 'pending');
+  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'already_bound' });
+});
+
+test('production-shaped pending order with null payment status is normalized during binding', async t => {
+  const { knex, store } = await fixture(t);
+  await insertOrder(knex, { payment_status: null });
+  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'bound' });
+  assert.deepEqual(await knex('orders').first().select('payment_status', 'stripe_session_id', 'stripe_customer_id'), {
+    payment_status: 'pending', stripe_session_id: SESSION, stripe_customer_id: 'cus_test_customer_123',
+  });
 });
 
 test('a different existing Session ID conflicts and is never replaced', async t => {
   const { knex, store } = await fixture(t);
   await insertOrder(knex, { stripe_session_id: 'cs_test_original_session_456' });
-  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION }), { result: 'conflict' });
+  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'conflict' });
   assert.equal((await knex('orders').first()).stripe_session_id, 'cs_test_original_session_456');
 });
 
 test('missing and ambiguous order identity fail closed', async t => {
   const { knex, store } = await fixture(t);
-  assert.deepEqual(await store.bind({ orderNumber: 'ORD-MISSING', stripeSessionId: SESSION }), { result: 'not_found' });
+  assert.deepEqual(await store.bind({ orderNumber: 'ORD-MISSING', stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'not_found' });
   await insertOrder(knex);
   await insertOrder(knex);
-  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION }), { result: 'not_found' });
+  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'not_found' });
   assert.equal(await knex('orders').whereNotNull('stripe_session_id').count({ count: '*' }).first().then(row => Number(row.count)), 0);
 });
 
@@ -69,7 +81,7 @@ test('paid, cancelled, processing, and malformed states are ineligible', async t
   ];
   for (const [order_number, state] of states) await insertOrder(knex, { order_number, ...state });
   for (const [orderNumber] of states) {
-    assert.deepEqual(await store.bind({ orderNumber, stripeSessionId: SESSION }), { result: 'not_eligible' });
+    assert.deepEqual(await store.bind({ orderNumber, stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'not_eligible' });
   }
   assert.equal(await knex('orders').whereNotNull('stripe_session_id').count({ count: '*' }).first().then(row => Number(row.count)), 0);
 });
@@ -79,7 +91,7 @@ test('conditional race recheck never attaches after the order becomes paid', asy
     beforeConditionalUpdate: async db => { await db('orders').where({ order_number: 'ORD-BIND' }).update({ payment_status: 'paid' }); },
   });
   await insertOrder(knex);
-  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION }), { result: 'not_eligible' });
+  assert.deepEqual(await store.bind({ orderNumber: 'ORD-BIND', stripeSessionId: SESSION, stripeCustomerId: 'cus_test_customer_123' }), { result: 'not_eligible' });
   assert.equal((await knex('orders').first()).stripe_session_id, null);
 });
 
