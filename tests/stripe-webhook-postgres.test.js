@@ -116,6 +116,28 @@ test('PostgreSQL migration creates and safely reruns deterministic unique indexe
   assert.deepEqual(await uniqueObjects(knex), first);
 });
 
+test('PostgreSQL event claims support ON CONFLICT (event_id) DO NOTHING', { skip: !configured }, async t => {
+  const { knex } = await postgresFixture(t);
+  await migration.up(knex);
+  const row = {
+    document_id: randomUUID(),
+    event_id: 'evt_pg_on_conflict',
+    order_number: null,
+    status: 'processing',
+    claimed_at: new Date(),
+    completed_at: null,
+    event_type: 'checkout.session.completed',
+    claim_token: randomUUID(),
+    created_at: new Date(),
+    updated_at: new Date(),
+  };
+  await knex('stripe_webhook_processings').insert(row);
+  await knex('stripe_webhook_processings').insert({ ...row, document_id: randomUUID(), claim_token: randomUUID() })
+    .onConflict('event_id')
+    .ignore();
+  assert.equal(await knex('stripe_webhook_processings').where({ event_id: row.event_id }).count('*').first().then(value => Number(value.count)), 1);
+});
+
 test('PostgreSQL migration accepts equivalent pre-existing unique constraints', { skip: !configured }, async t => {
   const { knex } = await postgresFixture(t);
   await knex.raw('ALTER TABLE ?? ADD CONSTRAINT ?? UNIQUE (??)', [

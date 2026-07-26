@@ -137,6 +137,17 @@ export default {
    * run jobs, or perform some special logic.
    */
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    // Strapi Cloud can disable repository user migrations, and this project
+    // intentionally defaults DATABASE_RUN_MIGRATIONS to false. Apply PB-07
+    // explicitly after content-type synchronization so production cannot boot
+    // without the constraints required by the webhook claim SQL.
+    if (process.env.NODE_ENV === 'production') {
+      const stripeWebhookMigration = require('../database/migrations/2026.07.15T00.00.00.stripe-webhook-processing.js');
+      await stripeWebhookMigration.up(strapi.db.connection);
+    } else {
+      console.info('[PB-07] migration skipped outside production');
+    }
+
     // The migration can run before Strapi synchronizes new content types on a
     // fresh database. Re-run its idempotent index step after schema sync so
     // the composite staging uniqueness is present on the first boot as well.

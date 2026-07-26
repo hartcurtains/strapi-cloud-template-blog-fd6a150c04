@@ -88,6 +88,47 @@ async function indexes(knex) {
   throw new Error(`PB-07 migration does not support database client ${client}`);
 }
 
+async function constraints(knex) {
+  const client = clientName(knex);
+  if (client.includes('pg') || client.includes('postgres')) {
+    const result = await knex.raw(`
+      SELECT c.conname AS name,
+             CASE c.contype
+               WHEN 'p' THEN 'primary key'
+               WHEN 'u' THEN 'unique'
+               WHEN 'f' THEN 'foreign key'
+               WHEN 'c' THEN 'check'
+               ELSE c.contype::text
+             END AS type,
+             pg_get_constraintdef(c.oid) AS definition
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace ns ON ns.oid = t.relnamespace
+       WHERE ns.nspname = current_schema()
+         AND t.relname = ?
+       ORDER BY c.conname
+    `, [TABLE]);
+    return rowsFromRaw(result);
+  }
+
+  // SQLite and MySQL expose the relevant uniqueness through indexes(), while
+  // PostgreSQL needs pg_constraint as well because a UNIQUE constraint is a
+  // separate schema object backed by an index.
+  return [];
+}
+
+function formatIndexes(allIndexes) {
+  return allIndexes.length
+    ? allIndexes.map(index => `${index.name}(${index.columns.join(',')}${index.unique ? ', unique' : ''})`).join(', ')
+    : '(none)';
+}
+
+function formatConstraints(allConstraints) {
+  return allConstraints.length
+    ? allConstraints.map(constraint => `${constraint.name}(${constraint.type}: ${constraint.definition})`).join(', ')
+    : '(none)';
+}
+
 function hasUniqueIndex(allIndexes, column) {
   return allIndexes.some(index => index.unique &&
     Array.isArray(index.columns) &&
@@ -129,25 +170,50 @@ async function validateStatuses(knex) {
 }
 
 async function ensureUniqueIndex(knex, column, name) {
-  if (hasUniqueIndex(await indexes(knex), column)) return;
-  await knex.raw('CREATE UNIQUE INDEX ?? ON ?? (??)', [name, TABLE, column]);
+  if (hasUniqueIndex(await indexes(knex), column)) return false;
+  const createSql = clientName(knex).includes('pg') || clientName(knex).includes('postgres')
+    ? 'CREATE UNIQUE INDEX IF NOT EXISTS ?? ON ?? (??)'
+    : 'CREATE UNIQUE INDEX ?? ON ?? (??)';
+  await knex.raw(createSql, [name, TABLE, column]);
   if (!hasUniqueIndex(await indexes(knex), column)) {
     throw new Error(`PB-07 migration failed to verify unique index for ${column}`);
   }
+  return true;
 }
 
 module.exports = {
   async up(knex) {
-    if (!await knex.schema.hasTable(TABLE)) {
-      throw new Error('PB-07 migration requires the Strapi content-type table first; deploy with schema synchronization before running this migration');
-    }
+    console.info(`[PB-07] migration started for table ${TABLE}`);
+    try {
+      if (!await knex.schema.hasTable(TABLE)) {
+        throw new Error('PB-07 migration requires the Strapi content-type table first; deploy with schema synchronization before running this migration');
+      }
+      console.info(`[PB-07] table found: ${TABLE}`);
 
-    await knex.transaction(async trx => {
-      await validateColumns(trx);
-      await validateStatuses(trx);
-      await ensureUniqueIndex(trx, 'event_id', EVENT_INDEX);
-      await ensureUniqueIndex(trx, 'order_number', ORDER_INDEX);
-    });
+      await knex.transaction(async trx => {
+        await validateColumns(trx);
+        await validateStatuses(trx);
+
+        const beforeIndexes = await indexes(trx);
+        const beforeConstraints = await constraints(trx);
+        console.info(`[PB-07] indexes found: ${formatIndexes(beforeIndexes)}`);
+        console.info(`[PB-07] constraints found: ${formatConstraints(beforeConstraints)}`);
+
+        const created = [];
+        if (await ensureUniqueIndex(trx, 'event_id', EVENT_INDEX)) created.push(EVENT_INDEX);
+        if (await ensureUniqueIndex(trx, 'order_number', ORDER_INDEX)) created.push(ORDER_INDEX);
+        console.info(`[PB-07] indexes ${created.length ? `created: ${created.join(', ')}` : 'already present; none created'}`);
+
+        const afterIndexes = await indexes(trx);
+        const afterConstraints = await constraints(trx);
+        console.info(`[PB-07] indexes found after migration: ${formatIndexes(afterIndexes)}`);
+        console.info(`[PB-07] constraints found after migration: ${formatConstraints(afterConstraints)}`);
+      });
+      console.info(`[PB-07] migration completed for table ${TABLE}`);
+    } catch (error) {
+      console.error('[PB-07] migration failed:', error);
+      throw error;
+    }
   },
 
   async down() {
