@@ -10,37 +10,25 @@ export default {
       method: 'GET',
       path: '/orders',
       handler: 'order.find',
-      config: {
-        auth: false,
-        policies: ['global::server-internal-auth'],
-      },
+      config: {},
     },
     {
       method: 'GET',
       path: '/orders/:id',
       handler: 'order.findOne',
-      config: {
-        auth: false,
-        policies: ['global::server-internal-auth'],
-      },
+      config: {},
     },
     {
       method: 'POST',
       path: '/orders',
       handler: 'order.create',
-      config: {
-        auth: false,
-        policies: ['global::server-internal-auth'],
-      },
+      config: {},
     },
     {
       method: 'PUT',
       path: '/orders/:id',
       handler: 'order.update',
-      config: {
-        auth: false,
-        policies: ['global::server-internal-auth'],
-      },
+      config: {},
     },
   ],
 };
