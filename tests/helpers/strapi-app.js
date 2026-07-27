@@ -72,6 +72,14 @@ async function startStrapiTestApp() {
   const adminToken = app.service('admin::token').createJwtToken(adminUser);
   const customerToken = app.plugin('users-permissions').service('jwt').issue({ id: 44, role: { type: 'authenticated' } });
   const forgedAdminToken = app.plugin('users-permissions').service('jwt').issue({ id: adminUser.id, admin: true, role: 'strapi-super-admin' });
+  const orderApiToken = await app.service('admin::api-token').create({
+    name: `order-api-${process.pid}`,
+    type: 'full-access',
+    lifespan: null,
+  });
+  // Mirror production: Vercel's STRAPI_API_TOKEN is the actual Strapi API token
+  // used by both the normal Strapi auth layer and the pre-body mutation guard.
+  process.env.STRAPI_API_TOKEN = orderApiToken.accessKey;
 
   return {
     app,
@@ -80,6 +88,7 @@ async function startStrapiTestApp() {
     internalToken: process.env.STRAPI_API_TOKEN,
     abandonmentToken: process.env.ABANDONED_PAYMENTS_TRANSITION_SECRET,
     adminToken,
+    orderApiToken: orderApiToken.accessKey,
     customerToken,
     forgedAdminToken,
     async stop() { await app.destroy(); },
