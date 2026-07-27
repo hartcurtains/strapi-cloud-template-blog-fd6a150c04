@@ -12,6 +12,11 @@ const COLOR_CODE_UID = 'api::color-code.color-code';
 const FABRIC_UID = 'api::fabric.fabric';
 const MAX_JSON_BYTES = 5 * 1024 * 1024;
 const EVIDENCE_STATUSES = new Set(['pending_manual', 'verified_manual', 'verified_official', 'unresolved']);
+const APPROVED_CATALOGUE_ALIASES = Object.freeze([
+  // Read-only catalogue evidence: input "Colette" maps to the unique
+  // Ashley Wilde product-id family COLLETTE (FAB-COLLETTE-8936).
+  { supplier: 'Ashley Wilde', alias: 'Colette', catalogueProductCode: 'COLLETTE' },
+]);
 
 function clean(value) { return String(value || '').normalize('NFKC').trim(); }
 function nameKey(value) { return clean(value).replace(/\s+/g, ' ').toLocaleLowerCase(); }
@@ -19,7 +24,18 @@ function compactNameKey(value) { return clean(value).toLocaleLowerCase().replace
 function codeKey(value) { return normalizeToken(value); }
 function relationId(value) { return value?.documentId || value?.id || value; }
 function unique(values) { return [...new Set(values.filter(Boolean))]; }
-function scopeKey(row) { return [clean(row.supplier), String(row.fabricDocumentId || ''), clean(row.supplierProductCode), clean(row.supplierColourCode)].join('|'); }
+function scopeKey(row) { return [clean(row.supplier), String(row.fabricDocumentId || ''), codeKey(row.supplierProductCode), codeKey(row.supplierColourCode)].join('|'); }
+function canonicalMappingKey(row) {
+  return [
+    clean(row.supplier),
+    String(row.fabricDocumentId || ''),
+    codeKey(row.supplierProductCode),
+    codeKey(row.supplierColourCode),
+    codeKey(row.fabricColourCode),
+    normalizeCanonicalColourName(row.officialColourName),
+    codeKey(row.internalColourCode),
+  ].join('|');
+}
 function hashJson(value) { return crypto.createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex'); }
 
 function assertJsonSize(value) {
@@ -124,6 +140,13 @@ function approvedFabricAliases(supplier) {
       }
     }
   } catch { /* The live catalogue remains authoritative if the optional repository map is unavailable. */ }
+  for (const entry of APPROVED_CATALOGUE_ALIASES) {
+    if (nameKey(entry.supplier) !== nameKey(supplier)) continue;
+    const key = compactNameKey(entry.alias);
+    const owners = aliases.get(key) || new Set();
+    owners.add(codeKey(entry.catalogueProductCode));
+    aliases.set(key, owners);
+  }
   return aliases;
 }
 
@@ -174,7 +197,7 @@ function resolveFabricFromCatalogue(catalogue, row, aliases = new Map()) {
     aliasOwners?.size ? catalogue.filter((fabric) => productIdDerivedCodes(fabric).some((code) => aliasOwners.has(code)) || aliasOwners.has(codeKey(fabric.supplierProductCode))) : [],
     'approved_fabric_alias',
   );
-  if (byAlias) return byAlias;
+  if (byAlias) return { ...byAlias, alias: row.fabricName };
 
   return { status: 'missing', candidates: [] };
 }
@@ -202,8 +225,8 @@ async function loadRegistry(strapi, supplier) {
   return { byCode, byName, registryRows: registryRows || [] };
 }
 
-function addIssue(issues, type, message, rowIndex = null) {
-  issues.push({ type, message, rowIndex });
+function addIssue(issues, type, message, rowIndex = null, details = null) {
+  issues.push({ type, message, rowIndex, ...(details ? { details } : {}) });
 }
 
 function pushCandidate(candidates, value) {
@@ -302,7 +325,9 @@ function reconcileInternalCodes(rows, registry) {
         canonicalColourName: row.officialColourName,
         submittedCodeOwner: submittedOwner ? { internalColourCode: submittedOwner.internalColourCode, canonicalColourName: submittedOwner.canonicalColourName, source: submittedOwner.source } : null,
         resolvedFrom: existing ? existing.source : allocationReason,
+        submittedEvidence: row.submittedReconciliationEvidence || null,
       };
+      row.reusedExistingGlobalColour = Boolean(existing);
       if (reason) reconciliations.push({
         rowIndex: row.rowIndex,
         supplierProductCode: row.supplierProductCode,
@@ -316,6 +341,65 @@ function reconcileInternalCodes(rows, registry) {
     }
   }
   return reconciliations;
+}
+
+function stableJson(value) {
+  if (value === null || value === undefined) return '';
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (typeof value === 'object') return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function mergedEvidence(rows) {
+  const entries = rows.map((row) => row.reconciliationEvidence).filter(Boolean)
+    .map((entry) => ({ value: entry, sortKey: stableJson(entry) }))
+    .sort((left, right) => left.sortKey.localeCompare(right.sortKey));
+  const uniqueEntries = entries.filter((entry, index) => index === 0 || entry.sortKey !== entries[index - 1].sortKey).map((entry) => entry.value);
+  if (!uniqueEntries.length) return null;
+  return uniqueEntries.length === 1 ? uniqueEntries[0] : { merged: true, entries: uniqueEntries };
+}
+
+function mergedText(rows, property) {
+  const values = unique(rows.map((row) => clean(row[property])).filter(Boolean)).sort((left, right) => left.localeCompare(right));
+  return values.length ? values.join(' | ') : null;
+}
+
+function collapseExactDuplicates(rows) {
+  const groups = new Map();
+  for (const row of rows) {
+    const key = scopeKey(row);
+    const group = groups.get(key) || [];
+    group.push(row);
+    groups.set(key, group);
+  }
+  const retained = [];
+  const exactDuplicateGroups = [];
+  const contradictoryGroups = [];
+  for (const [value, grouped] of groups.entries()) {
+    const variants = new Map();
+    for (const row of grouped) {
+      const variant = canonicalMappingKey(row);
+      const rowsForVariant = variants.get(variant) || [];
+      rowsForVariant.push(row);
+      variants.set(variant, rowsForVariant);
+    }
+    if (grouped.length > 1 && variants.size === 1) {
+      const ordered = grouped.slice().sort((left, right) => left.rowIndex - right.rowIndex);
+      const representative = { ...ordered[0] };
+      representative.source = mergedText(ordered, 'source');
+      representative.notes = mergedText(ordered, 'notes');
+      representative.reconciliationEvidence = mergedEvidence(ordered);
+      representative.reusedExistingGlobalColour = ordered.some((row) => row.reusedExistingGlobalColour);
+      representative.collapsedDuplicateRowIndexes = ordered.slice(1).map((row) => row.rowIndex);
+      retained.push(representative);
+      exactDuplicateGroups.push({ value, rowIndexes: ordered.map((row) => row.rowIndex), keptRowIndex: representative.rowIndex, collapsedRows: ordered.length - 1 });
+    } else {
+      retained.push(...grouped);
+      if (grouped.length > 1 && variants.size > 1) contradictoryGroups.push({ value, rows: grouped, variants: [...variants.keys()] });
+    }
+  }
+  retained.sort((left, right) => left.rowIndex - right.rowIndex);
+  return { rows: retained, exactDuplicateGroups, contradictoryGroups };
 }
 
 async function validateDocument(strapi, input) {
@@ -342,11 +426,13 @@ async function validateDocument(strapi, input) {
     const fabricResolution = {
       status: resolution.status,
       method: resolution.method || null,
+      alias: resolution.alias || null,
       inputFabricName: fabricInput.fabricName,
       inputSupplierProductCode: fabricInput.supplierProductCode,
       fabricDocumentId: fabric?.documentId || null,
       fabricName: fabric?.name || fabricInput.fabricName,
       supplierProductCode: fabric?.supplierProductCode || fabricInput.supplierProductCode,
+      catalogueEvidence: fabric ? { name: fabric.name || null, productId: fabric.productId || null, collection: fabric.collection || null, documentId: fabric.documentId || null } : null,
       candidates: (resolution.candidates || []).map((item) => ({ documentId: item.documentId || null, name: item.name || null, productId: item.productId || null })),
     };
     resolvedFabrics.set(fabricIndex, fabricResolution);
@@ -369,6 +455,7 @@ async function validateDocument(strapi, input) {
         officialColourName: colour.officialColourName || null,
         internalColourCode: colour.internalColourCode || null,
         incomingInternalColourCode: colour.submittedInternalColourCode || colour.internalColourCode || null,
+        submittedReconciliationEvidence: colour.reconciliationEvidence || null,
         evidenceStatus: colour.evidenceStatus || 'pending_manual',
         source: colour.source || document.source || null,
         notes: colour.notes || null,
@@ -379,9 +466,11 @@ async function validateDocument(strapi, input) {
   }
 
   const codeReconciliations = reconcileInternalCodes(rows, registry);
+  const collapsed = collapseExactDuplicates(rows);
+  const effectiveRows = collapsed.rows;
   const identityGroups = new Map();
   const codeGroups = new Map();
-  for (const row of rows) {
+  for (const row of effectiveRows) {
     if (!EVIDENCE_STATUSES.has(row.evidenceStatus)) addIssue(issues, 'unknown_evidence_status', `Unknown evidenceStatus ${row.evidenceStatus}`, row.rowIndex);
     if (!row.supplierColourCode) addIssue(issues, 'supplier_colour_code_missing', 'supplierColourCode is required', row.rowIndex);
     if (!row.officialColourName) addIssue(issues, 'official_colour_name_missing', 'officialColourName is required for an activated mapping', row.rowIndex);
@@ -392,21 +481,43 @@ async function validateDocument(strapi, input) {
     const identityRows = identityGroups.get(identity) || [];
     identityRows.push(row);
     identityGroups.set(identity, identityRows);
-    const fabricCode = `${row.supplier}|${String(row.fabricDocumentId || '')}|${codeKey(row.supplierProductCode)}|${codeKey(row.fabricColourCode)}`;
+    const fabricCode = `${row.supplier}|${String(row.fabricDocumentId || '')}|${codeKey(row.fabricColourCode)}`;
     const codeRows = codeGroups.get(fabricCode) || [];
     codeRows.push(row);
     codeGroups.set(fabricCode, codeRows);
   }
 
   const duplicateRows = [...identityGroups.entries()].filter(([, grouped]) => grouped.length > 1);
-  const contradictoryRows = duplicateRows.filter(([, grouped]) => new Set(grouped.map((row) => normalizeCanonicalColourName(row.officialColourName))).size > 1);
+  const contradictoryRows = duplicateRows.filter(([, grouped]) => new Set(grouped.map(canonicalMappingKey)).size > 1);
   const duplicateFabricColourCodes = [...codeGroups.entries()].filter(([, grouped]) => grouped.length > 1);
-  contradictoryRows.forEach(([value, grouped]) => addIssue(issues, 'mapping_identity_conflict', `Mapping identity ${value} maps to contradictory canonical colour names: ${unique(grouped.map((row) => row.officialColourName)).join(', ')}`, grouped[0].rowIndex));
+  contradictoryRows.forEach(([value, grouped]) => {
+    const details = grouped.map((row) => ({
+      rowIndex: row.rowIndex,
+      supplierProductCode: row.supplierProductCode,
+      supplierColourCode: row.supplierColourCode,
+      officialColourName: row.officialColourName,
+      resolvedInternalColourCode: row.internalColourCode,
+      source: row.source,
+      evidence: row.reconciliationEvidence,
+    }));
+    addIssue(issues, 'mapping_identity_conflict', `Mapping identity ${value} has contradictory canonical mappings: ${unique(grouped.map((row) => `${row.officialColourName || '(missing)'} (${row.internalColourCode || '(missing)'})`)).join(', ')}`, grouped[0].rowIndex, details);
+  });
   duplicateRows.filter(([value]) => !contradictoryRows.some(([conflictValue]) => conflictValue === value)).forEach(([value, grouped]) => addIssue(issues, 'duplicate_row', `Duplicate mapping identity ${value}`, grouped[0].rowIndex));
+  const exactDuplicateRowsCollapsed = collapsed.exactDuplicateGroups.reduce((total, group) => total + group.collapsedRows, 0);
+  const existingGlobalColoursReused = unique(effectiveRows.filter((row) => row.reusedExistingGlobalColour).map((row) => `${normalizeCanonicalColourName(row.officialColourName)}|${codeKey(row.internalColourCode)}`)).map((value) => {
+    const [canonicalColourName, internalColourCode] = value.split('|');
+    const row = effectiveRows.find((candidate) => normalizeCanonicalColourName(candidate.officialColourName) === canonicalColourName && codeKey(candidate.internalColourCode) === internalColourCode);
+    return { canonicalColourName: row?.officialColourName || canonicalColourName, internalColourCode, source: row?.reconciliationEvidence?.resolvedFrom || null };
+  });
+  const productScopedSupplierCodeReuse = [...new Map(effectiveRows.map((row) => [codeKey(row.supplierColourCode), []])).keys()]
+    .map((supplierColourCode) => effectiveRows.filter((row) => codeKey(row.supplierColourCode) === supplierColourCode))
+    .filter((group) => new Set(group.map((row) => `${row.fabricDocumentId}|${codeKey(row.supplierProductCode)}`)).size > 1)
+    .map((group) => ({ supplierColourCode: group[0].supplierColourCode, mappings: group.map((row) => ({ fabricDocumentId: row.fabricDocumentId, supplierProductCode: row.supplierProductCode, officialColourName: row.officialColourName, internalColourCode: row.internalColourCode })) }));
   duplicateFabricColourCodes.forEach(([value, grouped]) => addIssue(issues, 'duplicate_fabric_colour_code', `Duplicate fabricColourCode ${value}`, grouped[0].rowIndex));
   const validationSummary = {
     totalFabrics: document.fabrics.length,
-    totalRows: rows.length,
+    inputRows: rows.length,
+    totalRows: effectiveRows.length,
     resolvedFabrics: [...resolvedFabrics.values()].filter((item) => item.status === 'resolved').length,
     missingFabrics: [...resolvedFabrics.values()].filter((item) => item.status === 'missing').length,
     ambiguousFabrics: [...resolvedFabrics.values()].filter((item) => item.status === 'ambiguous').length,
@@ -414,6 +525,13 @@ async function validateDocument(strapi, input) {
     ambiguousFabricDetails: [...resolvedFabrics.entries()].filter(([, item]) => item.status === 'ambiguous').map(([fabricIndex, item]) => ({ fabricIndex, fabricName: item.inputFabricName, supplierProductCode: item.inputSupplierProductCode, candidates: item.candidates })),
     duplicateFabricColourCodes: duplicateFabricColourCodes.map(([value, grouped]) => ({ value, rowIndexes: grouped.map((row) => row.rowIndex) })),
     duplicateRows: duplicateRows.map(([value, grouped]) => ({ value, rowIndexes: grouped.map((row) => row.rowIndex) })),
+    exactDuplicateGroups: collapsed.exactDuplicateGroups,
+    exactDuplicateRowsCollapsed,
+    contradictoryDuplicateGroups: collapsed.contradictoryGroups.map(({ value, rows: grouped }) => ({ value, rowIndexes: grouped.map((row) => row.rowIndex) })),
+    contradictoryDuplicates: contradictoryRows.map(([value, grouped]) => ({ value, rowIndexes: grouped.map((row) => row.rowIndex) })),
+    existingGlobalColoursReused,
+    globalColoursReused: existingGlobalColoursReused.length,
+    productScopedSupplierCodeReuse,
     unknownEvidenceStatuses: issues.filter((issue) => issue.type === 'unknown_evidence_status').length,
     missingOfficialColourNames: issues.filter((issue) => issue.type === 'official_colour_name_missing').length,
     missingInternalCodes: issues.filter((issue) => issue.type === 'internal_code_missing').length,
@@ -427,7 +545,7 @@ async function validateDocument(strapi, input) {
     issueCount: issues.length,
     valid: issues.length === 0,
   };
-  return { document, rows, issues, validationSummary };
+  return { document, rows: effectiveRows, issues, validationSummary };
 }
 
 async function getActiveVersion(strapi, supplier) {

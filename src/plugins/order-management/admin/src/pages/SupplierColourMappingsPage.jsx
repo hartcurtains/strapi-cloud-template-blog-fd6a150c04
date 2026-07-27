@@ -30,6 +30,10 @@ function Summary({ preview }) {
       <span>Changed: {(comparison.changed || []).length}</span><span>Removed: {(comparison.removed || []).length}</span>
       <span>Approved-code reconciliations: {summary.approvedCodeReconciliations ?? (summary.codeReconciliations || []).length}</span>
       <span>Automatically corrected codes: {summary.automaticallyCorrectedInternalCodes || 0}</span>
+      <span>Exact duplicate rows collapsed: {summary.exactDuplicateRowsCollapsed || 0}</span>
+      <span>Existing global colours reused: {summary.globalColoursReused || 0}</span>
+      <span>Product-scoped code reuse: {(summary.productScopedSupplierCodeReuse || []).length}</span>
+      <span>Contradictory duplicates: {(summary.contradictoryDuplicates || []).length}</span>
       <span>Converted conflicts: {summary.convertedBlockingErrors || 0}</span>
     </div>
     {(preview.issues || []).length > 0 && <ul style={{ color: '#b42318', marginBottom: 0 }}>

@@ -60,6 +60,7 @@ test('supplier colour codes stay product-scoped across fabrics, including MI →
   assert.equal(preview.rows[1].internalColourCode, 'MA');
   assert.equal(preview.rows[1].reconciliationReason, 'submitted_code_belongs_to_different_canonical_colour');
   assert.equal(preview.issues.some((issue) => /already assigned/.test(issue.message)), false);
+  assert.equal(preview.validationSummary.productScopedSupplierCodeReuse.length, 1);
 });
 
 test('existing canonical codes are reused and provisional submitted conflicts are reconciled', async () => {
@@ -73,6 +74,7 @@ test('existing canonical codes are reused and provisional submitted conflicts ar
   assert.equal(preview.rows[0].internalColourCode, 'SAG');
   assert.equal(preview.rows[0].reconciliationReason, 'submitted_code_belongs_to_different_canonical_colour');
   assert.equal(preview.validationSummary.approvedCodeReconciliations, 1);
+  assert.equal(preview.validationSummary.globalColoursReused, 1);
 });
 
 test('new internal code allocation is deterministic and stable on rerun', async () => {
@@ -110,6 +112,54 @@ test('only an exact product-scoped contradictory identity blocks validation', as
     colour('MI', 'Maize', 'MI', { supplierProductCode: 'ONE' }),
   ] }]));
   assert.equal(preview.issues.filter((issue) => issue.type === 'mapping_identity_conflict').length, 1);
+  assert.equal(preview.rows.length, 2);
+  assert.deepEqual(preview.issues.find((issue) => issue.type === 'mapping_identity_conflict').details.map((item) => item.officialColourName), ['Mist', 'Maize']);
+  assert.equal(preview.validationSummary.valid, false);
+});
+
+test('identical canonical duplicate identities collapse, merge evidence, and remove duplicate blockers', async () => {
+  const { strapi } = harness({ fabrics: [fabric('fabric-austen', 'Austen', 'AUSTEN')] });
+  const preview = await mapping.validateDocument(strapi, document([{ fabricName: 'Austen', supplierProductCode: 'AUSTEN', colours: [
+    colour('LI', 'Linen', 'LI', { supplierProductCode: 'AUSTEN', source: 'official catalogue', notes: 'first source', reconciliationEvidence: { source: 'catalogue', url: '/austen-li' } }),
+    colour('LI', 'Linen', 'LI', { supplierProductCode: 'AUSTEN', source: 'trade price list', notes: 'second source', reconciliationEvidence: { source: 'price-list', page: 4 } }),
+  ] }]));
+  assert.equal(preview.rows.length, 1);
+  assert.equal(preview.validationSummary.inputRows, 2);
+  assert.equal(preview.validationSummary.totalRows, 1);
+  assert.equal(preview.validationSummary.exactDuplicateRowsCollapsed, 1);
+  assert.equal(preview.validationSummary.exactDuplicateGroups.length, 1);
+  assert.equal(preview.validationSummary.duplicateRows.length, 0);
+  assert.equal(preview.validationSummary.duplicateFabricColourCodes.length, 0);
+  assert.equal(preview.issues.some((issue) => issue.type === 'duplicate_row' || issue.type === 'duplicate_fabric_colour_code'), false);
+  assert.equal(preview.rows[0].source, 'official catalogue | trade price list');
+  assert.equal(preview.rows[0].notes, 'first source | second source');
+  assert.equal(preview.rows[0].reconciliationEvidence.merged, true);
+  assert.equal(preview.rows[0].reconciliationEvidence.entries.length, 2);
+});
+
+test('Colette resolves through the approved spelling alias only when the catalogue match is unique', async () => {
+  const catalogueFabric = { ...fabric('colette-document', 'Collette', undefined, 'FAB-COLLETTE-8936'), collection: 'Toulouse' };
+  const { strapi } = harness({ fabrics: [catalogueFabric] });
+  const preview = await mapping.validateDocument(strapi, document([{ fabricName: 'Colette', supplierProductCode: 'COLETTE', colours: [colour('LI', 'Linen', 'LI', { supplierProductCode: 'COLETTE' })] }]));
+  const resolution = preview.validationSummary.resolvedFabricDetails[0];
+  assert.equal(preview.validationSummary.resolvedFabrics, 1);
+  assert.equal(preview.validationSummary.missingFabrics, 0);
+  assert.equal(resolution.method, 'approved_fabric_alias');
+  assert.equal(resolution.fabricName, 'Collette');
+  assert.equal(resolution.catalogueEvidence.productId, 'FAB-COLLETTE-8936');
+  assert.equal(resolution.catalogueEvidence.collection, 'Toulouse');
+  assert.equal(preview.rows[0].fabricDocumentId, 'colette-document');
+});
+
+test('Colette alias remains blocking when the live catalogue has multiple matching product records', async () => {
+  const { strapi } = harness({ fabrics: [
+    { ...fabric('colette-one', 'Collette', undefined, 'FAB-COLLETTE-8936') },
+    { ...fabric('colette-two', 'Collette', undefined, 'FAB-COLLETTE-8936') },
+  ] });
+  const preview = await mapping.validateDocument(strapi, document([{ fabricName: 'Colette', supplierProductCode: 'COLETTE', colours: [colour('LI', 'Linen', 'LI', { supplierProductCode: 'COLETTE' })] }]));
+  assert.equal(preview.validationSummary.resolvedFabrics, 0);
+  assert.equal(preview.validationSummary.ambiguousFabrics, 1);
+  assert.equal(preview.validationSummary.ambiguousFabricDetails[0].candidates.length, 2);
   assert.equal(preview.validationSummary.valid, false);
 });
 
