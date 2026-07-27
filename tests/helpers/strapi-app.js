@@ -10,6 +10,7 @@ async function startStrapiTestApp() {
   process.env.DATABASE_AUTO_MIGRATE = 'true';
   process.env.DATABASE_RUN_MIGRATIONS = 'false';
   process.env.STRAPI_API_TOKEN = 'catalog-integration-internal-token';
+  process.env.STRAPI_INTERNAL_SECURITY_SECRET = 'strapi-internal-security-test-secret';
   process.env.ABANDONED_PAYMENTS_TRANSITION_SECRET = 'abandonment-integration-secret';
   process.env.XDG_CONFIG_HOME = path.join(process.cwd(), '.tmp', 'strapi-test-config');
 

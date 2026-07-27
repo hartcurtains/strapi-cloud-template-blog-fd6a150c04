@@ -1,0 +1,62 @@
+{
+  "kind": "collectionType",
+  "collectionName": "security_states",
+  "info": {
+    "singularName": "security-state",
+    "pluralName": "security-states",
+    "displayName": "Security State"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "kind": {
+      "type": "enumeration",
+      "required": true,
+      "private": true,
+      "enum": ["rate_limit", "account_deletion_challenge"]
+    },
+    "hashedKey": {
+      "type": "string",
+      "required": true,
+      "private": true
+    },
+    "actionCategory": {
+      "type": "string",
+      "required": true,
+      "private": true
+    },
+    "requestCount": {
+      "type": "integer",
+      "required": true,
+      "default": 0,
+      "private": true
+    },
+    "windowStart": {
+      "type": "datetime",
+      "private": true
+    },
+    "expiresAt": {
+      "type": "datetime",
+      "required": true,
+      "private": true
+    },
+    "accountIdentifier": {
+      "type": "string",
+      "private": true
+    },
+    "codeHash": {
+      "type": "string",
+      "private": true
+    },
+    "remainingAttempts": {
+      "type": "integer",
+      "private": true
+    },
+    "consumedAt": {
+      "type": "datetime",
+      "private": true
+    }
+  }
+}
