@@ -21,14 +21,16 @@ function Summary({ preview }) {
   const comparison = preview.comparison || {};
   return <div style={{ marginTop: 16, background: '#f8fafc', padding: 14, borderRadius: 6 }}>
     <strong>Validation preview</strong>
-    <p style={{ margin: '8px 0' }}>{summary.valid ? 'Valid and ready to activate.' : `${summary.issueCount || 0} issue(s) block activation.`}</p>
+    <p style={{ margin: '8px 0' }}>{summary.valid ? 'Valid and ready to activate.' : `${summary.blockingErrors ?? summary.issueCount ?? 0} issue(s) block activation.`}</p>
     <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
       <span>Fabrics: {summary.totalFabrics || 0}</span><span>Rows: {summary.totalRows || 0}</span>
       <span>Resolved: {summary.resolvedFabrics || 0}</span><span>Missing: {summary.missingFabrics || 0}</span>
       <span>Ambiguous: {summary.ambiguousFabrics || 0}</span>
       <span>Unchanged: {(comparison.unchanged || []).length}</span><span>New: {(comparison.added || []).length}</span>
       <span>Changed: {(comparison.changed || []).length}</span><span>Removed: {(comparison.removed || []).length}</span>
-      <span>Approved-code reconciliations: {(summary.codeReconciliations || []).length}</span>
+      <span>Approved-code reconciliations: {summary.approvedCodeReconciliations ?? (summary.codeReconciliations || []).length}</span>
+      <span>Automatically corrected codes: {summary.automaticallyCorrectedInternalCodes || 0}</span>
+      <span>Converted conflicts: {summary.convertedBlockingErrors || 0}</span>
     </div>
     {(preview.issues || []).length > 0 && <ul style={{ color: '#b42318', marginBottom: 0 }}>
       {preview.issues.slice(0, 20).map((issue, index) => <li key={`${issue.type}-${index}`}>{issue.message}</li>)}

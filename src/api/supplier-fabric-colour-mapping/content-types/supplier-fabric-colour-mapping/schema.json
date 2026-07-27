@@ -33,6 +33,9 @@
     "fabricColourCode": { "type": "string", "required": true },
     "officialColourName": { "type": "string" },
     "internalColourCode": { "type": "string" },
+    "submittedInternalColourCode": { "type": "string" },
+    "reconciliationReason": { "type": "string" },
+    "reconciliationEvidence": { "type": "json" },
     "evidenceStatus": {
       "type": "enumeration",
       "required": true,
