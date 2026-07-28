@@ -1,3 +1,6 @@
+export const STAGING_PARSER_VERSION = 'ashley-staging-parser-v2';
+export const STAGING_RETRY_MESSAGE = 'The image service was temporarily unavailable. This file was not confirmed as complete. Check its status before retrying.';
+
 function contentTypeOf(response) {
   if (!response) return '';
   if (typeof response.headers?.get === 'function') return response.headers.get('content-type') || '';

@@ -1275,8 +1275,24 @@ module.exports = {
     logAshleyWildeUpload(ctx, 'request-received');
     const isAshleyWildeFolder = ctx.request.body?.ashleyWilde === 'true' || ctx.request.body?.ashleyWilde === true;
     if (isAshleyWildeFolder && !hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    if (isAshleyWildeFolder) {
+      ctx.status = 410;
+      ctx.body = { success: false, error: 'Ashley Wilde staging now uses the Strapi Media Library upload followed by JSON finalisation.' };
+      return;
+    }
     const controller = strapi.controller('api::order-management.order-management');
     return controller.bulkImageUpload(ctx);
+  },
+
+  async finaliseAshleyWilde(ctx) {
+    const importer = require('../services/ashley-wilde-import');
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      ctx.body = { success: true, data: await importer.finaliseAshleyWildeMedia(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx) }) };
+    } catch (error) {
+      ctx.status = error?.status || 409;
+      ctx.body = { success: false, error: importer.safeMessage(error) };
+    }
   },
 
   async analyseAshleyWildeFolder(ctx) {

@@ -21,30 +21,28 @@ function loadBrowserModule(file, exports) {
   return module.exports;
 }
 
-test('a 13 MiB target cannot create a 25.6 MiB multi-file batch', () => {
+test('a prepared 19.4 MiB image is accepted by the Ashley policy', () => {
   const utility = loadBrowserModule(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), ['partitionUploadRows', 'assertUploadBatch']);
-  const rows = [{ size: Math.round(12.8 * 1024 * 1024), filename: 'a.jpg' }, { size: Math.round(12.8 * 1024 * 1024), filename: 'b.jpg' }];
-  const result = utility.partitionUploadRows(rows, 10, 13 * 1024 * 1024);
-  assert.equal(result.batches.length, 2);
-  assert.ok(result.batches.every((batch) => batch.reduce((sum, row) => sum + row.size, 0) <= 13 * 1024 * 1024));
+  const result = utility.partitionUploadRows([{ size: Math.round(19.4 * 1024 * 1024), filename: 'prepared.jpg' }]);
+  assert.equal(result.batches.length, 1);
+  assert.equal(result.oversized.length, 0);
+  assert.doesNotThrow(() => utility.assertUploadBatch(result.batches[0]));
 });
 
-test('a file above the normal target but below the individual limit is sent alone', () => {
+test('files above 20 MiB remain unsupported', () => {
   const utility = loadBrowserModule(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), ['partitionUploadRows', 'assertUploadBatch']);
-  const result = utility.partitionUploadRows([
-    { size: 19 * 1024 * 1024, filename: 'large.jpg' },
-    { size: 2 * 1024 * 1024, filename: 'small.jpg' },
-  ], 10, 9 * 1024 * 1024);
-  assert.equal(JSON.stringify(result.batches.map((batch) => batch.map((row) => row.filename))), JSON.stringify([['large.jpg'], ['small.jpg']]));
-  assert.doesNotThrow(() => utility.assertUploadBatch(result.batches[0], 10, 9 * 1024 * 1024));
+  const result = utility.partitionUploadRows([{ size: 20 * 1024 * 1024 + 1, filename: 'too-large.jpg' }]);
+  assert.equal(result.batches.length, 0);
+  assert.equal(result.oversized[0].status, 'unsupported_file');
+  assert.throws(() => utility.assertUploadBatch(result.oversized), /oversized/);
 });
 
-test('a multi-file batch is rejected before FormData/network dispatch when it exceeds the effective target', () => {
+test('Ashley staging policy permits one file and never permits a multi-file upload batch', () => {
   const utility = loadBrowserModule(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), ['assertUploadBatch']);
   assert.throws(() => utility.assertUploadBatch([
     { size: 8 * 1024 * 1024, filename: 'a.jpg' },
     { size: 6 * 1024 * 1024, filename: 'b.jpg' },
-  ], 10, 13 * 1024 * 1024), /exceeds/);
+  ]), /file count/);
 });
 
 test('text/plain 503 responses are read as text and never passed to JSON.parse', async () => {
@@ -63,11 +61,24 @@ test('text/plain 503 responses are read as text and never passed to JSON.parse',
   assert.equal(jsonCalled, false);
 });
 
-test('the conservative policy keeps requests sequential and uses one authoritative timeout', () => {
+test('the Ashley transport has one Media upload and a JSON-only finalisation request', () => {
   const component = fs.readFileSync(path.join(root, 'admin', 'src', 'components', 'AshleyWildeFolderImporter.jsx'), 'utf8');
+  const mediaUpload = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeMediaUpload.js'), 'utf8');
+  const routes = require(path.join(root, 'shared', 'routes.json'));
   assert.equal(policy.maxBatchFiles, 1);
-  assert.equal(policy.requestTimeoutMs, 120000);
-  assert.match(component, /await stageBatchRequest\(post/);
-  assert.match(component, /STAGING_REQUEST_TIMEOUT_MS/);
-  assert.match(component, /for \(let index = 0; index < stagingBatches\.length; index \+= 1\)/);
+  assert.equal(policy.maxFileBytes, 20 * 1024 * 1024);
+  assert.equal(routes.ashleyWildeFinalise, '/order-management/ashley-wilde/finalise');
+  assert.match(mediaUpload, /ASHLEY_MEDIA_UPLOAD_PATH = '\/upload'/);
+  assert.match(mediaUpload, /form\.append\('files', file/);
+  assert.match(component, /uploadAshleyWildeMedia\(row\.file/);
+  assert.match(component, /adminResponse\(post, adminCatalogRoutes\.ashleyWildeFinalise/);
+  assert.doesNotMatch(component, /bulkImageUpload|new\s+FormData\(\)/);
+});
+
+test('the alternate bulk uploader uses the shared parser for staging responses', () => {
+  const component = fs.readFileSync(path.join(root, 'admin', 'src', 'components', 'BulkImageUploader.jsx'), 'utf8');
+  const stagingPath = component.slice(component.indexOf('fetch(adminCatalogRoutes.bulkImageUpload'));
+  assert.match(stagingPath, /parseStagingResponse\(response\)/);
+  assert.doesNotMatch(stagingPath, /response\.json\(\)/);
+  assert.match(component, /STAGING_PARSER_VERSION/);
 });

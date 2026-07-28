@@ -1,0 +1,75 @@
+import { normalizeStagingError, parseStagingResponse, sanitizeDiagnosticMessage } from './stagingResponse';
+
+export const ASHLEY_MEDIA_UPLOAD_PATH = '/upload';
+export const ASHLEY_PREPARED_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+export const ACCEPTED_ASHLEY_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+export const MEDIA_UPLOAD_RETRY_MESSAGE = 'The image service was temporarily unavailable. This image was not uploaded. Please retry it.';
+
+function authHeaders() {
+  const token = typeof window !== 'undefined'
+    ? (window.strapi?.auth?.getToken?.() || localStorage.getItem('strapi-token') || localStorage.getItem('jwtToken'))
+    : null;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+export function mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }) {
+  const signature = String(analysisToken || '').split('.').pop();
+  return `aw-ashley:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
+}
+
+export function safeMediaUploadErrorMessage(error) {
+  const status = error?.status || error?.response?.status;
+  if (status === 401 || status === 403) return 'Your administrator session expired or is not authorised. Please sign in again.';
+  if (status === 413) return 'This prepared image is larger than the server can accept.';
+  if (status === 503 || error?.code === 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE') return MEDIA_UPLOAD_RETRY_MESSAGE;
+  if (error?.code === 'ASHLEY_WILDE_MEDIA_TOO_LARGE') return 'This prepared image is larger than the supported 20 MiB limit.';
+  if (/unexpected token|json|cloudflare|html/i.test(String(error?.message || ''))) return 'The image upload response was invalid. Please retry this image.';
+  return sanitizeDiagnosticMessage(error?.message) || 'The image could not be uploaded. Please retry it.';
+}
+
+export async function uploadAshleyWildeMedia(file, { analysisToken, folderFingerprint, relativePath, fileFingerprint, fetchImpl = fetch, signal } = {}) {
+  const size = Number(file?.size || 0);
+  const mimeType = String(file?.type || '').toLowerCase();
+  if (!Number.isSafeInteger(size) || size < 1 || size > ASHLEY_PREPARED_IMAGE_MAX_BYTES) {
+    const error = new Error('This prepared image is larger than the supported 20 MiB limit.');
+    error.code = 'ASHLEY_WILDE_MEDIA_TOO_LARGE';
+    error.status = 413;
+    throw error;
+  }
+  if (!ACCEPTED_ASHLEY_MEDIA_TYPES.has(mimeType)) {
+    const error = new Error('The selected file is not a supported image type.');
+    error.code = 'ASHLEY_WILDE_MEDIA_TYPE_INVALID';
+    error.status = 400;
+    throw error;
+  }
+
+  const form = new FormData();
+  form.append('files', file, file.name);
+  form.append('data', JSON.stringify({ fileInfo: {
+    name: file.name,
+    alternativeText: file.name,
+    caption: mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }),
+  } }));
+
+  try {
+    const response = await fetchImpl(ASHLEY_MEDIA_UPLOAD_PATH, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: form,
+      credentials: 'include',
+      signal,
+    });
+    const payload = await parseStagingResponse(response);
+    const media = Array.isArray(payload) ? payload[0] : payload?.data?.[0] || payload?.data;
+    if (!media?.id) {
+      const error = new Error('The Media Library did not return a Media record.');
+      error.code = 'ASHLEY_WILDE_MEDIA_RESPONSE_INVALID';
+      throw error;
+    }
+    return media;
+  } catch (error) {
+    const normalized = await normalizeStagingError(error);
+    normalized.safeMessage = safeMediaUploadErrorMessage(normalized);
+    throw normalized;
+  }
+}

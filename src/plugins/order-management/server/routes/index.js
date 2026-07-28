@@ -73,6 +73,12 @@ module.exports = [
       config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
     },
     {
+      method: 'POST',
+      path: relativePath(adminCatalogRoutes.ashleyWildeFinalise),
+      handler: 'import-export.finaliseAshleyWilde',
+      config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
+    },
+    {
       method: 'GET',
       path: relativePath(adminCatalogRoutes.ashleyWildeHistory),
       handler: 'import-export.getAshleyWildeHistory',

@@ -28,6 +28,7 @@ const CUSTOM_MUTATIONS = Object.freeze([
   { method: 'POST', path: '/order-management/bulk-image-upload', operation: 'bulk-image-upload' },
   { method: 'POST', path: '/order-management/create-fabric-with-colour', operation: 'fabric-colour-create' },
   { method: 'POST', path: '/order-management/ashley-wilde/analyse', operation: 'image-folder-analyse' },
+  { method: 'POST', path: '/order-management/ashley-wilde/finalise', operation: 'image-finalisation' },
   { method: 'POST', path: '/order-management/ashley-wilde/promote', operation: 'image-folder-promote' },
 ]);
 

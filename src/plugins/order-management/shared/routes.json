@@ -4,6 +4,7 @@
   "createFabricWithColour": "/order-management/create-fabric-with-colour",
   "bulkImageUpload": "/order-management/bulk-image-upload",
   "ashleyWildeAnalyse": "/order-management/ashley-wilde/analyse",
+  "ashleyWildeFinalise": "/order-management/ashley-wilde/finalise",
   "ashleyWildeHistory": "/order-management/ashley-wilde/history",
   "ashleyWildeMode": "/order-management/ashley-wilde/mode",
   "ashleyWildePromote": "/order-management/ashley-wilde/promote",

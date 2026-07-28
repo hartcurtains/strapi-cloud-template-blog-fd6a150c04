@@ -131,6 +131,7 @@ test('initialized Strapi router contains the complete protected mutation matrix'
   assert.ok(registered.some(route => route.method === 'POST' && route.path === adminCatalogRoutes.bulkImageUpload));
   for (const expected of [
     { method: 'POST', path: adminCatalogRoutes.ashleyWildeAnalyse },
+    { method: 'POST', path: adminCatalogRoutes.ashleyWildeFinalise },
     { method: 'GET', path: adminCatalogRoutes.ashleyWildeHistory },
     { method: 'GET', path: adminCatalogRoutes.ashleyWildeMode },
   ]) {
@@ -141,6 +142,7 @@ test('initialized Strapi router contains the complete protected mutation matrix'
   }
   for (const routePath of [
     adminCatalogRoutes.ashleyWildeAnalyse,
+    adminCatalogRoutes.ashleyWildeFinalise,
     adminCatalogRoutes.ashleyWildeHistory,
     adminCatalogRoutes.ashleyWildeMode,
   ]) {

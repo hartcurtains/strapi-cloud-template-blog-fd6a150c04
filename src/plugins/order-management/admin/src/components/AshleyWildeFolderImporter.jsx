@@ -4,9 +4,10 @@ import { AlertCircle, CheckCircle, FolderOpen, Loader2, RefreshCw, Upload } from
 import adminCatalogRoutes from '../../../shared/routes';
 import {
   MAX_BATCH_BYTES, MAX_BATCH_FILES, MAX_FILE_BYTES, READY_STATUSES, fingerprintManifest,
-  STAGING_REQUEST_TIMEOUT_MS, assertUploadBatch, folderNameFromFiles, isSupportedFileName, partitionUploadRows, relativePathOf, sequentialBatches, sha256File,
+  folderNameFromFiles, isSupportedFileName, partitionUploadRows, relativePathOf, sha256File,
 } from '../utils/ashleyWildeFolder';
-import { normalizeStagingError, parseStagingResponse, sanitizeDiagnosticMessage } from '../utils/stagingResponse';
+import { normalizeStagingError, parseStagingResponse, sanitizeDiagnosticMessage, STAGING_PARSER_VERSION, STAGING_RETRY_MESSAGE } from '../utils/stagingResponse';
+import { safeMediaUploadErrorMessage, uploadAshleyWildeMedia } from '../utils/ashleyWildeMediaUpload';
 
 const colours = {
   text: '#374151', muted: '#6b7280', line: '#e5e7eb', blue: '#3b82f6',
@@ -15,22 +16,9 @@ const colours = {
 const PREPARED_WARNING_BYTES = 20 * 1024 * 1024;
 const ABSOLUTE_IMPORTER_FILE_BYTES = 50 * 1024 * 1024;
 
-function performanceNow() {
-  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
-}
-
 function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function batchStats(rows) {
-  const sizes = rows.map((row) => Number(row.file?.size ?? row.size ?? 0));
-  return {
-    fileCount: rows.length,
-    totalBytes: sizes.reduce((total, size) => total + size, 0),
-    largestFileBytes: Math.max(0, ...sizes),
-  };
 }
 
 function preflightStats(rows) {
@@ -42,8 +30,7 @@ function preflightStats(rows) {
     totalFiles: rows.length,
     totalBytes,
     largestFileBytes,
-    above20MiB: sizes.filter((size) => size > PREPARED_WARNING_BYTES).length,
-    above45MiB: sizes.filter((size) => size > MAX_FILE_BYTES).length,
+    above20MiB: sizes.filter((size) => size > MAX_FILE_BYTES).length,
     above50MiB: sizes.filter((size) => size > ABSOLUTE_IMPORTER_FILE_BYTES).length,
     projectedBatches: projected.batches.length,
   };
@@ -51,57 +38,7 @@ function preflightStats(rows) {
 
 function stagingLog(step, details = {}) {
   if (typeof console?.debug !== 'function') return;
-  console.debug('[Ashley Wilde staging]', { step, ...details });
-}
-
-function buildStageForm({ folderName, folderFingerprint, manifest, rows, analysisToken, finalBatch }) {
-  const stats = { ...batchStats(rows), ...assertUploadBatch(rows) };
-  const form = new FormData();
-  stagingLog('form-data-created', stats);
-  form.append('ashleyWilde', 'true');
-  form.append('folderName', folderName);
-  form.append('folderFingerprint', folderFingerprint);
-  form.append('folderManifest', JSON.stringify(manifest));
-  form.append('fileMetadata', JSON.stringify(rows.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }))));
-  form.append('analysisToken', analysisToken);
-  form.append('finalBatch', String(finalBatch));
-  rows.forEach((row) => form.append('files', row.file, row.filename));
-  stagingLog('form-data-files-appended', stats);
-  return { form, stats };
-}
-
-async function stageBatchRequest(request, form, stats, batchNumber) {
-  const startedAt = performanceNow();
-  const controller = new AbortController();
-  let timedOut = false;
-  const log = (step) => stagingLog(step, {
-    batchNumber,
-    ...stats,
-    elapsedMs: Math.round(performanceNow() - startedAt),
-  });
-  const timeoutId = setTimeout(() => {
-    timedOut = true;
-    log('timeout-abort');
-    controller.abort();
-  }, STAGING_REQUEST_TIMEOUT_MS);
-
-  try {
-    log('fetch-invoked');
-    const response = await adminResponse(request, adminCatalogRoutes.bulkImageUpload, form, { signal: controller.signal });
-    log('response-returned');
-    return response;
-  } catch (error) {
-    log(timedOut ? 'request-timed-out' : 'request-rejected');
-    if (timedOut) {
-      const timeoutError = new Error('The upload did not start. Please retry this batch.');
-      timeoutError.code = 'ASHLEY_WILDE_UPLOAD_TIMEOUT';
-      timeoutError.cause = error;
-      throw timeoutError;
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
-  }
+  console.debug('[Ashley Wilde staging]', { step, parserVersion: STAGING_PARSER_VERSION, ...details });
 }
 
 async function adminResponse(request, ...args) {
@@ -132,12 +69,14 @@ function responseMessage(error) {
 }
 
 function safeErrorMessage(error) {
+  if (error?.ashleyPhase === 'upload') return safeMediaUploadErrorMessage(error);
+  if (error?.ashleyPhase === 'finalisation') return 'Image uploaded; staging link still needs to be completed. Retry this image.';
   if (error?.code === 'ASHLEY_WILDE_UPLOAD_TIMEOUT') return 'The upload did not start. Please retry this batch.';
   const status = responseStatus(error);
   if (status === 401) return 'The request could not authenticate. Your administrator credentials were not accepted.';
   if (status === 403) return 'You are signed in, but your administrator account does not have permission to use the Ashley Wilde importer.';
   if (status === 413) return 'The server rejected this upload because the request was too large. Retry; batches are automatically kept below the upload limit.';
-  if (status === 503 || error?.code === 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE') return 'The image service was temporarily unavailable while processing this batch. No later batches were started. Retry this batch.';
+  if (status === 503 || error?.code === 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE') return STAGING_RETRY_MESSAGE;
   const serverMessage = responseMessage(error);
   if (serverMessage && !/unexpected token|json/i.test(serverMessage)) return serverMessage;
   if (status >= 500) return 'The Ashley Wilde service failed. Try again.';
@@ -231,25 +170,83 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     });
   };
 
+  const updateFolderRow = (relativePath, details) => {
+    setFolderFiles((current) => current.map((row) => row.relativePath === relativePath ? { ...row, ...details } : row));
+  };
+
+  const stageAshleyRow = async ({ row, analysisToken, folderName, folderFingerprint, manifestFileCount, index, total }) => {
+    const persisted = history.find((item) => item.folderFingerprint === folderFingerprint)?.manifestSummary?.resultsByPath?.[row.relativePath];
+    let media = row.mediaRecord || (persisted?.mediaId ? { id: persisted.mediaId, documentId: persisted.mediaDocumentId, name: row.filename } : null);
+    const finaliseBody = {
+      analysisToken,
+      manifestFileCount,
+      mappingVersionDocumentId: analysis?.mappingVersionDocumentId || null,
+      folderName,
+      folderFingerprint,
+      relativePath: row.relativePath,
+      originalFilename: row.filename,
+      fileFingerprint: row.sha256,
+      fileSize: row.size,
+      mimeType: row.mimeType,
+      supplierProductCode: row.supplierProductCode || null,
+      supplierColourCode: row.supplierColourCode || null,
+      fabricDocumentId: row.fabricDocumentId || row.resolvedFabricDocumentId || null,
+    };
+
+    if (!media) {
+      try {
+        const lookupPayload = await adminResponse(post, adminCatalogRoutes.ashleyWildeFinalise, { ...finaliseBody, phase: 'lookup_media' });
+        const lookupResult = lookupPayload.data?.result || lookupPayload.data;
+        if (lookupResult?.phase === 'media_uploaded' && lookupResult.mediaId) {
+          media = { id: lookupResult.mediaId, documentId: lookupResult.mediaDocumentId || null, name: row.filename };
+          fileQueueRef.current = fileQueueRef.current.map((queued) => queued.relativePath === row.relativePath ? { ...queued, mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId, phase: 'media_uploaded' } : queued);
+          updateFolderRow(row.relativePath, { phase: 'media_uploaded', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId });
+        }
+      } catch (error) {
+        error.ashleyPhase = 'finalisation';
+        throw error;
+      }
+    }
+
+    if (!media) {
+      setProgress(`Uploading image ${index + 1} of ${total}: ${row.filename}`);
+      updateFolderRow(row.relativePath, { phase: 'uploading_media' });
+      try {
+        media = await uploadAshleyWildeMedia(row.file, { analysisToken, folderFingerprint, relativePath: row.relativePath, fileFingerprint: row.sha256 });
+      } catch (error) {
+        error.ashleyPhase = 'upload';
+        updateFolderRow(row.relativePath, { phase: 'retryable_upload_failure', status: 'failed', warning: safeMediaUploadErrorMessage(error) });
+        try {
+          await adminResponse(post, adminCatalogRoutes.ashleyWildeFinalise, { ...finaliseBody, phase: 'retryable_upload_failure', errorCode: error.code || 'unknown' });
+        } catch (_) { /* The original upload error remains the actionable message. */ }
+        throw error;
+      }
+      fileQueueRef.current = fileQueueRef.current.map((queued) => queued.relativePath === row.relativePath ? { ...queued, mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null, phase: 'media_uploaded' } : queued);
+      updateFolderRow(row.relativePath, { phase: 'media_uploaded', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null });
+    }
+
+    setProgress(`Finalising image ${index + 1} of ${total}: ${row.filename}`);
+    updateFolderRow(row.relativePath, { phase: 'finalising_staging', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null });
+    try {
+      const payload = await adminResponse(post, adminCatalogRoutes.ashleyWildeFinalise, { ...finaliseBody, mediaId: media.id, mediaDocumentId: media.documentId || null });
+      const result = payload.data?.result || payload.data;
+      updateFolderRow(row.relativePath, { ...result, phase: 'complete', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null });
+      await refreshHistory();
+      return result;
+    } catch (error) {
+      error.ashleyPhase = 'finalisation';
+      updateFolderRow(row.relativePath, { phase: 'retryable_finalisation_failure', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null, warning: 'Image uploaded; staging link still needs to be completed.' });
+      throw error;
+    }
+  };
+
   const uploadFolder = async () => {
     if (!analysis || analysis.analysisComplete !== true || !selectedRows.length || (unresolvedCount > 0 && !acknowledgeSkips)) return;
     setBusy(true);
     setError('');
     try {
-      const batches = sequentialBatches(selectedRows, MAX_BATCH_FILES, MAX_BATCH_BYTES);
-      const manifest = analysis.rows.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
-      for (let index = 0; index < batches.length; index += 1) {
-        const batch = batches[index];
-        setProgress(`Uploading batch ${index + 1} of ${batches.length} (${batch.length} files)`);
-        const { form } = buildStageForm({ folderName: analysis.folderName, folderFingerprint: analysis.folderFingerprint, manifest, rows: batch, analysisToken: analysis.analysisToken, finalBatch: index === batches.length - 1 });
-        const payload = await stageBatchRequest(post, form, batchStats(batch), index + 1);
-        if (!payload.data) throw new Error(`Batch ${index + 1} failed safely.`);
-          setFolderFiles((current) => current.map((row) => {
-          const result = payload.data.results.find((item) => item.filename === row.filename);
-          return result ? { ...row, uploadResult: result, status: result.status } : row;
-        }));
-        await refreshHistory();
-        if (payload.data.failed > 0) throw new Error(`Batch ${index + 1} reported ${payload.data.failed} failed file(s). Remaining batches were not sent.`);
+      for (let index = 0; index < selectedRows.length; index += 1) {
+        await stageAshleyRow({ row: selectedRows[index], analysisToken: analysis.analysisToken, folderName: analysis.folderName, folderFingerprint: analysis.folderFingerprint, manifestFileCount: analysis.rows.length, index, total: selectedRows.length });
       }
       setProgress('Folder import complete');
       setSelected(new Set());
@@ -276,7 +273,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         hashed.push({ ...item, sha256: await sha256File(item.file) });
       }
       fileQueueRef.current = hashed;
-      const manifest = hashed.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
+      const manifest = hashed.map(({ relativePath, sha256, size, mimeType }) => ({ relativePath, sha256, size, mimeType }));
       const folderFingerprint = await fingerprintManifest(manifest);
       const { batches, oversized } = partitionUploadRows(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES);
       const summary = { totalFiles: hashed.length, matchedFiles: 0, readyFiles: 0, alreadyCompleteFiles: 0, unresolvedFiles: 0, conflictFiles: 0 };
@@ -288,7 +285,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         const batch = batches[index];
         const processedCount = batches.slice(0, index + 1).reduce((total, currentBatch) => total + currentBatch.length, 0);
         setProgress(`Processing ${processedCount} / ${hashed.length} — batch ${index + 1} of ${batches.length}`);
-        const batchManifest = batch.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
+        const batchManifest = batch.map(({ relativePath, sha256, size, mimeType }) => ({ relativePath, sha256, size, mimeType }));
         const response = await adminResponse(post, adminCatalogRoutes.ashleyWildeAnalyse, {
           folderName: queuedFolder.folderName, folderFingerprint, manifest: batchManifest,
           folderManifest: manifest, queueBatch: true,
@@ -337,36 +334,18 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setError('');
     try {
       onStagingStart?.();
-      const manifest = fileQueueRef.current.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
       const folderFingerprint = analysis?.folderFingerprint;
-      const stagingBatches = [];
-      analysisBatches.forEach((batch, analysisIndex) => {
-        const ready = batch.rows.filter((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES);
-        const { batches, oversized } = partitionUploadRows(ready, MAX_BATCH_FILES, MAX_BATCH_BYTES);
-        if (oversized.length) throw new Error('The staging planner found a file above the supported individual limit.');
-        batches.forEach((rows) => stagingBatches.push({ rows, analysisToken: batch.analysisToken, analysisIndex }));
-      });
-      if (!stagingBatches.length) throw new Error('There are no confirmed files ready to stage.');
-      for (let index = 0; index < stagingBatches.length; index += 1) {
-        const batch = stagingBatches[index];
-        const stats = { ...batchStats(batch.rows), ...assertUploadBatch(batch.rows) };
-        setProgress(`Staging file ${index + 1} of ${stagingBatches.length} (${stats.fileCount} file, ${formatBytes(stats.totalBytes)} total; ${formatBytes(MAX_BATCH_BYTES)} normal target)`);
-        stagingLog('files-ready', { batchNumber: index + 1, totalBatches: stagingBatches.length, targetBytes: MAX_BATCH_BYTES, ...stats });
-        const { form } = buildStageForm({
-          folderName: queuedFolder.folderName,
-          folderFingerprint,
-          manifest,
-          rows: batch.rows,
-          analysisToken: batch.analysisToken,
-          finalBatch: index === stagingBatches.length - 1,
+      const stagingRows = [];
+      analysisBatches.forEach((batch) => {
+        batch.rows.filter((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES).forEach((row) => {
+          const queuedState = fileQueueRef.current.find((queued) => queued.relativePath === row.relativePath) || {};
+          stagingRows.push({ row: { ...row, ...queuedState }, analysisToken: batch.analysisToken });
         });
-        const upload = await stageBatchRequest(post, form, stats, index + 1);
-        if (!upload.data) throw new Error(`Batch ${index + 1} failed safely.`);
-        setFolderFiles((current) => current.map((row) => {
-          const result = upload.data.results?.find((item) => item.filename === row.filename);
-          return result ? { ...row, uploadResult: result, status: result.status } : row;
-        }));
-        if (upload.data.failed > 0) throw new Error(`Batch ${index + 1} reported ${upload.data.failed} failed file(s). Remaining batches were not sent.`);
+      });
+      if (!stagingRows.length) throw new Error('There are no confirmed files ready to stage.');
+      for (let index = 0; index < stagingRows.length; index += 1) {
+        const { row, analysisToken } = stagingRows[index];
+        await stageAshleyRow({ row, analysisToken, folderName: queuedFolder.folderName, folderFingerprint, manifestFileCount: fileQueueRef.current.length, index, total: stagingRows.length });
       }
       fileQueueRef.current = [];
       setQueuedFolder(null);
@@ -404,7 +383,6 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
               <span>{formatBytes(queuedFolder.preflight.totalBytes)} total</span>
               <span>{formatBytes(queuedFolder.preflight.largestFileBytes)} largest</span>
               <span>{queuedFolder.preflight.above20MiB} above 20 MiB</span>
-              <span>{queuedFolder.preflight.above45MiB} above 45 MiB</span>
               <span>{queuedFolder.preflight.projectedBatches} projected batch{queuedFolder.preflight.projectedBatches === 1 ? '' : 'es'}</span>
             </div>
             {queuedFolder.preflight.above20MiB > 0 && <div style={{ marginTop: '7px', color: colours.amber }}>This image has not been prepared for web upload. Prepare these files locally before staging.</div>}
@@ -435,7 +413,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
                       <td style={{ padding: '9px' }}>{row.supplierColourName || '—'}</td>
                       <td style={{ padding: '9px' }}>{row.supplierColourCode || '—'}</td>
                       <td style={{ padding: '9px' }}>{row.internalColourCode || '—'}</td>
-                      <td style={{ padding: '9px', color: statusTone(row.status) }}><strong>{statusLabel(row.status)}</strong>{(row.warning || row.size > MAX_FILE_BYTES) && <div style={{ marginTop: '3px', color: colours.red }}>{row.size > MAX_FILE_BYTES ? `Exceeds ${MAX_FILE_BYTES / 1024 / 1024} MB upload limit.` : row.warning}</div>}</td>
+                          <td style={{ padding: '9px', color: statusTone(row.status) }}><strong>{statusLabel(row.status)}</strong>{row.phase && <div style={{ marginTop: '3px', color: colours.muted }}>Phase: {row.phase.replaceAll('_', ' ')}</div>}{(row.warning || row.size > MAX_FILE_BYTES) && <div style={{ marginTop: '3px', color: colours.red }}>{row.size > MAX_FILE_BYTES ? `Exceeds ${MAX_FILE_BYTES / 1024 / 1024} MB upload limit.` : row.warning}</div>}</td>
                     </tr>;
                   })}</tbody>
                 </table>

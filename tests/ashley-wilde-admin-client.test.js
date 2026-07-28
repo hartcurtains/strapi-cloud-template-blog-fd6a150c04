@@ -22,12 +22,13 @@ test('Ashley Wilde admin importer uses Strapi authenticated fetch for every requ
   assert.match(componentSource, /adminResponse\(get,\s*adminCatalogRoutes\.ashleyWildeMode/);
   assert.match(componentSource, /adminResponse\(get,\s*adminCatalogRoutes\.ashleyWildeHistory/);
   assert.match(componentSource, /adminResponse\(post,\s*adminCatalogRoutes\.ashleyWildeAnalyse/);
-  assert.match(componentSource, /stageBatchRequest\(post,\s*form/);
+  assert.match(componentSource, /uploadAshleyWildeMedia/);
+  assert.match(componentSource, /adminResponse\(post,\s*adminCatalogRoutes\.ashleyWildeFinalise/);
   assert.doesNotMatch(componentSource, /\bfetch\s*\(/);
   assert.doesNotMatch(componentSource, /localStorage|sessionStorage|Authorization\s*:/);
   assert.doesNotMatch(componentSource, /Content-Type\s*:/);
-  assert.match(componentSource, /new\s+FormData\(\)/);
-  assert.match(componentSource, /stageBatchRequest\(post,\s*form/);
+  assert.doesNotMatch(componentSource, /new\s+FormData\(\)/);
+  assert.doesNotMatch(componentSource, /bulkImageUpload/);
   assert.doesNotMatch(componentSource, /parseMappedFilename|browserMappingForMode|validateBrowserMapping/);
   assert.match(componentSource, /const\s+serverAnalysis\s*=\s*analysisResponse\.data/);
   assert.match(componentSource, /return\s*\{\s*\.\.\.row,\s*file:\s*local\?\.file,\s*previewUrl:\s*local\?\.previewUrl,\s*warning\s*\}/);
@@ -48,7 +49,7 @@ test('Ashley Wilde preview renders the exact resolved server row properties', ()
 });
 
 test('Ashley Wilde browser URLs are the registered admin-plugin routes', () => {
-  for (const key of ['ashleyWildeAnalyse', 'ashleyWildeHistory', 'ashleyWildeMode', 'bulkImageUpload']) {
+  for (const key of ['ashleyWildeAnalyse', 'ashleyWildeFinalise', 'ashleyWildeHistory', 'ashleyWildeMode', 'bulkImageUpload']) {
     const route = sharedRoutes[key];
     assert.ok(route, `missing shared route ${key}`);
     const routePath = route.slice(sharedRoutes.base.length);
@@ -70,12 +71,12 @@ test('Ashley Wilde mode and analysis responses expose server mapping metadata', 
   assert.match(importerSource, /mappingGeneratedAt:\s*mappings\.colourMap\.generatedAt/);
 });
 
-test('Ashley Wilde production upload resolves its importer through the plugin service registry', () => {
+test('Ashley Wilde production multipart staging is retired without changing generic bulk upload routing', () => {
   const apiController = fs.readFileSync(path.join(process.cwd(), 'src', 'api', 'order-management', 'controllers', 'order-management.ts'), 'utf8');
   const pluginEntry = fs.readFileSync(path.join(root, 'strapi-server.js'), 'utf8');
   const services = fs.readFileSync(path.join(root, 'server', 'services', 'index.js'), 'utf8');
-  assert.match(apiController, /strapi\.plugin\('order-management'\)\?\.service\('ashley-wilde-import'\)/);
-  assert.doesNotMatch(apiController, /require\(['"]\.\.\/\.\.\/\.\.\/plugins\/order-management\/server\/services\/ashley-wilde-import['"]\)/);
+  assert.match(apiController, /Ashley Wilde staging now uses the Strapi Media Library upload/);
+  assert.doesNotMatch(apiController, /processBatch\(strapi, validatedFiles/);
   assert.match(pluginEntry, /services:\s*require\(['"]\.\/server\/services['"]\)/);
   assert.match(services, /'ashley-wilde-import':\s*require\(['"]\.\/ashley-wilde-import['"]\)/);
 });
@@ -87,45 +88,37 @@ test('Ashley Wilde phase-one queue uses one-file staging requests with sequentia
   assert.match(componentSource, /const \{ batches, oversized \} = partitionUploadRows\(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES\)/);
   assert.match(componentSource, /for \(let index = 0; index < fileQueueRef\.current\.length; index \+= 1\)[\s\S]*await sha256File\(item\.file\)/);
   assert.match(componentSource, /for \(let index = 0; index < batches\.length; index \+= 1\)[\s\S]*ashleyWildeAnalyse/);
-  assert.match(componentSource, /stageQueuedFolder[\s\S]*stageBatchRequest/);
+  assert.match(componentSource, /stageQueuedFolder[\s\S]*stageAshleyRow/);
   assert.match(componentSource, /partitionUploadRows\(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES\)/);
   assert.match(componentSource, /function preflightStats\(rows\)/);
   assert.match(componentSource, /above20MiB/);
-  assert.match(componentSource, /above45MiB/);
   assert.match(componentSource, /projectedBatches/);
   assert.match(componentSource, /current\.forEach\(\(item\) => item\.previewUrl && URL\.revokeObjectURL\(item\.previewUrl\)\)/);
   assert.match(componentSource, /setFolderFiles\(\(current\)[\s\S]*return analysedRows;/);
   assert.equal(uploadPolicy.maxBatchFiles, 1);
-  assert.equal(uploadPolicy.normalBatchTargetBytes, 9 * 1024 * 1024);
-  assert.equal(uploadPolicy.maxFileBytes, 45 * 1024 * 1024);
+  assert.equal(uploadPolicy.normalBatchTargetBytes, 20 * 1024 * 1024);
+  assert.equal(uploadPolicy.maxFileBytes, 20 * 1024 * 1024);
   assert.match(utilitySource, /export function assertUploadBatch/);
   assert.deepEqual(Array.from({ length: Math.ceil(35 / 10) }, (_, index) => Math.min(10, 35 - index * 10)), [10, 10, 10, 5]);
   assert.match(importerSource, /body\?\.queueBatch \? normalizeManifest\(body\?\.folderManifest\) : manifest/);
 });
 
-test('Ashley Wilde staging is a single authenticated multipart request per sequential byte-bounded batch', () => {
+test('Ashley Wilde staging uses one Media upload followed by JSON-only finalisation', () => {
   const utilitySource = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), 'utf8');
-  const fetchAllFabricsSource = fs.readFileSync(path.join(root, 'shared', 'fetch-all-fabrics.js'), 'utf8');
-  assert.match(componentSource, /STAGING_REQUEST_TIMEOUT_MS/);
-  assert.match(componentSource, /const controller = new AbortController\(\)/);
-  assert.match(componentSource, /adminResponse\(request, adminCatalogRoutes\.bulkImageUpload, form, \{ signal: controller\.signal \}\)/);
-  assert.match(componentSource, /analysisToken:\s*batch\.analysisToken/);
-  assert.match(componentSource, /finalBatch: index === stagingBatches\.length - 1/);
-  assert.match(componentSource, /stagingRunRef\.current/);
-  assert.match(componentSource, /The upload did not start\. Please retry this batch\./);
-  assert.doesNotMatch(componentSource, /Content-Type\s*:/);
-  assert.match(componentSource, /MAX_BATCH_BYTES/);
-  assert.match(componentSource, /totalBytes/);
-  assert.match(componentSource, /largestFileBytes/);
+  const mediaUploadSource = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeMediaUpload.js'), 'utf8');
+  assert.match(mediaUploadSource, /ASHLEY_MEDIA_UPLOAD_PATH = '\/upload'/);
+  assert.match(mediaUploadSource, /form\.append\('files', file/);
+  assert.match(mediaUploadSource, /parseStagingResponse\(response\)/);
+  assert.match(componentSource, /uploadAshleyWildeMedia\(row\.file/);
+  assert.match(componentSource, /adminResponse\(post, adminCatalogRoutes\.ashleyWildeFinalise/);
+  assert.doesNotMatch(componentSource, /bulkImageUpload/);
+  assert.doesNotMatch(componentSource, /new\s+FormData\(\)/);
   assert.match(utilitySource, /MAX_BATCH_FILES = uploadPolicy\.maxBatchFiles/);
-  assert.match(utilitySource, /MAX_BATCH_BYTES = uploadPolicy\.normalBatchTargetBytes/);
   assert.match(utilitySource, /MAX_FILE_BYTES = uploadPolicy\.maxFileBytes/);
-  assert.match(utilitySource, /STAGING_REQUEST_TIMEOUT_MS = uploadPolicy\.requestTimeoutMs/);
-  assert.match(utilitySource, /bytes \+ fileSize > maxBytes/);
-  assert.match(fetchAllFabricsSource, /signal: options\.signal/);
+  assert.equal(uploadPolicy.maxFileBytes, 20 * 1024 * 1024);
 });
 
-test('Ashley Wilde batching reserves multipart overhead and skips only oversized files', () => {
+test('Ashley Wilde rejects only files above the 20 MiB prepared-image contract', () => {
   const utilitySource = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), 'utf8');
   assert.match(utilitySource, /export function partitionUploadRows/);
   assert.match(utilitySource, /const oversized = \[\]/);
@@ -134,28 +127,21 @@ test('Ashley Wilde batching reserves multipart overhead and skips only oversized
   assert.match(utilitySource, /return \{ batches, oversized \}/);
   assert.match(componentSource, /summary\.skippedFiles = oversized\.length/);
   assert.match(componentSource, /This image has not been prepared for web upload/);
-  assert.match(componentSource, /ABSOLUTE_IMPORTER_FILE_BYTES = 50 \* 1024 \* 1024/);
-  assert.match(componentSource, /The server rejected this upload because the request was too large/);
-  assert.match(componentSource, /Remaining batches were not sent/);
-  assert.match(componentSource, /assertUploadBatch\(rows\)/);
-  assert.match(componentSource, /targetBytes: MAX_BATCH_BYTES/);
+  assert.match(componentSource, /MAX_FILE_BYTES/);
+  assert.equal(uploadPolicy.maxFileBytes, 20 * 1024 * 1024);
 });
 
 test('Ashley Wilde upload observability exposes only safe request phase metadata', () => {
   assert.match(controllerSource, /logAshleyWildeUpload\(ctx, 'request-received'\)/);
   const apiController = fs.readFileSync(path.join(process.cwd(), 'src', 'api', 'order-management', 'controllers', 'order-management.ts'), 'utf8');
-  assert.match(apiController, /logStage\('multipart-validated'/);
-  assert.match(apiController, /logStage\('staging-processing-complete'/);
+  assert.match(controllerSource, /finaliseAshleyWilde/);
+  assert.match(controllerSource, /Media Library upload followed by JSON finalisation/);
+  assert.match(apiController, /Ashley Wilde staging now uses the Strapi Media Library upload followed by JSON finalisation/);
   assert.match(controllerSource, /authenticatedAdminId/);
-  assert.match(controllerSource, /batchFileCount/);
-  assert.match(controllerSource, /metadataPresent/);
-  assert.match(controllerSource, /analysisTokenPresent/);
   assert.match(importerServiceSource, /safeLog\(strapi, 'analysis-token-validation-start'/);
-  assert.match(importerServiceSource, /safeLog\(strapi, 'analysis-token-validation-complete'/);
-  assert.doesNotMatch(importerServiceSource, /JSON\.stringify\(body\?\.analysisToken\)/);
-  assert.match(importerServiceSource, /timedStage\(strapi, 'mapping-load'/);
-  assert.match(importerServiceSource, /timedStage\(strapi, 'file-processing'/);
-  assert.match(importerServiceSource, /timedStage\(strapi, 'history-upsert-final'/);
+  assert.match(importerServiceSource, /timedStage\(strapi, 'mapping-load-finalise'/);
+  assert.match(importerServiceSource, /timedStage\(strapi, 'staging-finalise'/);
+  assert.match(importerServiceSource, /retryable_finalisation_failure/);
 });
 
 test('Ashley Wilde staging has a single safe response parser and stops after a retryable upstream failure', () => {
@@ -164,15 +150,18 @@ test('Ashley Wilde staging has a single safe response parser and stops after a r
   assert.match(parserSource, /isJsonContentType/);
   assert.match(parserSource, /response\.text\(\)/);
   assert.match(componentSource, /status === 503 .*ASHLEY_WILDE_UPSTREAM_UNAVAILABLE/);
-  assert.match(componentSource, /No later batches were started\. Retry this batch/);
+  assert.match(parserSource, /The image service was temporarily unavailable\. This file was not confirmed as complete\. Check its status before retrying/);
   assert.match(componentSource, /await refreshHistory\(\);\s*setError\(safeErrorMessage/);
-  assert.match(componentSource, /for \(let index = 0; index < stagingBatches\.length; index \+= 1\)/);
+  assert.match(componentSource, /for \(let index = 0; index < stagingRows\.length; index \+= 1\)/);
 });
 
-test('Ashley Wilde server staging rejects multi-file batches before processing and keeps token validation ahead of writes', () => {
+test('Ashley Wilde finalisation keeps token validation ahead of Media binding and staging writes', () => {
   const apiController = fs.readFileSync(path.join(process.cwd(), 'src', 'api', 'order-management', 'controllers', 'order-management.ts'), 'utf8');
-  assert.match(apiController, /isAshleyWildeFolder && fileArray\.length > ashleyUploadPolicy\.maxBatchFiles/);
+  assert.match(apiController, /Ashley Wilde staging now uses the Strapi Media Library upload/);
+  assert.match(routeSource, /ashleyWildeFinalise/);
   assert.match(importerServiceSource, /verifyAnalysisToken\(body\?\.analysisToken/);
-  assert.match(importerServiceSource, /history-upsert-uploading/);
-  assert.ok(importerServiceSource.indexOf('analysis-token-validation-complete') < importerServiceSource.indexOf('history-upsert-uploading'));
+  assert.match(importerServiceSource, /validateAshleyMedia/);
+  assert.match(importerServiceSource, /mediaBindingFor/);
+  const finaliseSource = importerServiceSource.slice(importerServiceSource.indexOf('async function finaliseAshleyWildeMedia'));
+  assert.ok(finaliseSource.indexOf('verifyAnalysisToken(body?.analysisToken') < finaliseSource.indexOf('validateAshleyMedia'));
 });

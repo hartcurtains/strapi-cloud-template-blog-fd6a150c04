@@ -4,6 +4,15 @@ import { extractColorId, matchImageToProduct, parseColorIdFromFilename } from '.
 import adminCatalogRoutes from '../../../shared/routes';
 import { fetchAllFabrics } from '../../../shared/fetch-all-fabrics';
 import AshleyWildeFolderImporter from './AshleyWildeFolderImporter';
+import { normalizeStagingError, parseStagingResponse, STAGING_PARSER_VERSION, STAGING_RETRY_MESSAGE } from '../utils/stagingResponse';
+
+function bulkUploadErrorMessage(error) {
+  const status = error?.status || error?.response?.status;
+  if (status === 503 || error?.code === 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE') return STAGING_RETRY_MESSAGE;
+  if (status === 413) return 'The server rejected this upload because the request was too large. Retry with a smaller file.';
+  if (/unexpected token|json/i.test(String(error?.message || ''))) return 'The upload response was invalid. Check its status before retrying.';
+  return error?.message || 'The image upload failed. Try again.';
+}
 
 export default function BulkImageUploader({ productType = 'fabrics' }) {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -216,19 +225,12 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
               credentials: 'include', // Include cookies/session for authentication
             });
 
-            if (!response.ok) {
-              let errorMessage = `Upload failed: ${response.status}`;
-              try {
-                const errorData = await response.json();
-                errorMessage = errorData.error || (typeof errorData === 'object' ? JSON.stringify(errorData) : errorData) || errorMessage;
-              } catch (e) {
-                // If response is not JSON, use status text
-                errorMessage = response.statusText || errorMessage;
-              }
-              throw new Error(errorMessage);
-            }
-
-            const data = await response.json();
+            console.debug('[Ashley Wilde staging]', {
+              step: 'bulk-upload-response-parser',
+              parserVersion: STAGING_PARSER_VERSION,
+              fileName,
+            });
+            const data = await parseStagingResponse(response);
 
             // Merge results
             if (data.results) {
@@ -247,10 +249,12 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
             }
           } catch (error) {
             console.error(`❌ Error uploading ${fileName}:`, error);
+            const normalized = await normalizeStagingError(error);
+            const safeMessage = bulkUploadErrorMessage(normalized);
             allResults.failed++;
             allResults.errors.push({
               filename: fileName,
-              error: error.message
+              error: safeMessage
             });
             setUploadProgress(prev => ({ ...prev, status: 'error' }));
 
@@ -266,7 +270,8 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
       console.log('✅ Bulk upload completed:', allResults);
     } catch (error) {
       console.error('❌ Error in upload process:', error);
-      alert(`Failed to upload images: ${error.message}`);
+      const normalized = await normalizeStagingError(error);
+      alert(`Failed to upload images: ${bulkUploadErrorMessage(normalized)}`);
     } finally {
       setUploading(false);
       setUploadProgress({
@@ -893,10 +898,6 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
     </div>
   );
 }
-
-
-
-
 
 
 

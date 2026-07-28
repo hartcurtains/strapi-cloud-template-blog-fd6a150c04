@@ -1,8 +1,8 @@
 {
   "effectivePathLimitBytes": 52428800,
   "multipartOverheadBytes": 5242880,
-  "normalBatchTargetBytes": 9437184,
+  "normalBatchTargetBytes": 20971520,
   "maxBatchFiles": 1,
-  "maxFileBytes": 47185920,
+  "maxFileBytes": 20971520,
   "requestTimeoutMs": 120000
 }
