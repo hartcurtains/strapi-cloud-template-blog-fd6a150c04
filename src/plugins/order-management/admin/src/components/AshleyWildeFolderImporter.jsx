@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFetchClient } from '@strapi/strapi/admin';
+import { getFetchClient, useFetchClient } from '@strapi/strapi/admin';
 import { AlertCircle, CheckCircle, FolderOpen, Loader2, RefreshCw, Upload } from 'lucide-react';
 import adminCatalogRoutes from '../../../shared/routes';
 import {
@@ -70,7 +70,15 @@ function responseMessage(error) {
 
 function safeErrorMessage(error) {
   if (error?.ashleyPhase === 'upload') return safeMediaUploadErrorMessage(error);
-  if (error?.ashleyPhase === 'finalisation') return 'Image uploaded; staging link still needs to be completed. Retry this image.';
+  if (error?.ashleyPhase === 'finalisation') {
+    const status = responseStatus(error);
+    if (status === 401 || status === 403) return 'The image was uploaded, but its staging link could not be authorised. Refresh your admin session and retry finalisation.';
+    if (status === 503 || error?.code === 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE') return STAGING_RETRY_MESSAGE;
+    if (status === 413) return 'The staging request was too large. Retry this image.';
+    const serverMessage = responseMessage(error);
+    if (serverMessage && !/unexpected token|json/i.test(serverMessage)) return serverMessage;
+    return 'Image uploaded; staging link still needs to be completed. Retry this image.';
+  }
   if (error?.code === 'ASHLEY_WILDE_UPLOAD_TIMEOUT') return 'The upload did not start. Please retry this batch.';
   const status = responseStatus(error);
   if (status === 401) return 'The request could not authenticate. Your administrator credentials were not accepted.';
@@ -99,7 +107,8 @@ const statusLabel = (status) => ({
 }[status] || String(status || 'unknown').replaceAll('_', ' '));
 
 export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
-  const { get, post, put, del } = useFetchClient();
+  const { get, put, del } = useFetchClient();
+  const post = useCallback((...args) => getFetchClient().post(...args), []);
   const [analysis, setAnalysis] = useState(null);
   const [folderFiles, setFolderFiles] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -212,7 +221,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       setProgress(`Uploading image ${index + 1} of ${total}: ${row.filename}`);
       updateFolderRow(row.relativePath, { phase: 'uploading_media' });
       try {
-        media = await uploadAshleyWildeMedia(row.file, { analysisToken, folderFingerprint, relativePath: row.relativePath, fileFingerprint: row.sha256 });
+        media = await uploadAshleyWildeMedia(row.file, { analysisToken, folderFingerprint, relativePath: row.relativePath, fileFingerprint: row.sha256, adminPost: post });
       } catch (error) {
         error.ashleyPhase = 'upload';
         updateFolderRow(row.relativePath, { phase: 'retryable_upload_failure', status: 'failed', warning: safeMediaUploadErrorMessage(error) });

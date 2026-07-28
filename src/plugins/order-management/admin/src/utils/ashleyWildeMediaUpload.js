@@ -4,13 +4,7 @@ export const ASHLEY_MEDIA_UPLOAD_PATH = '/upload';
 export const ASHLEY_PREPARED_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 export const ACCEPTED_ASHLEY_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 export const MEDIA_UPLOAD_RETRY_MESSAGE = 'The image service was temporarily unavailable. This image was not uploaded. Please retry it.';
-
-function authHeaders() {
-  const token = typeof window !== 'undefined'
-    ? (window.strapi?.auth?.getToken?.() || localStorage.getItem('strapi-token') || localStorage.getItem('jwtToken'))
-    : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+export const MEDIA_UPLOAD_UNAUTHORISED_MESSAGE = 'The image upload was not authorised. Refresh your admin session and retry.';
 
 export function mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }) {
   const signature = String(analysisToken || '').split('.').pop();
@@ -19,7 +13,7 @@ export function mediaBindingFor({ analysisToken, folderFingerprint, relativePath
 
 export function safeMediaUploadErrorMessage(error) {
   const status = error?.status || error?.response?.status;
-  if (status === 401 || status === 403) return 'Your administrator session expired or is not authorised. Please sign in again.';
+  if (status === 401 || status === 403) return MEDIA_UPLOAD_UNAUTHORISED_MESSAGE;
   if (status === 413) return 'This prepared image is larger than the server can accept.';
   if (status === 503 || error?.code === 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE') return MEDIA_UPLOAD_RETRY_MESSAGE;
   if (error?.code === 'ASHLEY_WILDE_MEDIA_TOO_LARGE') return 'This prepared image is larger than the supported 20 MiB limit.';
@@ -27,7 +21,7 @@ export function safeMediaUploadErrorMessage(error) {
   return sanitizeDiagnosticMessage(error?.message) || 'The image could not be uploaded. Please retry it.';
 }
 
-export async function uploadAshleyWildeMedia(file, { analysisToken, folderFingerprint, relativePath, fileFingerprint, fetchImpl = fetch, signal } = {}) {
+export async function uploadAshleyWildeMedia(file, { analysisToken, folderFingerprint, relativePath, fileFingerprint, adminPost, signal } = {}) {
   const size = Number(file?.size || 0);
   const mimeType = String(file?.type || '').toLowerCase();
   if (!Number.isSafeInteger(size) || size < 1 || size > ASHLEY_PREPARED_IMAGE_MAX_BYTES) {
@@ -52,13 +46,8 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
   } }));
 
   try {
-    const response = await fetchImpl(ASHLEY_MEDIA_UPLOAD_PATH, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: form,
-      credentials: 'include',
-      signal,
-    });
+    if (typeof adminPost !== 'function') throw new Error('The authenticated Strapi admin upload client is unavailable.');
+    const response = await adminPost(ASHLEY_MEDIA_UPLOAD_PATH, form, { signal });
     const payload = await parseStagingResponse(response);
     const media = Array.isArray(payload) ? payload[0] : payload?.data?.[0] || payload?.data;
     if (!media?.id) {

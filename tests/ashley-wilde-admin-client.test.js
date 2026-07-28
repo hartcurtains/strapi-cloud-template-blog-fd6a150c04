@@ -17,8 +17,9 @@ const sharedRoutes = require(path.join(root, 'shared', 'routes.json'));
 const uploadPolicy = require(path.join(root, 'shared', 'ashley-wilde-upload-policy.json'));
 
 test('Ashley Wilde admin importer uses Strapi authenticated fetch for every request', () => {
-  assert.match(componentSource, /import\s*\{\s*useFetchClient\s*\}\s*from\s*['"]@strapi\/strapi\/admin['"]/);
-  assert.match(componentSource, /const\s*\{\s*get,\s*post,\s*put,\s*del\s*\}\s*=\s*useFetchClient\(\)/);
+  assert.match(componentSource, /import\s*\{\s*getFetchClient,\s*useFetchClient\s*\}\s*from\s*['"]@strapi\/strapi\/admin['"]/);
+  assert.match(componentSource, /const\s*\{\s*get,\s*put,\s*del\s*\}\s*=\s*useFetchClient\(\)/);
+  assert.match(componentSource, /const\s+post\s*=\s*useCallback\(\(\.\.\.args\)\s*=>\s*getFetchClient\(\)\.post\(\.\.\.args\),\s*\[\]\)/);
   assert.match(componentSource, /adminResponse\(get,\s*adminCatalogRoutes\.ashleyWildeMode/);
   assert.match(componentSource, /adminResponse\(get,\s*adminCatalogRoutes\.ashleyWildeHistory/);
   assert.match(componentSource, /adminResponse\(post,\s*adminCatalogRoutes\.ashleyWildeAnalyse/);
