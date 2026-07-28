@@ -12,6 +12,7 @@
     "ashley-wilde:pilot-seed": "node scripts/ashley-wilde-pilot-seed.js --force",
     "ashley-wilde:pilot-reset": "node scripts/ashley-wilde-pilot-reset.js",
     "ashley-wilde:promote-staged-colours": "node scripts/ashley-wilde-promote-staged-colours.js",
+    "prepare:ashley-wilde": "node scripts/prepare-ashley-wilde-images.mjs",
     "build": "node scripts/ashley-wilde-build-guard.js && strapi build",
     "console": "strapi console",
     "deploy": "strapi deploy",

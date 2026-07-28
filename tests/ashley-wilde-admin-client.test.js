@@ -29,7 +29,7 @@ test('Ashley Wilde admin importer uses Strapi authenticated fetch for every requ
   assert.match(componentSource, /adminResponse\(post,\s*adminCatalogRoutes\.bulkImageUpload,\s*form\)/);
   assert.doesNotMatch(componentSource, /parseMappedFilename|browserMappingForMode|validateBrowserMapping/);
   assert.match(componentSource, /const\s+serverAnalysis\s*=\s*analysisResponse\.data/);
-  assert.match(componentSource, /return\s*\{\s*file:\s*local\?\.file,\s*previewUrl:\s*local\?\.previewUrl,\s*\.\.\.row\s*\}/);
+  assert.match(componentSource, /return\s*\{\s*\.\.\.row,\s*file:\s*local\?\.file,\s*previewUrl:\s*local\?\.previewUrl,\s*warning\s*\}/);
   assert.doesNotMatch(componentSource, /ashley-wilde-(?:colour-map|code-registry)/);
   assert.doesNotMatch(componentSource, /STRAPI_API_TOKEN|process\.env/);
 });
@@ -88,6 +88,10 @@ test('Ashley Wilde phase-one queue is bounded to 10 files with sequential hashin
   assert.match(componentSource, /for \(let index = 0; index < batches\.length; index \+= 1\)[\s\S]*ashleyWildeAnalyse/);
   assert.match(componentSource, /stageQueuedFolder[\s\S]*stageBatchRequest/);
   assert.match(componentSource, /partitionUploadRows\(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES\)/);
+  assert.match(componentSource, /function preflightStats\(rows\)/);
+  assert.match(componentSource, /above20MiB/);
+  assert.match(componentSource, /above45MiB/);
+  assert.match(componentSource, /projectedBatches/);
   assert.match(componentSource, /current\.forEach\(\(item\) => item\.previewUrl && URL\.revokeObjectURL\(item\.previewUrl\)\)/);
   assert.match(componentSource, /setFolderFiles\(\(current\)[\s\S]*return analysedRows;/);
   assert.match(utilitySource, /for \(let index = 0; index < items\.length; index \+= size\) batches\.push\(items\.slice\(index, index \+ size\)\)/);
@@ -126,6 +130,8 @@ test('Ashley Wilde batching reserves multipart overhead and skips only oversized
   assert.match(utilitySource, /continue;/);
   assert.match(utilitySource, /return \{ batches, oversized \}/);
   assert.match(componentSource, /summary\.skippedFiles = oversized\.length/);
+  assert.match(componentSource, /This image has not been prepared for web upload/);
+  assert.match(componentSource, /ABSOLUTE_IMPORTER_FILE_BYTES = 50 \* 1024 \* 1024/);
   assert.match(componentSource, /The server rejected this upload because the request was too large/);
   assert.match(componentSource, /Remaining batches were not sent/);
 });

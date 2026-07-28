@@ -12,6 +12,8 @@ const colours = {
   green: '#059669', amber: '#b45309', red: '#dc2626', surface: '#f9fafb',
 };
 const STAGING_REQUEST_TIMEOUT_MS = 90 * 1000;
+const PREPARED_WARNING_BYTES = 20 * 1024 * 1024;
+const ABSOLUTE_IMPORTER_FILE_BYTES = 50 * 1024 * 1024;
 
 function performanceNow() {
   return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
@@ -28,6 +30,22 @@ function batchStats(rows) {
     fileCount: rows.length,
     totalBytes: sizes.reduce((total, size) => total + size, 0),
     largestFileBytes: Math.max(0, ...sizes),
+  };
+}
+
+function preflightStats(rows) {
+  const sizes = rows.map((row) => Number(row.file?.size ?? row.size ?? 0));
+  const totalBytes = sizes.reduce((total, size) => total + size, 0);
+  const largestFileBytes = Math.max(0, ...sizes);
+  const projected = partitionUploadRows(rows, MAX_BATCH_FILES, MAX_BATCH_BYTES);
+  return {
+    totalFiles: rows.length,
+    totalBytes,
+    largestFileBytes,
+    above20MiB: sizes.filter((size) => size > PREPARED_WARNING_BYTES).length,
+    above45MiB: sizes.filter((size) => size > MAX_FILE_BYTES).length,
+    above50MiB: sizes.filter((size) => size > ABSOLUTE_IMPORTER_FILE_BYTES).length,
+    projectedBatches: projected.batches.length,
   };
 }
 
@@ -181,15 +199,16 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     const files = [...(event.target.files || [])];
     if (!files.length) return;
     const selectedFolderName = folderNameFromFiles(files);
-    fileQueueRef.current = files.map((file) => ({
+    const selectedRows = files.map((file) => ({
       file, filename: file.name, relativePath: relativePathOf(file), size: file.size,
       mimeType: file.type || 'application/octet-stream',
     })).sort((left, right) => left.relativePath.localeCompare(right.relativePath));
+    fileQueueRef.current = selectedRows;
     folderFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
     setFolderFiles([]);
     setError('');
     setAcknowledgeSkips(false);
-    setQueuedFolder({ folderName: selectedFolderName, totalFiles: files.length });
+    setQueuedFolder({ folderName: selectedFolderName, totalFiles: files.length, preflight: preflightStats(selectedRows) });
     setAnalysis(null);
     setAnalysisBatches([]);
     setAnalysisState('pending');
@@ -285,8 +304,9 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         const filesByPath = new Map(batch.map((item) => [item.relativePath, item]));
         const rows = serverAnalysis.rows.map((row) => {
           const local = filesByPath.get(row.relativePath);
-          if (!local || !isSupportedFileName(row.filename)) return { file: local?.file, previewUrl: local?.previewUrl, ...row };
-          return { file: local?.file, previewUrl: URL.createObjectURL(local.file), ...row };
+          const warning = local?.size > PREPARED_WARNING_BYTES ? 'This image has not been prepared for web upload.' : row.warning;
+          if (!local || !isSupportedFileName(row.filename)) return { ...row, file: local?.file, previewUrl: local?.previewUrl, warning };
+          return { ...row, file: local?.file, previewUrl: URL.createObjectURL(local.file), warning };
         });
         analysedRows.push(...rows);
         analysedBatches.push({ rows, analysisToken: serverAnalysis.analysisToken });
@@ -381,6 +401,19 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
 
           {busy && <p style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colours.muted, fontSize: '13px' }}><Loader2 size={16} className="aw-spin" />{progress}</p>}
           {error && <div role="alert" style={{ display: 'flex', gap: '8px', marginTop: '14px', padding: '12px', background: '#fef2f2', color: '#991b1b', borderRadius: '6px' }}><AlertCircle size={18} />{error}</div>}
+          {queuedFolder?.preflight && <div role="status" style={{ marginTop: '14px', padding: '12px', background: colours.surface, border: `1px solid ${colours.line}`, borderRadius: '6px', color: colours.muted, fontSize: '13px' }}>
+            <strong style={{ color: colours.text }}>Upload preparation pre-flight</strong>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', marginTop: '7px' }}>
+              <span>{queuedFolder.preflight.totalFiles} selected</span>
+              <span>{formatBytes(queuedFolder.preflight.totalBytes)} total</span>
+              <span>{formatBytes(queuedFolder.preflight.largestFileBytes)} largest</span>
+              <span>{queuedFolder.preflight.above20MiB} above 20 MiB</span>
+              <span>{queuedFolder.preflight.above45MiB} above 45 MiB</span>
+              <span>{queuedFolder.preflight.projectedBatches} projected batch{queuedFolder.preflight.projectedBatches === 1 ? '' : 'es'}</span>
+            </div>
+            {queuedFolder.preflight.above20MiB > 0 && <div style={{ marginTop: '7px', color: colours.amber }}>This image has not been prepared for web upload. Prepare these files locally before staging.</div>}
+            {queuedFolder.preflight.above50MiB > 0 && <div style={{ marginTop: '4px', color: colours.red }}>{queuedFolder.preflight.above50MiB} file(s) exceed the absolute 50 MiB importer limit and will remain unsupported.</div>}
+          </div>}
 
           {analysis?.analysisComplete === true && (
             <>
