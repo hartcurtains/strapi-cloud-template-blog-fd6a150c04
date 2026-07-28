@@ -6,6 +6,10 @@ export const ACCEPTED_ASHLEY_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', '
 export const MEDIA_UPLOAD_RETRY_MESSAGE = 'The image service was temporarily unavailable. This image was not uploaded. Please retry it.';
 export const MEDIA_UPLOAD_UNAUTHORISED_MESSAGE = 'The image upload was not authorised. Refresh your administrator session and retry.';
 
+export function getSafeBasename(relativePath) {
+  return String(relativePath || '').normalize('NFKC').replace(/\\/g, '/').split('/').pop() || '';
+}
+
 export function mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }) {
   const signature = String(analysisToken || '').split('.').pop();
   return `aw-ashley:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
@@ -66,11 +70,12 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
   // formData.append('files', rawFile) and formData.append('fileInfo', JSON.stringify(...)).
   // The injected admin client supplies the current authenticated session and
   // deliberately owns the request headers/boundary.
-  form.append('files', file);
+  const canonicalFilename = getSafeBasename(relativePath || file.name);
+  form.append('files', file, canonicalFilename);
   form.append('fileInfo', JSON.stringify({
-    name: file.name,
-    caption: mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }),
-    alternativeText: file.name,
+    name: canonicalFilename,
+    alternativeText: null,
+    caption: null,
     folder: undefined,
   }));
 

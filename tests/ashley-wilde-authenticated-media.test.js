@@ -28,7 +28,7 @@ function loadMediaUploadModule() {
 
 function preparedFile() {
   const file = new Blob(['prepared-image'], { type: 'image/jpeg' });
-  file.name = 'ALASKAAQ.jpg';
+  file.name = 'Test/ALASKAAQ.jpg';
   return file;
 }
 
@@ -52,12 +52,13 @@ test('Media staging uses the injected Strapi admin client and preserves the Medi
   assert.ok(calls[0][1] instanceof FormData);
   assert.equal(calls[0][2].signal, undefined);
   assert.equal(calls[0][1].getAll('files').length, 1);
+  assert.equal(calls[0][1].get('files').name, 'ALASKAAQ.jpg');
   assert.equal(calls[0][1].get('data'), null);
   const fileInfo = JSON.parse(calls[0][1].get('fileInfo'));
   assert.deepEqual(fileInfo, {
     name: 'ALASKAAQ.jpg',
-    alternativeText: 'ALASKAAQ.jpg',
-    caption: 'aw-ashley:signature:folder-fingerprint:Ashley/ALASKAAQ.jpg:file-fingerprint',
+    alternativeText: null,
+    caption: null,
   });
 });
 
