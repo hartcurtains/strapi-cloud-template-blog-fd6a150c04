@@ -885,7 +885,7 @@ async bulkImageUpload(ctx) {
           error.code = 'ASHLEY_WILDE_SERVICE_UNAVAILABLE';
           throw error;
         }
-        const folderResults = await importer.processBatch(strapi, validatedFiles, ctx.request.body);
+        const folderResults = await importer.processBatch(strapi, validatedFiles, ctx.request.body, { adminId: importer.adminIdentity(ctx) });
         ctx.body = { success: folderResults.failed === 0, data: folderResults };
       } catch (error: any) {
         ctx.status = ['ASHLEY_WILDE_MAPPING_INVALID', 'ASHLEY_WILDE_SERVICE_UNAVAILABLE'].includes(error?.code) ? 503 : 400;

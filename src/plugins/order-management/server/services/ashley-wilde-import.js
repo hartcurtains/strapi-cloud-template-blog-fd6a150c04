@@ -16,10 +16,90 @@ const IDENTITY_UID = 'api::fabric-colour-identity.fabric-colour-identity';
 const ASSET_UID = 'api::fabric-colour-asset.fabric-colour-asset';
 const FILE_UID = 'plugin::upload.file';
 const COLOUR_STATUSES = new Set(['matched', 'mapped', 'pending_manual_mapping', 'would_stage_identity', 'would_stage_asset', 'already_staged', 'staged', 'exact_duplicate', 'conflicting_image']);
+const ANALYSIS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 function safeMessage(error) {
   if (error?.code === 'ASHLEY_WILDE_MAPPING_INVALID') return error.message;
+  if (error?.code === 'ASHLEY_WILDE_ANALYSIS_REQUIRED') return 'A successful Ashley Wilde filename analysis is required before staging files.';
+  if (error?.code === 'ASHLEY_WILDE_ANALYSIS_INVALID') return 'The Ashley Wilde analysis is no longer valid. Analyse the selected folder again before staging.';
   return 'The folder import could not be processed safely.';
+}
+
+function adminIdentity(ctx) {
+  const user = ctx?.state?.catalogWriteAuth?.user || ctx?.state?.user;
+  return String(user?.documentId || user?.id || user?.email || '').trim();
+}
+
+function analysisTokenSecret() {
+  const configured = process.env.STRAPI_INTERNAL_SECURITY_SECRET || process.env.APP_KEYS;
+  if (!configured) {
+    const error = new Error('Ashley Wilde analysis token signing is not configured');
+    error.code = 'ASHLEY_WILDE_ANALYSIS_REQUIRED';
+    throw error;
+  }
+  return String(configured).split(',')[0];
+}
+
+function base64url(value) {
+  return Buffer.from(value, 'utf8').toString('base64url');
+}
+
+function signAnalysisPayload(encodedPayload) {
+  return crypto.createHmac('sha256', analysisTokenSecret()).update(encodedPayload, 'utf8').digest('base64url');
+}
+
+function createAnalysisToken({ mappingImportDocumentId, mappingVersion, manifestFingerprint: fingerprint, manifestFileCount, analyzedPaths, adminId }) {
+  if (!adminId) {
+    const error = new Error('Authenticated administrator identity is required for Ashley Wilde analysis');
+    error.code = 'ASHLEY_WILDE_ANALYSIS_REQUIRED';
+    throw error;
+  }
+  const paths = [...new Set((analyzedPaths || []).map(normalizeRelativePath))].sort();
+  const payload = {
+    version: 1,
+    expiresAt: Date.now() + ANALYSIS_TOKEN_TTL_MS,
+    adminId: String(adminId),
+    mappingImportDocumentId: mappingImportDocumentId || null,
+    mappingVersion: mappingVersion || null,
+    manifestFingerprint: fingerprint,
+    manifestFileCount,
+    analyzedPaths: paths,
+    analyzedFileCount: paths.length,
+  };
+  const encoded = base64url(JSON.stringify(payload));
+  return `aw-analysis.${encoded}.${signAnalysisPayload(encoded)}`;
+}
+
+function invalidAnalysisError() {
+  const error = new Error('Ashley Wilde analysis token is invalid or no longer matches the selected folder.');
+  error.code = 'ASHLEY_WILDE_ANALYSIS_INVALID';
+  return error;
+}
+
+function verifyAnalysisToken(token, { mappingImportDocumentId, mappingVersion, fingerprint, manifestFileCount, uploadedPaths, adminId }) {
+  if (typeof token !== 'string' || !token.startsWith('aw-analysis.')) {
+    const error = new Error('A successful Ashley Wilde filename analysis is required before staging files.');
+    error.code = 'ASHLEY_WILDE_ANALYSIS_REQUIRED';
+    throw error;
+  }
+  const [, encoded, suppliedSignature] = token.split('.');
+  if (!encoded || !suppliedSignature) throw invalidAnalysisError();
+  const expectedSignature = signAnalysisPayload(encoded);
+  const expected = Buffer.from(expectedSignature, 'utf8');
+  const supplied = Buffer.from(suppliedSignature, 'utf8');
+  if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) throw invalidAnalysisError();
+  let payload;
+  try { payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')); } catch { throw invalidAnalysisError(); }
+  const expectedPaths = new Set(Array.isArray(payload.analyzedPaths) ? payload.analyzedPaths : []);
+  const requestedPaths = (uploadedPaths || []).map(normalizeRelativePath);
+  if (payload.version !== 1 || payload.expiresAt < Date.now() || payload.adminId !== String(adminId || '')
+    || payload.mappingImportDocumentId !== (mappingImportDocumentId || null)
+    || payload.mappingVersion !== (mappingVersion || null)
+    || payload.manifestFingerprint !== fingerprint
+    || payload.manifestFileCount !== manifestFileCount
+    || payload.analyzedFileCount !== expectedPaths.size
+    || requestedPaths.some((relativePath) => !expectedPaths.has(relativePath))) throw invalidAnalysisError();
+  return payload;
 }
 
 function normalizeManifest(input) {
@@ -191,6 +271,7 @@ async function loadAshleyImporterMappings(strapi, options = {}) {
       colourMap: active.colourMap,
       mappingVersion: active.version.version,
       mappingImportDocumentId: active.version.documentId,
+      mappingRowCount: active.rows.length,
       codeRegistry: null,
       imageIndex: null,
     };
@@ -198,7 +279,7 @@ async function loadAshleyImporterMappings(strapi, options = {}) {
   return { ...loadProductionMappings(), source: 'repository-fallback', mappingVersion: null, mappingImportDocumentId: null };
 }
 
-async function analyseFolder(strapi, body) {
+async function analyseFolder(strapi, body, options = {}) {
   const mappings = await loadAshleyImporterMappings(strapi);
   const manifest = normalizeManifest(body?.manifest);
   const completeManifest = body?.queueBatch ? normalizeManifest(body?.folderManifest) : manifest;
@@ -218,7 +299,27 @@ async function analyseFolder(strapi, body) {
     rows.push({ ...entry, ...parsed });
   }
   const summary = summaryForRows(rows);
-  if (body?.queueBatch) return { supplier: SUPPLIER, folderName, folderFingerprint: fingerprint, mappingSchemaVersion: mappings.colourMap.schemaVersion, mappingGeneratedAt: mappings.colourMap.generatedAt, mappingMode: mappings.mode, mappingSource: mappings.source, mappingVersion: mappings.mappingVersion || null, rows, summary };
+  if (body?.queueBatch) return {
+    supplier: SUPPLIER,
+    folderName,
+    folderFingerprint: fingerprint,
+    mappingSchemaVersion: mappings.colourMap.schemaVersion,
+    mappingGeneratedAt: mappings.colourMap.generatedAt,
+    mappingMode: mappings.mode,
+    mappingSource: mappings.source,
+    mappingVersion: mappings.mappingVersion || null,
+    mappingRowCount: mappings.mappingRowCount || null,
+    analysisToken: createAnalysisToken({
+      mappingImportDocumentId: mappings.mappingImportDocumentId,
+      mappingVersion: mappings.mappingVersion,
+      manifestFingerprint: fingerprint,
+      manifestFileCount: completeManifest.length,
+      analyzedPaths: manifest.map((item) => item.relativePath),
+      adminId: options.adminId,
+    }),
+    rows,
+    summary,
+  };
   const previousRows = await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: fingerprint }, limit: 1 });
   const previous = previousRows?.[0];
   const noRemainingWork = summary.readyFiles === 0;
@@ -315,6 +416,14 @@ async function processBatch(strapi, descriptors, body, options = {}) {
   const fingerprint = manifestFingerprint(manifest);
   if (fingerprint !== body?.folderFingerprint) throw new Error('Folder fingerprint does not match the manifest');
   const batchMetadata = JSON.parse(body?.fileMetadata || '[]');
+  if (!options.mappings) verifyAnalysisToken(body?.analysisToken, {
+    mappingImportDocumentId: mappings.mappingImportDocumentId,
+    mappingVersion: mappings.mappingVersion,
+    fingerprint,
+    manifestFileCount: manifest.length,
+    uploadedPaths: batchMetadata.map((item) => item.relativePath),
+    adminId: options.adminId,
+  });
   const byPath = new Map(batchMetadata.map((item) => [normalizeRelativePath(item.relativePath), item]));
   const results = [];
   for (const descriptor of descriptors) {
@@ -340,4 +449,4 @@ async function getHistory(strapi) {
   return strapi.entityService.findMany(BATCH_UID, { sort: ['updatedAt:desc'], limit: 50 });
 }
 
-module.exports = { analyseFolder, getHistory, loadAshleyImporterMappings, logicalRows, manifestFingerprint, normalizeManifest, processBatch, resolveAshleyFabric, safeMessage, summaryForRows, upsertHistory };
+module.exports = { adminIdentity, analyseFolder, createAnalysisToken, getHistory, loadAshleyImporterMappings, logicalRows, manifestFingerprint, normalizeManifest, processBatch, resolveAshleyFabric, safeMessage, summaryForRows, upsertHistory, verifyAnalysisToken };

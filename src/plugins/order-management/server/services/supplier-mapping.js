@@ -3,7 +3,9 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { loadProductionMappings, normalizeCanonicalColourName, normalizeToken } = require('../../shared/ashley-wilde-mapping');
+const {
+  AshleyWildeMappingError, SUPPLIER, loadProductionMappings, normalizeCanonicalColourName, normalizeToken, validateColourMap,
+} = require('../../shared/ashley-wilde-mapping');
 
 const IMPORT_UID = 'api::supplier-mapping-import.supplier-mapping-import';
 const MAPPING_UID = 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping';
@@ -45,6 +47,14 @@ function canonicalMappingKey(row) {
   ].join('|');
 }
 function hashJson(value) { return crypto.createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex'); }
+
+function normalizeActiveSupplier(value, file = 'active Ashley Wilde mapping') {
+  const normalized = clean(value).replace(/\s+/g, ' ');
+  if (normalized.toLocaleLowerCase() !== SUPPLIER.toLocaleLowerCase()) {
+    throw new AshleyWildeMappingError(`supplier must be "${SUPPLIER}"`, file);
+  }
+  return SUPPLIER;
+}
 
 function assertJsonSize(value) {
   const bytes = Buffer.byteLength(value, 'utf8');
@@ -573,10 +583,10 @@ function importerColourMap(version, rows) {
   const products = {};
   for (const fabric of version.sourcePayload?.fabrics || []) {
     const productKey = `${codeKey(fabric.supplierProductCode)}|${fabric.fabricDocumentId || fabric.fabricName}`;
-    products[productKey] = {
-      productName: fabric.fabricName,
-      fabricName: fabric.fabricName,
-      fabricDocumentId: fabric.fabricDocumentId || null,
+      products[productKey] = {
+        productName: fabric.fabricName,
+        fabricName: fabric.fabricName,
+        ...(fabric.fabricDocumentId ? { fabricDocumentId: fabric.fabricDocumentId } : {}),
       supplierProductCode: fabric.supplierProductCode,
       mappingVersion: version.version,
       filenamePrefixes: [fabric.supplierProductCode],
@@ -590,7 +600,7 @@ function importerColourMap(version, rows) {
       products[productKey] = {
         productName: row.fabricName,
         fabricName: row.fabricName,
-        fabricDocumentId: row.fabricDocumentId,
+        ...(row.fabricDocumentId ? { fabricDocumentId: row.fabricDocumentId } : {}),
         supplierProductCode: row.supplierProductCode,
         mappingVersion: version.version,
         filenamePrefixes: [row.supplierProductCode],
@@ -603,18 +613,32 @@ function importerColourMap(version, rows) {
       supplierColourName: row.officialColourName,
       internalColourCode: row.internalColourCode,
       resolved: Boolean(row.officialColourName && row.internalColourCode),
+      ...(row.officialColourName && row.internalColourCode ? {} : { reason: row.reconciliationReason || 'Active mapping row is unresolved.' }),
       evidenceStatus: row.evidenceStatus,
       evidence: { source: `${row.source || 'Strapi supplier mapping'} (mapping version ${version.version})` },
     };
   }
-  return { schemaVersion: version.schemaVersion || 1, mappingVersion: version.version, generatedAt: version.importedAt, products };
+  return { schemaVersion: version.schemaVersion || 1, supplier: SUPPLIER, mappingVersion: version.version, generatedAt: version.importedAt, products };
+}
+
+function normalizeActiveImporterMapping(payload) {
+  const version = payload?.version;
+  const file = 'active Ashley Wilde mapping';
+  const versionSupplier = normalizeActiveSupplier(version?.supplier, file);
+  const sourceSupplier = normalizeActiveSupplier(version?.sourcePayload?.supplier || versionSupplier, file);
+  const rawColourMap = payload?.colourMap || importerColourMap(version, payload?.rows || []);
+  normalizeActiveSupplier(rawColourMap?.supplier || versionSupplier, file);
+  const colourMap = { ...rawColourMap, supplier: SUPPLIER };
+  validateColourMap(colourMap, file);
+  return { version, rows: payload?.rows || [], colourMap, source: 'strapi-active-version' };
 }
 
 async function getActiveImporterMappings(strapi, supplier) {
-  const version = await getActiveVersion(strapi, supplier);
+  const canonicalSupplier = normalizeActiveSupplier(supplier, 'Ashley Wilde importer request');
+  const version = await getActiveVersion(strapi, canonicalSupplier);
   if (!version) return null;
   const rows = await mappingsForVersion(strapi, version);
-  return { version, rows, colourMap: importerColourMap(version, rows), source: 'strapi-active-version' };
+  return normalizeActiveImporterMapping({ version, rows });
 }
 
 function compareRows(rows, activeRows) {
@@ -843,4 +867,4 @@ async function reenrichSupplierMappings(strapi, ctx) {
   return { version: safeImportRecord(version), summary, results, applied: 0 };
 }
 
-module.exports = { MAX_JSON_BYTES, applyMapping, buildPreview, exportMapping, exportRepositoryFallback, getActiveImporterMappings, getActiveMappings, getActiveVersion, loadRegistry, mappingsForVersion, normalizeDocument, reenrichSupplierMappings, uploadMapping, validateDocument };
+module.exports = { MAX_JSON_BYTES, applyMapping, buildPreview, exportMapping, exportRepositoryFallback, getActiveImporterMappings, getActiveMappings, getActiveVersion, loadRegistry, mappingsForVersion, normalizeActiveImporterMapping, normalizeDocument, reenrichSupplierMappings, uploadMapping, validateDocument };

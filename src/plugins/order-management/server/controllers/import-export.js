@@ -1265,7 +1265,7 @@ module.exports = {
     const importer = require('../services/ashley-wilde-import');
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
     try {
-      ctx.body = { success: true, data: await importer.analyseFolder(strapi, ctx.request.body) };
+      ctx.body = { success: true, data: await importer.analyseFolder(strapi, ctx.request.body, { adminId: importer.adminIdentity(ctx) }) };
     } catch (error) {
       ctx.status = error?.code === 'ASHLEY_WILDE_MAPPING_INVALID' ? 503 : 400;
       ctx.body = { success: false, error: importer.safeMessage(error) };
@@ -1296,6 +1296,8 @@ module.exports = {
           mode: mappings.mode || mode,
           source: mappings.source || 'repository-fallback',
           mappingVersion: mappings.mappingVersion || null,
+          mappingRowCount: mappings.mappingRowCount || null,
+          supplier: mappings.colourMap.supplier,
           pilot: (mappings.mode || mode) === 'pilot',
           label: (mappings.mode || mode) === 'pilot' ? 'Pilot mapping — local testing only' : null,
           schemaVersion: mappings.colourMap.schemaVersion,
