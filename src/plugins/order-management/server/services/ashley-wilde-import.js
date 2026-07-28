@@ -30,6 +30,12 @@ function adminIdentity(ctx) {
   return String(user?.documentId || user?.id || user?.email || '').trim();
 }
 
+function safeLog(strapi, stage, details = {}) {
+  const entry = { timestamp: new Date().toISOString(), stage, ...details };
+  const logger = strapi?.log?.info ? strapi.log : console;
+  logger.info(`[Ashley Wilde bulk upload] ${JSON.stringify(entry)}`);
+}
+
 function analysisTokenSecret() {
   const configured = process.env.STRAPI_INTERNAL_SECURITY_SECRET || process.env.APP_KEYS;
   if (!configured) {
@@ -416,6 +422,12 @@ async function processBatch(strapi, descriptors, body, options = {}) {
   const fingerprint = manifestFingerprint(manifest);
   if (fingerprint !== body?.folderFingerprint) throw new Error('Folder fingerprint does not match the manifest');
   const batchMetadata = JSON.parse(body?.fileMetadata || '[]');
+  safeLog(strapi, 'analysis-token-validation-start', {
+    authenticatedAdminId: options.adminId || null,
+    batchFileCount: descriptors.length,
+    metadataPresent: batchMetadata.length > 0,
+    analysisTokenPresent: Boolean(body?.analysisToken),
+  });
   if (!options.mappings) verifyAnalysisToken(body?.analysisToken, {
     mappingImportDocumentId: mappings.mappingImportDocumentId,
     mappingVersion: mappings.mappingVersion,
@@ -423,6 +435,12 @@ async function processBatch(strapi, descriptors, body, options = {}) {
     manifestFileCount: manifest.length,
     uploadedPaths: batchMetadata.map((item) => item.relativePath),
     adminId: options.adminId,
+  });
+  safeLog(strapi, 'analysis-token-validation-complete', {
+    authenticatedAdminId: options.adminId || null,
+    batchFileCount: descriptors.length,
+    metadataPresent: batchMetadata.length > 0,
+    analysisTokenPresent: Boolean(body?.analysisToken),
   });
   const byPath = new Map(batchMetadata.map((item) => [normalizeRelativePath(item.relativePath), item]));
   const results = [];

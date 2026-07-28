@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Upload, X, CheckCircle, AlertCircle, Loader2, Image as ImageIcon } from 'lucide-react';
 import { extractColorId, matchImageToProduct, parseColorIdFromFilename } from '../utils/imageMatching';
 import adminCatalogRoutes from '../../../shared/routes';
@@ -23,6 +23,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
   const [products, setProducts] = useState([]);
   const [colorMappings, setColorMappings] = useState({});
   const [showColorMapping, setShowColorMapping] = useState(false);
+  const catalogueControllerRef = useRef(null);
 
   const getAuthHeaders = () => {
     // Use Strapi's internal admin API - get the JWT token from Strapi's admin context
@@ -38,16 +39,18 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
 
   // Fetch products when component mounts or productType changes
   useEffect(() => {
+    const controller = new AbortController();
+    catalogueControllerRef.current = controller;
     const fetchProducts = async () => {
       try {
         const apiPath = `/api/${productType}`;
         if (productType === 'fabrics') {
-          const data = await fetchAllFabrics({ fetchImpl: fetch, headers: getAuthHeaders(), populate: '*' });
+          const data = await fetchAllFabrics({ fetchImpl: fetch, headers: getAuthHeaders(), populate: '*', signal: controller.signal });
           setProducts(data.data);
           return;
         }
         const response = await fetch(`${apiPath}?populate=*`, {
-          headers: getAuthHeaders()
+          headers: getAuthHeaders(), signal: controller.signal
         });
 
         if (response.ok) {
@@ -55,14 +58,22 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
           setProducts(data.data || []);
         }
       } catch (error) {
-        console.error('Error fetching products:', error);
+        if (!controller.signal.aborted) console.error('Error fetching products:', error);
       }
     };
 
     if (matchBy === 'colorId') {
       fetchProducts();
     }
+    return () => {
+      controller.abort();
+      if (catalogueControllerRef.current === controller) catalogueControllerRef.current = null;
+    };
   }, [productType, matchBy]);
+
+  const cancelCatalogueRequests = useCallback(() => {
+    catalogueControllerRef.current?.abort();
+  }, []);
 
   const handleFileSelect = (files) => {
     const validFiles = Array.from(files).filter(file =>
@@ -287,7 +298,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
         </p>
       </div>
 
-      {productType === 'fabrics' && <AshleyWildeFolderImporter />}
+      {productType === 'fabrics' && <AshleyWildeFolderImporter onStagingStart={cancelCatalogueRequests} />}
 
       {/* Match By Selection */}
       <div style={{ marginBottom: '24px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
@@ -882,7 +893,6 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
     </div>
   );
 }
-
 
 
 

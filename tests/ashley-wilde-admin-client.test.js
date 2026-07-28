@@ -12,6 +12,7 @@ const componentSource = fs.readFileSync(
 );
 const routeSource = fs.readFileSync(path.join(root, 'server', 'routes', 'index.js'), 'utf8');
 const controllerSource = fs.readFileSync(path.join(root, 'server', 'controllers', 'import-export.js'), 'utf8');
+const importerServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
 const sharedRoutes = require(path.join(root, 'shared', 'routes.json'));
 
 test('Ashley Wilde admin importer uses Strapi authenticated fetch for every request', () => {
@@ -61,7 +62,7 @@ test('Ashley Wilde browser URLs are the registered admin-plugin routes', () => {
 });
 
 test('Ashley Wilde mode and analysis responses expose server mapping metadata', () => {
-  assert.match(controllerSource, /loadProductionMappings\(\)/);
+  assert.match(importerServiceSource, /loadProductionMappings\(\)/);
   assert.match(controllerSource, /schemaVersion:\s*mappings\.colourMap\.schemaVersion/);
   assert.match(controllerSource, /generatedAt:\s*mappings\.colourMap\.generatedAt/);
   const importerSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
@@ -82,12 +83,44 @@ test('Ashley Wilde phase-one queue is bounded to 10 files with sequential hashin
   const utilitySource = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), 'utf8');
   const importerSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
   assert.match(componentSource, /fileQueueRef\s*=\s*useRef\(\[\]\)/);
-  assert.match(componentSource, /const batches = boundedBatches\(hashed, 10\)/);
+  assert.match(componentSource, /const batches = sequentialBatches\(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES\)/);
   assert.match(componentSource, /for \(let index = 0; index < fileQueueRef\.current\.length; index \+= 1\)[\s\S]*await sha256File\(item\.file\)/);
-  assert.match(componentSource, /for \(let index = 0; index < batches\.length; index \+= 1\)[\s\S]*ashleyWildeAnalyse[\s\S]*bulkImageUpload/);
+  assert.match(componentSource, /for \(let index = 0; index < batches\.length; index \+= 1\)[\s\S]*ashleyWildeAnalyse/);
+  assert.match(componentSource, /stageQueuedFolder[\s\S]*stageBatchRequest/);
   assert.match(componentSource, /current\.forEach\(\(item\) => item\.previewUrl && URL\.revokeObjectURL\(item\.previewUrl\)\)/);
-  assert.match(componentSource, /setFolderFiles\(\(current\)[\s\S]*return rows;/);
+  assert.match(componentSource, /setFolderFiles\(\(current\)[\s\S]*return analysedRows;/);
   assert.match(utilitySource, /for \(let index = 0; index < items\.length; index \+= size\) batches\.push\(items\.slice\(index, index \+ size\)\)/);
   assert.deepEqual(Array.from({ length: Math.ceil(35 / 10) }, (_, index) => Math.min(10, 35 - index * 10)), [10, 10, 10, 5]);
   assert.match(importerSource, /body\?\.queueBatch \? normalizeManifest\(body\?\.folderManifest\) : manifest/);
+});
+
+test('Ashley Wilde staging is a single authenticated multipart request per sequential byte-bounded batch', () => {
+  const utilitySource = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), 'utf8');
+  const fetchAllFabricsSource = fs.readFileSync(path.join(root, 'shared', 'fetch-all-fabrics.js'), 'utf8');
+  assert.match(componentSource, /const STAGING_REQUEST_TIMEOUT_MS = 90 \* 1000/);
+  assert.match(componentSource, /const controller = new AbortController\(\)/);
+  assert.match(componentSource, /adminResponse\(request, adminCatalogRoutes\.bulkImageUpload, form, \{ signal: controller\.signal \}\)/);
+  assert.match(componentSource, /analysisToken:\s*batch\.analysisToken/);
+  assert.match(componentSource, /finalBatch: index === lastStagingBatchIndex/);
+  assert.match(componentSource, /stagingRunRef\.current/);
+  assert.match(componentSource, /The upload did not start\. Please retry this batch\./);
+  assert.doesNotMatch(componentSource, /Content-Type\s*:/);
+  assert.match(componentSource, /MAX_BATCH_BYTES/);
+  assert.match(componentSource, /totalBytes/);
+  assert.match(componentSource, /largestFileBytes/);
+  assert.match(utilitySource, /MAX_BATCH_FILES = 10/);
+  assert.match(utilitySource, /MAX_BATCH_BYTES = 90 \* 1024 \* 1024/);
+  assert.match(utilitySource, /bytes \+ fileSize > maxBytes/);
+  assert.match(fetchAllFabricsSource, /signal: options\.signal/);
+});
+
+test('Ashley Wilde upload observability exposes only safe request phase metadata', () => {
+  assert.match(controllerSource, /logAshleyWildeUpload\(ctx, 'request-received'\)/);
+  assert.match(controllerSource, /authenticatedAdminId/);
+  assert.match(controllerSource, /batchFileCount/);
+  assert.match(controllerSource, /metadataPresent/);
+  assert.match(controllerSource, /analysisTokenPresent/);
+  assert.match(importerServiceSource, /safeLog\(strapi, 'analysis-token-validation-start'/);
+  assert.match(importerServiceSource, /safeLog\(strapi, 'analysis-token-validation-complete'/);
+  assert.doesNotMatch(importerServiceSource, /JSON\.stringify\(body\?\.analysisToken\)/);
 });

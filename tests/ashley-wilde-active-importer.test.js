@@ -173,5 +173,5 @@ test('folder UI does not display zero-count analysis or allow stage before analy
   assert.match(source, /setAnalysis\(null\)/);
   assert.match(source, /stageQueuedFolder/);
   assert.match(source, /<button[^>]*disabled(?:\s|=)[^>]*>[^<]*<Upload[^>]*\/>Stage \{queuedFolder\.totalFiles\} file\(s\)/s);
-  assert.match(source, /form\.append\('analysisToken', batch\.analysisToken\)/);
+  assert.match(source, /analysisToken:\s*batch\.analysisToken/);
 });

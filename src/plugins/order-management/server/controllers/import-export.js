@@ -30,6 +30,23 @@ function hasAshleyWildePromotionPermission(ctx) {
   return subjects.every((subject) => ability.can('create', subject) || ability.can('update', subject));
 }
 
+function logAshleyWildeUpload(ctx, stage) {
+  const files = ctx?.request?.files?.files;
+  const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
+  const body = ctx?.request?.body || {};
+  const user = ctx?.state?.catalogWriteAuth?.user || ctx?.state?.user;
+  const entry = {
+    timestamp: new Date().toISOString(),
+    stage,
+    authenticatedAdminId: String(user?.documentId || user?.id || user?.email || '').trim() || null,
+    batchFileCount: fileArray.length,
+    metadataPresent: Boolean(body.fileMetadata),
+    analysisTokenPresent: Boolean(body.analysisToken),
+  };
+  const logger = typeof strapi !== 'undefined' && strapi?.log?.info ? strapi.log : console;
+  logger.info(`[Ashley Wilde bulk upload] ${JSON.stringify(entry)}`);
+}
+
 module.exports = {
   // Simple test endpoint
   async test(ctx) {
@@ -1255,6 +1272,7 @@ module.exports = {
   },
 
   async bulkImageUpload(ctx) {
+    logAshleyWildeUpload(ctx, 'request-received');
     const isAshleyWildeFolder = ctx.request.body?.ashleyWilde === 'true' || ctx.request.body?.ashleyWilde === true;
     if (isAshleyWildeFolder && !hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
     const controller = strapi.controller('api::order-management.order-management');

@@ -1,4 +1,8 @@
 export const SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
+export const MAX_BATCH_FILES = 10;
+export const MAX_FILE_BYTES = 50 * 1024 * 1024;
+// Keep headroom for multipart boundaries and metadata under Strapi's 100 MB body limit.
+export const MAX_BATCH_BYTES = 90 * 1024 * 1024;
 export const READY_STATUSES = new Set([
   'matched', 'would_create_colour', 'would_create_internal_code',
   'would_create_relation', 'would_upload_and_link', 'previously_uploaded',
@@ -34,26 +38,30 @@ export async function fingerprintManifest(manifest) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export function boundedBatches(items, size = 10) {
+export function boundedBatches(items, size = MAX_BATCH_FILES) {
   if (!Number.isSafeInteger(size) || size < 1) throw new Error('Batch size must be a positive integer.');
   const batches = [];
   for (let index = 0; index < items.length; index += size) batches.push(items.slice(index, index + size));
   return batches;
 }
 
-export function sequentialBatches(rows, maxFiles = 10, maxBytes = 100 * 1024 * 1024) {
+export function sequentialBatches(rows, maxFiles = MAX_BATCH_FILES, maxBytes = MAX_BATCH_BYTES) {
+  if (!Number.isSafeInteger(maxFiles) || maxFiles < 1) throw new Error('Batch file limit must be a positive integer.');
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('Batch byte limit must be a positive integer.');
   const batches = [];
   let current = [];
   let bytes = 0;
   for (const row of rows) {
-    if (row.file.size > 50 * 1024 * 1024) throw new Error(`${row.filename} exceeds the 50 MB file limit.`);
-    if (current.length === maxFiles || bytes + row.file.size > maxBytes) {
-      batches.push(current);
+    const fileSize = Number(row.file?.size ?? row.size ?? 0);
+    if (!Number.isSafeInteger(fileSize) || fileSize < 0) throw new Error(`${row.filename} has an invalid file size.`);
+    if (fileSize > MAX_FILE_BYTES) throw new Error(`${row.filename} exceeds the 50 MB file limit.`);
+    if (current.length === maxFiles || bytes + fileSize > maxBytes) {
+      if (current.length) batches.push(current);
       current = [];
       bytes = 0;
     }
     current.push(row);
-    bytes += row.file.size;
+    bytes += fileSize;
   }
   if (current.length) batches.push(current);
   return batches;

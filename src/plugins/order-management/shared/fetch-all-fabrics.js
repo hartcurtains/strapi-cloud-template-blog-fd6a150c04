@@ -20,7 +20,7 @@ async function fetchAllFabrics(options = {}) {
     const params = new URLSearchParams(baseParams);
     params.set('pagination[page]', String(page));
     params.set('pagination[pageSize]', String(pageSize));
-    const response = await fetchImpl(`/api/fabrics?${params}`, { headers: options.headers });
+    const response = await fetchImpl(`/api/fabrics?${params}`, { headers: options.headers, signal: options.signal });
     if (!response.ok) throw new Error(`Complete fabric catalogue request failed on page ${page} (${response.status}).`);
     const payload = await response.json();
     const current = payload?.meta?.pagination;

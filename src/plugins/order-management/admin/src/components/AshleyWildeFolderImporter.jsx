@@ -3,14 +3,88 @@ import { useFetchClient } from '@strapi/strapi/admin';
 import { AlertCircle, CheckCircle, FolderOpen, Loader2, RefreshCw, Upload } from 'lucide-react';
 import adminCatalogRoutes from '../../../shared/routes';
 import {
-  READY_STATUSES, boundedBatches, fingerprintManifest, folderNameFromFiles, isSupportedFileName,
-  relativePathOf, sequentialBatches, sha256File,
+  MAX_BATCH_BYTES, MAX_BATCH_FILES, MAX_FILE_BYTES, READY_STATUSES, fingerprintManifest,
+  folderNameFromFiles, isSupportedFileName, relativePathOf, sequentialBatches, sha256File,
 } from '../utils/ashleyWildeFolder';
 
 const colours = {
   text: '#374151', muted: '#6b7280', line: '#e5e7eb', blue: '#3b82f6',
   green: '#059669', amber: '#b45309', red: '#dc2626', surface: '#f9fafb',
 };
+const STAGING_REQUEST_TIMEOUT_MS = 90 * 1000;
+
+function performanceNow() {
+  return typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : Date.now();
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function batchStats(rows) {
+  const sizes = rows.map((row) => Number(row.file?.size ?? row.size ?? 0));
+  return {
+    fileCount: rows.length,
+    totalBytes: sizes.reduce((total, size) => total + size, 0),
+    largestFileBytes: Math.max(0, ...sizes),
+  };
+}
+
+function stagingLog(step, details = {}) {
+  if (typeof console?.debug !== 'function') return;
+  console.debug('[Ashley Wilde staging]', { step, ...details });
+}
+
+function buildStageForm({ folderName, folderFingerprint, manifest, rows, analysisToken, finalBatch }) {
+  const stats = batchStats(rows);
+  const form = new FormData();
+  stagingLog('form-data-created', stats);
+  form.append('ashleyWilde', 'true');
+  form.append('folderName', folderName);
+  form.append('folderFingerprint', folderFingerprint);
+  form.append('folderManifest', JSON.stringify(manifest));
+  form.append('fileMetadata', JSON.stringify(rows.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }))));
+  form.append('analysisToken', analysisToken);
+  form.append('finalBatch', String(finalBatch));
+  rows.forEach((row) => form.append('files', row.file, row.filename));
+  stagingLog('form-data-files-appended', stats);
+  return { form, stats };
+}
+
+async function stageBatchRequest(request, form, stats, batchNumber) {
+  const startedAt = performanceNow();
+  const controller = new AbortController();
+  let timedOut = false;
+  const log = (step) => stagingLog(step, {
+    batchNumber,
+    ...stats,
+    elapsedMs: Math.round(performanceNow() - startedAt),
+  });
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    log('timeout-abort');
+    controller.abort();
+  }, STAGING_REQUEST_TIMEOUT_MS);
+
+  try {
+    log('fetch-invoked');
+    const response = await adminResponse(request, adminCatalogRoutes.bulkImageUpload, form, { signal: controller.signal });
+    log('response-returned');
+    return response;
+  } catch (error) {
+    log(timedOut ? 'request-timed-out' : 'request-rejected');
+    if (timedOut) {
+      const timeoutError = new Error('The upload did not start. Please retry this batch.');
+      timeoutError.code = 'ASHLEY_WILDE_UPLOAD_TIMEOUT';
+      timeoutError.cause = error;
+      throw timeoutError;
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 async function adminResponse(request, ...args) {
   const response = await request(...args);
@@ -38,6 +112,7 @@ function responseMessage(error) {
 }
 
 function safeErrorMessage(error) {
+  if (error?.code === 'ASHLEY_WILDE_UPLOAD_TIMEOUT') return 'The upload did not start. Please retry this batch.';
   const status = responseStatus(error);
   if (status === 401) return 'The request could not authenticate. Your administrator credentials were not accepted.';
   if (status === 403) return 'You are signed in, but your administrator account does not have permission to use the Ashley Wilde importer.';
@@ -63,7 +138,7 @@ const statusLabel = (status) => ({
   staged: 'staged', failed: 'failed', already_staged: 'already staged',
 }[status] || String(status || 'unknown').replaceAll('_', ' '));
 
-export default function AshleyWildeFolderImporter() {
+export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const { get, post, put, del } = useFetchClient();
   const [analysis, setAnalysis] = useState(null);
   const [folderFiles, setFolderFiles] = useState([]);
@@ -80,6 +155,7 @@ export default function AshleyWildeFolderImporter() {
   const [analysisState, setAnalysisState] = useState('idle');
   const [analysisBatches, setAnalysisBatches] = useState([]);
   const fileQueueRef = useRef([]);
+  const stagingRunRef = useRef(false);
 
   const refreshMappingMode = useCallback(async () => {
     const response = await adminResponse(get, adminCatalogRoutes.ashleyWildeMode);
@@ -186,14 +262,15 @@ export default function AshleyWildeFolderImporter() {
       fileQueueRef.current = hashed;
       const manifest = hashed.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
       const folderFingerprint = await fingerprintManifest(manifest);
-      const batches = boundedBatches(hashed, 10);
+      const batches = sequentialBatches(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES);
       const summary = { totalFiles: hashed.length, matchedFiles: 0, readyFiles: 0, alreadyCompleteFiles: 0, unresolvedFiles: 0, conflictFiles: 0 };
       const analysedRows = [];
       const analysedBatches = [];
       let lastServerAnalysis = null;
       for (let index = 0; index < batches.length; index += 1) {
         const batch = batches[index];
-        setProgress(`Processing ${Math.min((index + 1) * 10, hashed.length)} / ${hashed.length} — batch ${index + 1} of ${batches.length}`);
+        const processedCount = batches.slice(0, index + 1).reduce((total, currentBatch) => total + currentBatch.length, 0);
+        setProgress(`Processing ${processedCount} / ${hashed.length} — batch ${index + 1} of ${batches.length}`);
         const batchManifest = batch.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
         const response = await adminResponse(post, adminCatalogRoutes.ashleyWildeAnalyse, {
           folderName: queuedFolder.folderName, folderFingerprint, manifest: batchManifest,
@@ -234,30 +311,40 @@ export default function AshleyWildeFolderImporter() {
   };
 
   const stageQueuedFolder = async () => {
-    if (!queuedFolder || analysisState !== 'complete' || !analysisBatches.length || !fileQueueRef.current.length) return;
+    if (!queuedFolder || analysisState !== 'complete' || !analysisBatches.length || !fileQueueRef.current.length || stagingRunRef.current) return;
+    stagingRunRef.current = true;
     setBusy(true);
     setError('');
     try {
+      onStagingStart?.();
       const manifest = fileQueueRef.current.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
       const folderFingerprint = analysis?.folderFingerprint;
+      const stagingBatches = analysisBatches.map((batch, index) => ({
+        ...batch,
+        index,
+        ready: batch.rows.filter((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES),
+      })).filter((batch) => batch.ready.length > 0);
+      const lastStagingBatchIndex = stagingBatches.at(-1)?.index;
+      if (!stagingBatches.length) throw new Error('There are no confirmed files ready to stage.');
       for (let index = 0; index < analysisBatches.length; index += 1) {
         const batch = analysisBatches[index];
-        const ready = batch.rows.filter((row) => READY_STATUSES.has(row.status) && row.size <= 50 * 1024 * 1024);
+        const ready = batch.rows.filter((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES);
         if (!ready.length) continue;
-        setProgress(`Staging confirmed files from batch ${index + 1} of ${analysisBatches.length}`);
-        const form = new FormData();
-        form.append('ashleyWilde', 'true');
-        form.append('folderName', queuedFolder.folderName);
-        form.append('folderFingerprint', folderFingerprint);
-        form.append('folderManifest', JSON.stringify(manifest));
-        form.append('fileMetadata', JSON.stringify(ready.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }))));
-        form.append('analysisToken', batch.analysisToken);
-        form.append('finalBatch', String(index === analysisBatches.length - 1));
-        ready.forEach((row) => form.append('files', row.file, row.filename));
-        const upload = await adminResponse(post, adminCatalogRoutes.bulkImageUpload, form);
+        const stats = batchStats(ready);
+        setProgress(`Staging confirmed files from batch ${index + 1} of ${analysisBatches.length} (${stats.fileCount} files, ${formatBytes(stats.totalBytes)} total, ${formatBytes(stats.largestFileBytes)} largest)`);
+        stagingLog('files-ready', { batchNumber: index + 1, ...stats });
+        const { form } = buildStageForm({
+          folderName: queuedFolder.folderName,
+          folderFingerprint,
+          manifest,
+          rows: ready,
+          analysisToken: batch.analysisToken,
+          finalBatch: index === lastStagingBatchIndex,
+        });
+        const upload = await stageBatchRequest(post, form, stats, index + 1);
         if (!upload.data) throw new Error(`Batch ${index + 1} failed safely.`);
         setFolderFiles((current) => current.map((row) => {
-          const result = upload.data.results.find((item) => item.filename === row.filename);
+          const result = upload.data.results?.find((item) => item.filename === row.filename);
           return result ? { ...row, uploadResult: result, status: result.status } : row;
         }));
         if (upload.data.failed > 0) throw new Error(`Batch ${index + 1} reported ${upload.data.failed} failed file(s). Remaining batches were not sent.`);
@@ -270,6 +357,7 @@ export default function AshleyWildeFolderImporter() {
     } catch (stageError) {
       setError(safeErrorMessage(stageError));
     } finally {
+      stagingRunRef.current = false;
       setBusy(false);
       window.setTimeout(() => setProgress(''), 1500);
     }
@@ -305,7 +393,7 @@ export default function AshleyWildeFolderImporter() {
                 <table style={{ width: '100%', minWidth: '880px', borderCollapse: 'collapse', fontSize: '12px' }}>
                   <thead><tr style={{ background: colours.surface, textAlign: 'left' }}>{['', 'Image', 'Filename', 'Product', 'Colour', 'Supplier code', 'Internal code', 'Action / status'].map((label) => <th key={label} style={{ padding: '9px', borderBottom: `1px solid ${colours.line}`, color: colours.muted }}>{label}</th>)}</tr></thead>
                   <tbody>{folderFiles.map((row) => {
-                    const selectable = READY_STATUSES.has(row.status) && row.size <= 50 * 1024 * 1024;
+                    const selectable = READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES;
                     return <tr key={row.relativePath} style={{ borderBottom: `1px solid ${colours.line}`, verticalAlign: 'top' }}>
                       <td style={{ padding: '9px' }}><input type="checkbox" checked={selected.has(row.relativePath)} disabled={!selectable || busy} onChange={() => toggleRow(row)} aria-label={`Select ${row.filename}`} /></td>
                       <td style={{ padding: '9px' }}>{row.previewUrl ? <img src={row.previewUrl} alt="" style={{ width: '42px', height: '42px', objectFit: 'cover', borderRadius: '4px' }} /> : '—'}</td>
@@ -314,15 +402,15 @@ export default function AshleyWildeFolderImporter() {
                       <td style={{ padding: '9px' }}>{row.supplierColourName || '—'}</td>
                       <td style={{ padding: '9px' }}>{row.supplierColourCode || '—'}</td>
                       <td style={{ padding: '9px' }}>{row.internalColourCode || '—'}</td>
-                      <td style={{ padding: '9px', color: statusTone(row.status) }}><strong>{statusLabel(row.status)}</strong>{(row.warning || row.size > 50 * 1024 * 1024) && <div style={{ marginTop: '3px', color: colours.red }}>{row.size > 50 * 1024 * 1024 ? 'Exceeds 50 MB file limit.' : row.warning}</div>}</td>
+                      <td style={{ padding: '9px', color: statusTone(row.status) }}><strong>{statusLabel(row.status)}</strong>{(row.warning || row.size > MAX_FILE_BYTES) && <div style={{ marginTop: '3px', color: colours.red }}>{row.size > MAX_FILE_BYTES ? 'Exceeds 50 MB file limit.' : row.warning}</div>}</td>
                     </tr>;
                   })}</tbody>
                 </table>
               </div>
               {queuedFolder ? <>
-                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '14px', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of 10, then stage confirmed files and leave unresolved or conflicting files skipped.</label>
+                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '14px', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to 10 files and 90 MB, then stage confirmed files and leave unresolved or conflicting files skipped.</label>
                 <button onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips || analysisState === 'complete'} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips || analysisState === 'complete' ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
-                <button onClick={stageQueuedFolder} disabled={busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= 50 * 1024 * 1024))} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= 50 * 1024 * 1024)) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
+                <button onClick={stageQueuedFolder} disabled={busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES))} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES)) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
               </> : <>
                 {unresolvedCount > 0 && <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '14px', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Upload confirmed files and explicitly leave {unresolvedCount} unresolved or conflicting file(s) skipped.</label>}
                 <button onClick={uploadFolder} disabled={busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips)} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {selectedRows.length} confirmed file(s)</button>
@@ -332,7 +420,7 @@ export default function AshleyWildeFolderImporter() {
           {queuedFolder && analysis?.analysisComplete !== true && (
             <div style={{ marginTop: '14px' }}>
               {analysisState === 'failed' && <p role="status" style={{ color: colours.red, fontSize: '13px' }}>Filename analysis failed; staging is disabled until the folder is analysed successfully.</p>}
-              <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of 10, then stage confirmed files and leave unresolved or conflicting files skipped.</label>
+              <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to 10 files and 90 MB, then stage confirmed files and leave unresolved or conflicting files skipped.</label>
               <button onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
               <button onClick={stageQueuedFolder} disabled style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: 0.45, cursor: 'not-allowed' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
             </div>

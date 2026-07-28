@@ -733,6 +733,12 @@ export default factories.createCoreController('api::order-management.order-manag
 
 // Bulk image upload with auto-linking to products
 async bulkImageUpload(ctx) {
+  console.info('[Ashley Wilde bulk upload] controller-entered', {
+    timestamp: new Date().toISOString(),
+    batchFileCount: Array.isArray(ctx.request.files?.files) ? ctx.request.files.files.length : (ctx.request.files?.files ? 1 : 0),
+    metadataPresent: Boolean(ctx.request.body?.fileMetadata),
+    analysisTokenPresent: Boolean(ctx.request.body?.analysisToken),
+  });
   try {
     const fs = require('fs').promises;
     const ALLOWED_TYPES = [
