@@ -1,3 +1,5 @@
+const { attemptFromTraceId, diagnosticContext, traceIdFromRequest } = require('../utils/ashleyWildeDiagnostics');
+
 function hasAuthenticatedAdmin(ctx) {
   const catalogWriteAuth = ctx?.state?.catalogWriteAuth;
   if (catalogWriteAuth?.kind === 'admin' && catalogWriteAuth.user?.isActive !== false) {
@@ -34,6 +36,15 @@ function logAshleyWildeUpload(ctx, stage) {
   const files = ctx?.request?.files?.files;
   const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
   const body = ctx?.request?.body || {};
+  const traceId = traceIdFromRequest(ctx);
+  const diagnostic = diagnosticContext({
+    traceId,
+    relativePath: body.relativePath,
+    filename: body.originalFilename,
+    sizeBytes: body.fileSize,
+    mimeType: body.mimeType,
+    attempt: attemptFromTraceId(traceId),
+  });
   const user = ctx?.state?.catalogWriteAuth?.user || ctx?.state?.user;
   const entry = {
     timestamp: new Date().toISOString(),
@@ -42,6 +53,7 @@ function logAshleyWildeUpload(ctx, stage) {
     batchFileCount: fileArray.length,
     metadataPresent: Boolean(body.fileMetadata),
     analysisTokenPresent: Boolean(body.analysisToken),
+    ...diagnostic,
   };
   const logger = typeof strapi !== 'undefined' && strapi?.log?.info ? strapi.log : console;
   logger.info(`[Ashley Wilde bulk upload] ${JSON.stringify(entry)}`);
@@ -1293,7 +1305,7 @@ module.exports = {
       return;
     }
     try {
-      ctx.body = { success: true, data: await importer.finaliseAshleyWildeMedia(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx) }) };
+      ctx.body = { success: true, data: await importer.finaliseAshleyWildeMedia(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx), traceId: traceIdFromRequest(ctx) }) };
     } catch (error) {
       ctx.status = error?.status || 409;
       ctx.body = { success: false, error: importer.safeMessage(error) };
@@ -1309,7 +1321,7 @@ module.exports = {
       return;
     }
     try {
-      ctx.body = { success: true, data: await importer.getAshleyWildeMediaStatus(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx) }) };
+      ctx.body = { success: true, data: await importer.getAshleyWildeMediaStatus(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx), traceId: traceIdFromRequest(ctx) }) };
     } catch (error) {
       ctx.status = error?.status || 409;
       ctx.body = { success: false, error: importer.safeMessage(error) };
@@ -1325,7 +1337,7 @@ module.exports = {
       return;
     }
     try {
-      ctx.body = { success: true, data: await importer.recordAshleyWildeProgress(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx) }) };
+      ctx.body = { success: true, data: await importer.recordAshleyWildeProgress(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx), traceId: traceIdFromRequest(ctx) }) };
     } catch (error) {
       ctx.status = error?.status || 409;
       ctx.body = { success: false, error: importer.safeMessage(error) };

@@ -13,6 +13,8 @@ const componentSource = fs.readFileSync(
 const routeSource = fs.readFileSync(path.join(root, 'server', 'routes', 'index.js'), 'utf8');
 const controllerSource = fs.readFileSync(path.join(root, 'server', 'controllers', 'import-export.js'), 'utf8');
 const importerServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
+const uploadDiagnosticsSource = fs.readFileSync(path.join(process.cwd(), 'src', 'middlewares', 'ashley-upload-diagnostics.ts'), 'utf8');
+const middlewareConfigSource = fs.readFileSync(path.join(process.cwd(), 'config', 'middlewares.ts'), 'utf8');
 const sharedRoutes = require(path.join(root, 'shared', 'routes.json'));
 const uploadPolicy = require(path.join(root, 'shared', 'ashley-wilde-upload-policy.json'));
 
@@ -143,6 +145,22 @@ test('Ashley Wilde upload observability exposes only safe request phase metadata
   assert.match(importerServiceSource, /timedStage\(strapi, 'mapping-load-finalise'/);
   assert.match(importerServiceSource, /timedStage\(strapi, 'staging-finalise'/);
   assert.match(importerServiceSource, /retryable_finalisation_failure/);
+});
+
+test('Ashley Media upload request diagnostics are trace-gated and lifecycle-shaped', () => {
+  assert.match(middlewareConfigSource, /global::ashley-upload-diagnostics/);
+  assert.match(uploadDiagnosticsSource, /String\(ctx\?\.path \|\| ''\) === '\/upload'/);
+  assert.match(uploadDiagnosticsSource, /traceIdFromRequest\(ctx\)/);
+  assert.match(uploadDiagnosticsSource, /'upload_request_received'/);
+  assert.match(uploadDiagnosticsSource, /contentLength/);
+  assert.match(uploadDiagnosticsSource, /authenticatedAdminPresent/);
+  assert.match(uploadDiagnosticsSource, /startTime/);
+  assert.match(uploadDiagnosticsSource, /'upload_request_completed'/);
+  assert.match(uploadDiagnosticsSource, /responseStatus: ctx\.status/);
+  assert.match(uploadDiagnosticsSource, /durationMs/);
+  assert.match(uploadDiagnosticsSource, /errorClass/);
+  assert.match(uploadDiagnosticsSource, /safeMessage/);
+  assert.doesNotMatch(uploadDiagnosticsSource, /analysisToken|fileInfo|buffer/);
 });
 
 test('Ashley Wilde staging has a single safe response parser and stops after a retryable upstream failure', () => {

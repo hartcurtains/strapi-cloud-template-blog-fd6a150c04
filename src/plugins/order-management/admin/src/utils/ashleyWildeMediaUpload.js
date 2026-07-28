@@ -6,6 +6,38 @@ export const ACCEPTED_ASHLEY_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', '
 export const MEDIA_UPLOAD_RETRY_MESSAGE = 'The image service was temporarily unavailable. This image was not uploaded. Please retry it.';
 export const MEDIA_UPLOAD_UNAUTHORISED_MESSAGE = 'The image upload was not authorised. Refresh your administrator session and retry.';
 
+function tracePrefix(value) {
+  const prefix = String(value || '').toLowerCase().replace(/[^a-f0-9]/g, '').slice(0, 8);
+  return prefix || 'unknown';
+}
+
+export function createAshleyTraceId({ folderFingerprint, fileFingerprint, attempt = 1 } = {}) {
+  const safeAttempt = Number.isSafeInteger(Number(attempt)) && Number(attempt) > 0 ? Number(attempt) : 1;
+  return `aw_${tracePrefix(folderFingerprint)}*${tracePrefix(fileFingerprint)}*${safeAttempt}`;
+}
+
+export function ashleyUploadLog(details = {}) {
+  if (typeof console === 'undefined' || typeof console.info !== 'function') return;
+  const { analysisToken, fileFingerprint, folderFingerprint, ...safeDetails } = details;
+  console.info('[AshleyUpload]', safeDetails);
+}
+
+export function ashleyDiagnosticError(error) {
+  const status = error?.status || error?.response?.status;
+  return {
+    errorCode: error?.code || 'unknown',
+    status: Number.isFinite(Number(status)) ? Number(status) : null,
+    contentType: error?.contentType || error?.response?.headers?.['content-type'] || null,
+  };
+}
+
+export function ashleyTraceRequestConfig(traceId, signal) {
+  return {
+    ...(signal ? { signal } : {}),
+    ...(traceId ? { headers: { 'X-Ashley-Trace-Id': traceId } } : {}),
+  };
+}
+
 export function getSafeBasename(relativePath) {
   return String(relativePath || '').normalize('NFKC').replace(/\\/g, '/').split('/').pop() || '';
 }
@@ -49,7 +81,7 @@ export function safeMediaUploadErrorMessage(error) {
   return sanitizeDiagnosticMessage(error?.message) || 'The image could not be uploaded. Please retry it.';
 }
 
-export async function uploadAshleyWildeMedia(file, { analysisToken, folderFingerprint, relativePath, fileFingerprint, adminPost, signal } = {}) {
+export async function uploadAshleyWildeMedia(file, { analysisToken, folderFingerprint, relativePath, fileFingerprint, traceId, attempt, adminPost, signal } = {}) {
   const size = Number(file?.size || 0);
   const mimeType = String(file?.type || '').toLowerCase();
   if (!Number.isSafeInteger(size) || size < 1 || size > ASHLEY_PREPARED_IMAGE_MAX_BYTES) {
@@ -71,6 +103,9 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
   // The injected admin client supplies the current authenticated session and
   // deliberately owns the request headers/boundary.
   const canonicalFilename = getSafeBasename(relativePath || file.name);
+  const diagnostic = { traceId, stage: 'upload_start', filename: canonicalFilename, relativePath: relativePath || null, sizeBytes: size, mimeType, attempt };
+  const startedAt = Date.now();
+  ashleyUploadLog(diagnostic);
   form.append('files', file, canonicalFilename);
   form.append('fileInfo', JSON.stringify({
     name: canonicalFilename,
@@ -81,12 +116,15 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
 
   try {
     if (typeof adminPost !== 'function') throw new Error('The authenticated Strapi admin upload client is unavailable.');
-    const response = await adminPost(ASHLEY_MEDIA_UPLOAD_PATH, form, { signal });
+    const response = await adminPost(ASHLEY_MEDIA_UPLOAD_PATH, form, ashleyTraceRequestConfig(traceId, signal));
     const payload = await parseStagingResponse(response);
-    return normalizeMediaRecord(payload);
+    const media = normalizeMediaRecord(payload);
+    ashleyUploadLog({ ...diagnostic, stage: 'upload_success', durationMs: Date.now() - startedAt, mediaId: media.id || null, mediaDocumentId: media.documentId || null });
+    return media;
   } catch (error) {
     const normalized = await normalizeStagingError(error);
     normalized.safeMessage = safeMediaUploadErrorMessage(normalized);
+    ashleyUploadLog({ ...diagnostic, stage: 'upload_failure', durationMs: Date.now() - startedAt, ...ashleyDiagnosticError(normalized) });
     throw normalized;
   }
 }

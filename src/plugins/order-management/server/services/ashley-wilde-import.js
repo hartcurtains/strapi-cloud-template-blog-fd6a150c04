@@ -10,6 +10,7 @@ const {
 } = require('../../shared/ashley-wilde-mapping');
 const supplierMappings = require('./supplier-mapping');
 const uploadPolicy = require('../../shared/ashley-wilde-upload-policy.json');
+const { diagnosticContext, logAshleyDiagnostic } = require('../utils/ashleyWildeDiagnostics');
 
 const BATCH_UID = 'api::image-import-batch.image-import-batch';
 const FABRIC_UID = 'api::fabric.fabric';
@@ -37,6 +38,18 @@ function safeLog(strapi, stage, details = {}) {
   const entry = { timestamp: new Date().toISOString(), stage, ...details };
   const logger = strapi?.log?.info ? strapi.log : console;
   logger.info(`[Ashley Wilde bulk upload] ${JSON.stringify(entry)}`);
+}
+
+function serviceDiagnostic(body, options = {}) {
+  const relativePath = body?.relativePath || null;
+  return diagnosticContext({
+    traceId: options.traceId,
+    relativePath,
+    filename: relativePath ? path.basename(String(relativePath).replace(/\\/g, '/')) : null,
+    sizeBytes: body?.fileSize,
+    mimeType: body?.mimeType,
+    attempt: options.attempt,
+  });
 }
 
 async function timedStage(strapi, stage, work, details = {}) {
@@ -610,33 +623,66 @@ function validateAshleyAnalysisRequest(body, mappings, adminId) {
 }
 
 async function getAshleyWildeMediaStatus(strapi, body, options = {}) {
-  const mappings = await timedStage(strapi, 'mapping-load-media-status', () => loadAshleyImporterMappings(strapi), { relativePath: body?.relativePath || null });
-  const { relativePath, filename, analysedFile } = validateAshleyAnalysisRequest(body, mappings, options.adminId);
-  const media = await findUnfinalisedAshleyMedia(strapi, body, analysedFile, options.adminId);
-  if (!media) return { result: { filename, relativePath, phase: 'media_not_found' }, history: null };
-  const result = { filename, relativePath, phase: 'media_uploaded', mediaId: media.id, mediaDocumentId: media.documentId || null };
-  const history = await persistFilePhase(strapi, mappings, body, 'media_uploaded', result);
-  return { result, history };
+  const diagnostic = serviceDiagnostic(body, options);
+  logAshleyDiagnostic(strapi, 'media_recovery_start', diagnostic);
+  try {
+    const mappings = await timedStage(strapi, 'mapping-load-media-status', () => loadAshleyImporterMappings(strapi), diagnostic);
+    const { relativePath, filename, analysedFile } = validateAshleyAnalysisRequest(body, mappings, options.adminId);
+    const media = await findUnfinalisedAshleyMedia(strapi, body, analysedFile, options.adminId);
+    if (!media) {
+      logAshleyDiagnostic(strapi, 'media_recovery_not_found', diagnostic);
+      return { result: { filename, relativePath, phase: 'media_not_found' }, history: null };
+    }
+    const result = { filename, relativePath, phase: 'media_uploaded', mediaId: media.id, mediaDocumentId: media.documentId || null };
+    const history = await persistFilePhase(strapi, mappings, body, 'media_uploaded', { ...result, ...diagnostic });
+    logAshleyDiagnostic(strapi, 'media_recovery_found', { ...diagnostic, mediaId: media.id || null, mediaDocumentId: media.documentId || null });
+    return { result, history };
+  } catch (error) {
+    logAshleyDiagnostic(strapi, 'media_recovery_failure', { ...diagnostic, errorCode: error?.code || 'unknown', status: error?.status || null });
+    throw error;
+  }
 }
 
 async function recordAshleyWildeProgress(strapi, body, options = {}) {
-  const mappings = await timedStage(strapi, 'mapping-load-progress', () => loadAshleyImporterMappings(strapi), { relativePath: body?.relativePath || null });
-  const { filename, relativePath } = validateAshleyAnalysisRequest(body, mappings, options.adminId);
-  if (body?.phase !== 'retryable_upload_failure') {
-    throw finalisationError('Only retryable Ashley Wilde upload failures may be recorded as progress.', 'ASHLEY_WILDE_PROGRESS_INVALID', 400);
+  const diagnostic = serviceDiagnostic(body, options);
+  logAshleyDiagnostic(strapi, 'progress_start', diagnostic);
+  try {
+    const mappings = await timedStage(strapi, 'mapping-load-progress', () => loadAshleyImporterMappings(strapi), diagnostic);
+    const { filename, relativePath } = validateAshleyAnalysisRequest(body, mappings, options.adminId);
+    if (body?.phase !== 'retryable_upload_failure') {
+      throw finalisationError('Only retryable Ashley Wilde upload failures may be recorded as progress.', 'ASHLEY_WILDE_PROGRESS_INVALID', 400);
+    }
+    const result = {
+      filename,
+      relativePath,
+      phase: 'retryable_upload_failure',
+      errorCode: String(body.errorCode || 'unknown'),
+    };
+    const history = await persistFilePhase(strapi, mappings, body, result.phase, { ...result, ...diagnostic });
+    logAshleyDiagnostic(strapi, 'progress_success', diagnostic);
+    return { result, history };
+  } catch (error) {
+    logAshleyDiagnostic(strapi, 'progress_failure', { ...diagnostic, errorCode: error?.code || 'unknown', status: error?.status || null });
+    throw error;
   }
-  const result = {
-    filename,
-    relativePath,
-    phase: 'retryable_upload_failure',
-    errorCode: String(body.errorCode || 'unknown'),
-  };
-  const history = await persistFilePhase(strapi, mappings, body, result.phase, result);
-  return { result, history };
 }
 
 async function finaliseAshleyWildeMedia(strapi, body, options = {}) {
-  const mappings = await timedStage(strapi, 'mapping-load-finalise', () => loadAshleyImporterMappings(strapi), { relativePath: body?.relativePath || null });
+  const diagnostic = serviceDiagnostic(body, options);
+  logAshleyDiagnostic(strapi, 'finalise_start', diagnostic);
+  try {
+    const result = await finaliseAshleyWildeMediaInternal(strapi, body, { ...options, diagnostic });
+    logAshleyDiagnostic(strapi, 'finalise_success', diagnostic);
+    return result;
+  } catch (error) {
+    logAshleyDiagnostic(strapi, 'finalise_failure', { ...diagnostic, errorCode: error?.code || 'unknown', status: error?.status || null });
+    throw error;
+  }
+}
+
+async function finaliseAshleyWildeMediaInternal(strapi, body, options = {}) {
+  const diagnostic = options.diagnostic || serviceDiagnostic(body, options);
+  const mappings = await timedStage(strapi, 'mapping-load-finalise', () => loadAshleyImporterMappings(strapi), diagnostic);
   const relativePath = normalizeRelativePath(body?.relativePath);
   const filename = path.basename(relativePath);
   const manifestFileCount = Number(body?.manifestFileCount);
@@ -665,15 +711,15 @@ async function finaliseAshleyWildeMedia(strapi, body, options = {}) {
   const media = await validateAshleyMedia(strapi, body, analysedFile, options.adminId);
   const metadata = { relativePath, sha256: analysedFile.sha256, size: analysedFile.size, mimeType: analysedFile.mimeType };
   const descriptor = { name: filename, relativePath, mimeType: analysedFile.mimeType, size: analysedFile.size };
-  await persistFilePhase(strapi, mappings, body, 'media_uploaded', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, sha256: analysedFile.sha256, size: analysedFile.size, mimeType: analysedFile.mimeType });
-  await persistFilePhase(strapi, mappings, body, 'finalising_staging', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename });
+  await persistFilePhase(strapi, mappings, body, 'media_uploaded', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, sha256: analysedFile.sha256, size: analysedFile.size, mimeType: analysedFile.mimeType, ...diagnostic });
+  await persistFilePhase(strapi, mappings, body, 'finalising_staging', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, ...diagnostic });
   try {
-    const result = await timedStage(strapi, 'staging-finalise', () => stageMediaAsset(strapi, descriptor, metadata, mappings, { folderName: body.folderName, folderFingerprint: body.folderFingerprint }, media), { relativePath, mediaId: media.id, bytes: analysedFile.size });
+    const result = await timedStage(strapi, 'staging-finalise', () => stageMediaAsset(strapi, descriptor, metadata, mappings, { folderName: body.folderName, folderFingerprint: body.folderFingerprint }, media), { ...diagnostic, relativePath, mediaId: media.id, bytes: analysedFile.size });
     const complete = { ...result, phase: 'complete', mediaId: media.id, mediaDocumentId: media.documentId || null, relativePath };
-    const history = await persistFilePhase(strapi, mappings, body, 'complete', complete);
+    const history = await persistFilePhase(strapi, mappings, body, 'complete', { ...complete, ...diagnostic });
     return { result: complete, history };
   } catch (error) {
-    await persistFilePhase(strapi, mappings, body, 'retryable_finalisation_failure', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, errorCode: error?.code || 'unknown' });
+    await persistFilePhase(strapi, mappings, body, 'retryable_finalisation_failure', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, errorCode: error?.code || 'unknown', ...diagnostic });
     if (error?.code === 'ASHLEY_WILDE_FINALISATION_RETRYABLE') throw error;
     throw finalisationError('The image was uploaded, but its staged fabric-colour link still needs to be completed.');
   }

@@ -123,11 +123,13 @@ function twoPhaseFixture({ badCaption = false, failAssetOnce = false } = {}) {
 
 test('JSON finalisation validates the Media record and stages it without image bytes', async () => {
   const fixture = twoPhaseFixture();
-  const response = await importer.finaliseAshleyWildeMedia(fixture.strapi, fixture.body, { adminId: 'admin-1' });
+  const response = await importer.finaliseAshleyWildeMedia(fixture.strapi, fixture.body, { adminId: 'admin-1', traceId: 'aw_folder01*file0001*2' });
   assert.equal(response.result.phase, 'complete');
   assert.equal(response.result.mediaId, 123);
   assert.equal(fixture.assets[0].media, 123);
   assert.ok(!fixture.writes.some((write) => write.data?.buffer || write.data?.files));
+  assert.equal(fixture.batches[0].manifestSummary.resultsByPath['Ashley/ALASKAAQ.jpg'].traceId, 'aw_folder01*file0001*2');
+  assert.equal(fixture.batches[0].manifestSummary.resultsByPath['Ashley/ALASKAAQ.jpg'].attempt, 2);
 });
 
 test('arbitrary Media identity injection is rejected before staging writes', async () => {

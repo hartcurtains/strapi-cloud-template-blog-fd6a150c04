@@ -20,7 +20,7 @@ function loadMediaUploadModule() {
     .replace(/export const /g, 'const ')
     .replace(/export function /g, 'function ')
     .replace(/export async function /g, 'async function ');
-  const source = `${parser}\n${media}\nmodule.exports = { uploadAshleyWildeMedia, normalizeMediaRecord, safeMediaUploadErrorMessage, mediaBindingFor, MEDIA_UPLOAD_UNAUTHORISED_MESSAGE };`;
+  const source = `${parser}\n${media}\nmodule.exports = { uploadAshleyWildeMedia, normalizeMediaRecord, safeMediaUploadErrorMessage, mediaBindingFor, createAshleyTraceId, ashleyTraceRequestConfig, MEDIA_UPLOAD_UNAUTHORISED_MESSAGE };`;
   const module = { exports: {} };
   vm.runInNewContext(source, { module, exports: module.exports, Blob, FormData, TextEncoder, console, window: {} });
   return module.exports;
@@ -34,12 +34,15 @@ function preparedFile() {
 
 test('Media staging uses the injected Strapi admin client and preserves the Media Library contract', async () => {
   const utility = loadMediaUploadModule();
+  const traceId = utility.createAshleyTraceId({ folderFingerprint: 'folder-fingerprint', fileFingerprint: 'file-fingerprint', attempt: 2 });
   const calls = [];
   const media = await utility.uploadAshleyWildeMedia(preparedFile(), {
     analysisToken: 'header.payload.signature',
     folderFingerprint: 'folder-fingerprint',
     relativePath: 'Ashley/ALASKAAQ.jpg',
     fileFingerprint: 'file-fingerprint',
+    traceId,
+    attempt: 2,
     adminPost: async (...args) => {
       calls.push(args);
       return { data: [{ id: 42, documentId: 'media-42' }] };
@@ -51,6 +54,7 @@ test('Media staging uses the injected Strapi admin client and preserves the Medi
   assert.equal(calls[0][0], '/upload');
   assert.ok(calls[0][1] instanceof FormData);
   assert.equal(calls[0][2].signal, undefined);
+  assert.equal(calls[0][2].headers['X-Ashley-Trace-Id'], traceId);
   assert.equal(calls[0][1].getAll('files').length, 1);
   assert.equal(calls[0][1].get('files').name, 'ALASKAAQ.jpg');
   assert.equal(calls[0][1].get('data'), null);
@@ -60,6 +64,18 @@ test('Media staging uses the injected Strapi admin client and preserves the Medi
     alternativeText: null,
     caption: null,
   });
+});
+
+test('Ashley trace IDs are short, deterministic, and attempt-scoped', () => {
+  const utility = loadMediaUploadModule();
+  assert.equal(
+    utility.createAshleyTraceId({ folderFingerprint: 'ABCDEF0123456789', fileFingerprint: '1234567890abcdef', attempt: 3 }),
+    'aw_abcdef01*12345678*3',
+  );
+  assert.equal(
+    utility.ashleyTraceRequestConfig('aw_abcdef01*12345678*3').headers['X-Ashley-Trace-Id'],
+    'aw_abcdef01*12345678*3',
+  );
 });
 
 test('native Media response normalization keeps numeric id and documentId distinct', () => {
