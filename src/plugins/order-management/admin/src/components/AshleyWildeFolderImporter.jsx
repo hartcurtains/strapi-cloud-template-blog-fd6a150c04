@@ -70,6 +70,7 @@ function responseMessage(error) {
 
 function safeErrorMessage(error) {
   if (error?.ashleyPhase === 'upload') return safeMediaUploadErrorMessage(error);
+  if (error?.code === 'ASHLEY_WILDE_ANALYSIS_INVALID') return 'The active supplier mapping changed after this folder was analysed. Analyse the folder again before continuing.';
   if (error?.ashleyPhase === 'finalisation') {
     const status = responseStatus(error);
     if (status === 401 || status === 403) return 'The image was uploaded, but its staging link could not be authorised. Refresh your admin session and retry finalisation.';
@@ -77,7 +78,7 @@ function safeErrorMessage(error) {
     if (status === 413) return 'The staging request was too large. Retry this image.';
     const serverMessage = responseMessage(error);
     if (serverMessage && !/unexpected token|json/i.test(serverMessage)) return serverMessage;
-    return 'Image uploaded; staging link still needs to be completed. Retry this image.';
+    return 'The image was uploaded, but its staged fabric-colour link still needs to be completed.';
   }
   if (error?.code === 'ASHLEY_WILDE_UPLOAD_TIMEOUT') return 'The upload did not start. Please retry this batch.';
   const status = responseStatus(error);
@@ -199,12 +200,14 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       mimeType: row.mimeType,
       supplierProductCode: row.supplierProductCode || null,
       supplierColourCode: row.supplierColourCode || null,
+      supplierColourName: row.supplierColourName || null,
+      internalColourCode: row.internalColourCode || null,
       fabricDocumentId: row.fabricDocumentId || row.resolvedFabricDocumentId || null,
     };
 
     if (!media) {
       try {
-        const lookupPayload = await adminResponse(post, adminCatalogRoutes.ashleyWildeFinalise, { ...finaliseBody, phase: 'lookup_media' });
+        const lookupPayload = await adminResponse(post, adminCatalogRoutes.ashleyWildeMediaStatus, { ...finaliseBody, phase: 'lookup_media' });
         const lookupResult = lookupPayload.data?.result || lookupPayload.data;
         if (lookupResult?.phase === 'media_uploaded' && lookupResult.mediaId) {
           media = { id: lookupResult.mediaId, documentId: lookupResult.mediaDocumentId || null, name: row.filename };
@@ -212,7 +215,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
           updateFolderRow(row.relativePath, { phase: 'media_uploaded', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId });
         }
       } catch (error) {
-        error.ashleyPhase = 'finalisation';
+        error.ashleyPhase = 'media_status';
         throw error;
       }
     }
@@ -226,7 +229,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         error.ashleyPhase = 'upload';
         updateFolderRow(row.relativePath, { phase: 'retryable_upload_failure', status: 'failed', warning: safeMediaUploadErrorMessage(error) });
         try {
-          await adminResponse(post, adminCatalogRoutes.ashleyWildeFinalise, { ...finaliseBody, phase: 'retryable_upload_failure', errorCode: error.code || 'unknown' });
+          await adminResponse(post, adminCatalogRoutes.ashleyWildeProgress, { ...finaliseBody, phase: 'retryable_upload_failure', errorCode: error.code || 'unknown' });
         } catch (_) { /* The original upload error remains the actionable message. */ }
         throw error;
       }
@@ -458,6 +461,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
             <div style={{ color: colours.muted, fontSize: '11px' }}>{dateLabel(item.lastUploadedAt)} · map v{item.mappingSchemaVersion}</div>
           </button>)}</div>
           {selectedHistory && <div style={{ paddingTop: '12px', fontSize: '12px', color: colours.muted }}><strong style={{ color: colours.text }}>Selected summary</strong><div>Fingerprint: {selectedHistory.folderFingerprint?.slice(0, 12)}…</div><div>Attempts: {selectedHistory.manifestSummary?.attemptCount || 1}</div><div>Failed: {selectedHistory.failedFiles}</div></div>}
+        {selectedHistory && <div style={{ paddingTop: '12px', fontSize: '12px', color: colours.muted }}><div>Current file: {selectedHistory.manifestSummary?.currentFilename || 'None'}</div><div>Phase: {selectedHistory.manifestSummary?.currentPhase || 'analysed'}</div><div>Ready: {selectedHistory.manifestSummary?.readyFiles ?? 0}</div><div>Attempts: {selectedHistory.manifestSummary?.attemptCount || 1}</div></div>}
         </aside>
       </div>
       <style>{`.aw-folder-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:24px}.aw-spin{animation:aw-spin 1s linear infinite}@keyframes aw-spin{to{transform:rotate(360deg)}}@media(max-width:900px){.aw-folder-layout{grid-template-columns:minmax(0,1fr)}.aw-folder-layout aside{border-left:0!important;border-top:1px solid #e5e7eb;padding-left:0!important;padding-top:20px}}`}</style>

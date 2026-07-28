@@ -1287,8 +1287,45 @@ module.exports = {
   async finaliseAshleyWilde(ctx) {
     const importer = require('../services/ashley-wilde-import');
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    if (ctx.request.files && Object.keys(ctx.request.files).length) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: 'Ashley Wilde finalisation accepts JSON only.' };
+      return;
+    }
     try {
       ctx.body = { success: true, data: await importer.finaliseAshleyWildeMedia(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx) }) };
+    } catch (error) {
+      ctx.status = error?.status || 409;
+      ctx.body = { success: false, error: importer.safeMessage(error) };
+    }
+  },
+
+  async getAshleyWildeMediaStatus(ctx) {
+    const importer = require('../services/ashley-wilde-import');
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    if (ctx.request.files && Object.keys(ctx.request.files).length) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: 'Ashley Wilde Media status accepts JSON only.' };
+      return;
+    }
+    try {
+      ctx.body = { success: true, data: await importer.getAshleyWildeMediaStatus(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx) }) };
+    } catch (error) {
+      ctx.status = error?.status || 409;
+      ctx.body = { success: false, error: importer.safeMessage(error) };
+    }
+  },
+
+  async recordAshleyWildeProgress(ctx) {
+    const importer = require('../services/ashley-wilde-import');
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    if (ctx.request.files && Object.keys(ctx.request.files).length) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: 'Ashley Wilde progress accepts JSON only.' };
+      return;
+    }
+    try {
+      ctx.body = { success: true, data: await importer.recordAshleyWildeProgress(strapi, ctx.request.body || {}, { adminId: importer.adminIdentity(ctx) }) };
     } catch (error) {
       ctx.status = error?.status || 409;
       ctx.body = { success: false, error: importer.safeMessage(error) };

@@ -79,6 +79,18 @@ module.exports = [
       config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
     },
     {
+      method: 'POST',
+      path: relativePath(adminCatalogRoutes.ashleyWildeMediaStatus),
+      handler: 'import-export.getAshleyWildeMediaStatus',
+      config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
+    },
+    {
+      method: 'POST',
+      path: relativePath(adminCatalogRoutes.ashleyWildeProgress),
+      handler: 'import-export.recordAshleyWildeProgress',
+      config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
+    },
+    {
       method: 'GET',
       path: relativePath(adminCatalogRoutes.ashleyWildeHistory),
       handler: 'import-export.getAshleyWildeHistory',

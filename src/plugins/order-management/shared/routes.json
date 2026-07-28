@@ -5,6 +5,8 @@
   "bulkImageUpload": "/order-management/bulk-image-upload",
   "ashleyWildeAnalyse": "/order-management/ashley-wilde/analyse",
   "ashleyWildeFinalise": "/order-management/ashley-wilde/finalise",
+  "ashleyWildeMediaStatus": "/order-management/ashley-wilde/media-status",
+  "ashleyWildeProgress": "/order-management/ashley-wilde/progress",
   "ashleyWildeHistory": "/order-management/ashley-wilde/history",
   "ashleyWildeMode": "/order-management/ashley-wilde/mode",
   "ashleyWildePromote": "/order-management/ashley-wilde/promote",

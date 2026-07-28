@@ -143,7 +143,7 @@ test('arbitrary Media identity injection is rejected before staging writes', asy
 
 test('finalisation retry reuses the uploaded Media and does not duplicate the identity', async () => {
   const fixture = twoPhaseFixture({ failAssetOnce: true });
-  await assert.rejects(() => importer.finaliseAshleyWildeMedia(fixture.strapi, fixture.body, { adminId: 'admin-1' }), /Image uploaded; staging link still needs to be completed/);
+  await assert.rejects(() => importer.finaliseAshleyWildeMedia(fixture.strapi, fixture.body, { adminId: 'admin-1' }), /The image was uploaded, but its staged fabric-colour link still needs to be completed/);
   const firstIdentityCount = fixture.identities.length;
   const response = await importer.finaliseAshleyWildeMedia(fixture.strapi, fixture.body, { adminId: 'admin-1' });
   assert.equal(response.result.phase, 'complete');
@@ -153,9 +153,22 @@ test('finalisation retry reuses the uploaded Media and does not duplicate the id
 
 test('refresh recovery finds the bound uploaded Media without image bytes', async () => {
   const fixture = twoPhaseFixture();
-  const lookup = await importer.finaliseAshleyWildeMedia(fixture.strapi, { ...fixture.body, phase: 'lookup_media', mediaId: undefined, mediaDocumentId: undefined }, { adminId: 'admin-1' });
+  const lookup = await importer.getAshleyWildeMediaStatus(fixture.strapi, { ...fixture.body, mediaId: undefined, mediaDocumentId: undefined }, { adminId: 'admin-1' });
   assert.equal(lookup.result.phase, 'media_uploaded');
   assert.equal(lookup.result.mediaId, 123);
   assert.equal(fixture.assets.length, 0);
   assert.ok(!fixture.writes.some((write) => write.data?.buffer || write.data?.files));
+});
+
+test('upload failure records retryable progress without calling finalisation or creating staging rows', async () => {
+  const fixture = twoPhaseFixture();
+  const response = await importer.recordAshleyWildeProgress(fixture.strapi, {
+    ...fixture.body,
+    phase: 'retryable_upload_failure',
+    errorCode: 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE',
+  }, { adminId: 'admin-1' });
+  assert.equal(response.result.phase, 'retryable_upload_failure');
+  assert.equal(fixture.assets.length, 0);
+  assert.equal(fixture.identities.length, 0);
+  assert.equal(fixture.batches[0].manifestSummary.resultsByPath['Ashley/ALASKAAQ.jpg'].phase, 'retryable_upload_failure');
 });

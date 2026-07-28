@@ -4,11 +4,35 @@ export const ASHLEY_MEDIA_UPLOAD_PATH = '/upload';
 export const ASHLEY_PREPARED_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 export const ACCEPTED_ASHLEY_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 export const MEDIA_UPLOAD_RETRY_MESSAGE = 'The image service was temporarily unavailable. This image was not uploaded. Please retry it.';
-export const MEDIA_UPLOAD_UNAUTHORISED_MESSAGE = 'The image upload was not authorised. Refresh your admin session and retry.';
+export const MEDIA_UPLOAD_UNAUTHORISED_MESSAGE = 'The image upload was not authorised. Refresh your administrator session and retry.';
 
 export function mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }) {
   const signature = String(analysisToken || '').split('.').pop();
   return `aw-ashley:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
+}
+
+/**
+ * Strapi 5.23.6's Media Library upload hook returns res.data, which is an
+ * array for a normal upload. Keep the numeric id and documentId distinct and
+ * only copy fields that the installed Media Library actually returned.
+ */
+export function normalizeMediaRecord(payload) {
+  const candidate = Array.isArray(payload)
+    ? payload[0]
+    : payload?.data && !payload.id && !payload.documentId
+      ? (Array.isArray(payload.data) ? payload.data[0] : payload.data)
+      : payload;
+  if (!candidate || (candidate.id === undefined && !candidate.documentId)) {
+    const error = new Error('The Media Library did not return a Media record.');
+    error.code = 'ASHLEY_WILDE_MEDIA_RESPONSE_INVALID';
+    throw error;
+  }
+
+  const normalized = {};
+  for (const field of ['id', 'documentId', 'name', 'mime', 'size', 'url', 'hash', 'width', 'height']) {
+    if (candidate[field] !== undefined && candidate[field] !== null) normalized[field] = candidate[field];
+  }
+  return normalized;
 }
 
 export function safeMediaUploadErrorMessage(error) {
@@ -38,24 +62,23 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
   }
 
   const form = new FormData();
-  form.append('files', file, file.name);
-  form.append('data', JSON.stringify({ fileInfo: {
+  // This mirrors @strapi/upload 5.23.6's useUpload hook exactly:
+  // formData.append('files', rawFile) and formData.append('fileInfo', JSON.stringify(...)).
+  // The injected admin client supplies the current authenticated session and
+  // deliberately owns the request headers/boundary.
+  form.append('files', file);
+  form.append('fileInfo', JSON.stringify({
     name: file.name,
-    alternativeText: file.name,
     caption: mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }),
-  } }));
+    alternativeText: file.name,
+    folder: undefined,
+  }));
 
   try {
     if (typeof adminPost !== 'function') throw new Error('The authenticated Strapi admin upload client is unavailable.');
     const response = await adminPost(ASHLEY_MEDIA_UPLOAD_PATH, form, { signal });
     const payload = await parseStagingResponse(response);
-    const media = Array.isArray(payload) ? payload[0] : payload?.data?.[0] || payload?.data;
-    if (!media?.id) {
-      const error = new Error('The Media Library did not return a Media record.');
-      error.code = 'ASHLEY_WILDE_MEDIA_RESPONSE_INVALID';
-      throw error;
-    }
-    return media;
+    return normalizeMediaRecord(payload);
   } catch (error) {
     const normalized = await normalizeStagingError(error);
     normalized.safeMessage = safeMediaUploadErrorMessage(normalized);

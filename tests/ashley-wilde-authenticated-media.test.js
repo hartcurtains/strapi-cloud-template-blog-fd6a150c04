@@ -20,7 +20,7 @@ function loadMediaUploadModule() {
     .replace(/export const /g, 'const ')
     .replace(/export function /g, 'function ')
     .replace(/export async function /g, 'async function ');
-  const source = `${parser}\n${media}\nmodule.exports = { uploadAshleyWildeMedia, safeMediaUploadErrorMessage, mediaBindingFor, MEDIA_UPLOAD_UNAUTHORISED_MESSAGE };`;
+  const source = `${parser}\n${media}\nmodule.exports = { uploadAshleyWildeMedia, normalizeMediaRecord, safeMediaUploadErrorMessage, mediaBindingFor, MEDIA_UPLOAD_UNAUTHORISED_MESSAGE };`;
   const module = { exports: {} };
   vm.runInNewContext(source, { module, exports: module.exports, Blob, FormData, TextEncoder, console, window: {} });
   return module.exports;
@@ -46,13 +46,44 @@ test('Media staging uses the injected Strapi admin client and preserves the Medi
     },
   });
 
-  assert.deepEqual(media, { id: 42, documentId: 'media-42' });
+  assert.deepEqual(JSON.parse(JSON.stringify(media)), { id: 42, documentId: 'media-42' });
   assert.equal(calls.length, 1);
   assert.equal(calls[0][0], '/upload');
   assert.ok(calls[0][1] instanceof FormData);
   assert.equal(calls[0][2].signal, undefined);
   assert.equal(calls[0][1].getAll('files').length, 1);
-  assert.match(calls[0][1].get('data'), /aw-ashley:signature:folder-fingerprint:Ashley\/ALASKAAQ\.jpg:file-fingerprint/);
+  assert.equal(calls[0][1].get('data'), null);
+  const fileInfo = JSON.parse(calls[0][1].get('fileInfo'));
+  assert.deepEqual(fileInfo, {
+    name: 'ALASKAAQ.jpg',
+    alternativeText: 'ALASKAAQ.jpg',
+    caption: 'aw-ashley:signature:folder-fingerprint:Ashley/ALASKAAQ.jpg:file-fingerprint',
+  });
+});
+
+test('native Media response normalization keeps numeric id and documentId distinct', () => {
+  const utility = loadMediaUploadModule();
+  assert.deepEqual(JSON.parse(JSON.stringify(utility.normalizeMediaRecord([{
+    id: 123,
+    documentId: 'media-123',
+    name: 'TUNBRIDGEDA.jpg',
+    mime: 'image/jpeg',
+    size: 19865.2,
+    url: '/uploads/TUNBRIDGEDA.jpg',
+    hash: 'tunbridge-hash',
+    width: 4000,
+    height: 3000,
+  }]))), {
+    id: 123,
+    documentId: 'media-123',
+    name: 'TUNBRIDGEDA.jpg',
+    mime: 'image/jpeg',
+    size: 19865.2,
+    url: '/uploads/TUNBRIDGEDA.jpg',
+    hash: 'tunbridge-hash',
+    width: 4000,
+    height: 3000,
+  });
 });
 
 test('raw unauthenticated fetch and legacy token construction are absent from Ashley two-phase staging', () => {
@@ -65,17 +96,19 @@ test('raw unauthenticated fetch and legacy token construction are absent from As
   assert.match(component, /const post = useCallback\(\(\.\.\.args\) => getFetchClient\(\)\.post\(\.\.\.args\), \[\]\)/);
   assert.match(component, /uploadAshleyWildeMedia\(row\.file, \{[\s\S]*adminPost: post/);
   assert.match(component, /adminResponse\(post, adminCatalogRoutes\.ashleyWildeFinalise/);
+  assert.match(component, /adminResponse\(post, adminCatalogRoutes\.ashleyWildeProgress/);
+  assert.doesNotMatch(component, /ashleyWildeFinalise, \{ \.\.\.finaliseBody, phase: 'retryable_upload_failure'/);
 });
 
 test('upload and finalisation authentication failures are stage-specific while service failures are not session errors', () => {
   const utility = loadMediaUploadModule();
   assert.equal(
     utility.safeMediaUploadErrorMessage({ status: 401 }),
-    'The image upload was not authorised. Refresh your admin session and retry.',
+    'The image upload was not authorised. Refresh your administrator session and retry.',
   );
   assert.equal(
     utility.safeMediaUploadErrorMessage({ status: 403 }),
-    'The image upload was not authorised. Refresh your admin session and retry.',
+    'The image upload was not authorised. Refresh your administrator session and retry.',
   );
   assert.match(utility.safeMediaUploadErrorMessage({ status: 503 }), /temporarily unavailable/);
 
