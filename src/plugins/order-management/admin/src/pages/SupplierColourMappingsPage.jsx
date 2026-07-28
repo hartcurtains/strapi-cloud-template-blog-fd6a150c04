@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useFetchClient } from '@strapi/strapi/admin';
 import adminCatalogRoutes from '../../../shared/routes';
+import { ACTIVE_REFRESH_ERROR, safeAdminJsonRequest } from '../utils/supplierMappingClient';
 
 const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, padding: 20, marginBottom: 16 };
 const button = { border: 0, borderRadius: 6, padding: '9px 14px', cursor: 'pointer', background: '#4945ff', color: '#fff', fontWeight: 600 };
@@ -43,7 +44,7 @@ function Summary({ preview }) {
 }
 
 export default function SupplierColourMappingsPage() {
-  const { get, post } = useFetchClient();
+  const { post } = useFetchClient();
   const [file, setFile] = useState(null);
   const [importRecord, setImportRecord] = useState(null);
   const [preview, setPreview] = useState(null);
@@ -56,9 +57,9 @@ export default function SupplierColourMappingsPage() {
   const [reenrichPreview, setReenrichPreview] = useState(null);
 
   const refresh = useCallback(async () => {
-    const response = await get(`${adminCatalogRoutes.supplierMappingsActive}?supplier=${encodeURIComponent('Ashley Wilde')}`);
-    setActive(response?.data?.data || response?.data || null);
-  }, [get]);
+    const payload = await safeAdminJsonRequest(`${adminCatalogRoutes.supplierMappingsActive}?supplier=${encodeURIComponent('Ashley Wilde')}`, { fallbackMessage: ACTIVE_REFRESH_ERROR });
+    setActive(payload?.data || payload || null);
+  }, []);
 
   useEffect(() => { refresh().catch((requestError) => setError(errorMessage(requestError))); }, [refresh]);
 
@@ -86,7 +87,8 @@ export default function SupplierColourMappingsPage() {
       if (typeof importDocumentId !== 'string' || !importDocumentId.trim()) throw new Error('The selected mapping import does not have a valid documentId.');
       const response = await post(adminCatalogRoutes.supplierMappingsApply, { importDocumentId, confirm: true });
       const data = response?.data?.data || response?.data || {};
-      setImportRecord(data.import); setPreview(data.preview); setMessage('Mapping version activated.'); setConfirm(false); await refresh();
+      setImportRecord(data.import); setPreview(data.preview); setMessage('Mapping version activated.'); setConfirm(false);
+      try { await refresh(); } catch (refreshError) { setError(errorMessage(refreshError)); }
     } catch (requestError) { setError(errorMessage(requestError)); } finally { setBusy(false); }
   };
 
@@ -94,8 +96,7 @@ export default function SupplierColourMappingsPage() {
     setBusy(true); setError('');
     try {
       const documentId = active?.version?.documentId;
-      const response = await get(`${adminCatalogRoutes.supplierMappingsExport}?documentId=${encodeURIComponent(documentId || '')}`);
-      const payload = response?.data || response;
+      const payload = await safeAdminJsonRequest(`${adminCatalogRoutes.supplierMappingsExport}?documentId=${encodeURIComponent(documentId || '')}`, { fallbackMessage: 'The active mapping JSON could not be exported.' });
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
       anchor.href = url; anchor.download = `${payload.supplier || 'supplier'}-${payload.mappingVersion || 'mapping'}.json`; anchor.click(); URL.revokeObjectURL(url);
@@ -105,8 +106,7 @@ export default function SupplierColourMappingsPage() {
   const exportRepositoryFallback = async () => {
     setBusy(true); setError('');
     try {
-      const response = await get(adminCatalogRoutes.supplierMappingsFallbackExport);
-      const payload = response?.data || response;
+      const payload = await safeAdminJsonRequest(adminCatalogRoutes.supplierMappingsFallbackExport, { fallbackMessage: 'The approved repository fallback JSON could not be downloaded.' });
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob); const anchor = document.createElement('a');
       anchor.href = url; anchor.download = 'ashley-wilde-complete-mapping.json'; anchor.click(); URL.revokeObjectURL(url);
