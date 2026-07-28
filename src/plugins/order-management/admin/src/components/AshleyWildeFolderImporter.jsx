@@ -4,14 +4,14 @@ import { AlertCircle, CheckCircle, FolderOpen, Loader2, RefreshCw, Upload } from
 import adminCatalogRoutes from '../../../shared/routes';
 import {
   MAX_BATCH_BYTES, MAX_BATCH_FILES, MAX_FILE_BYTES, READY_STATUSES, fingerprintManifest,
-  folderNameFromFiles, isSupportedFileName, partitionUploadRows, relativePathOf, sequentialBatches, sha256File,
+  STAGING_REQUEST_TIMEOUT_MS, assertUploadBatch, folderNameFromFiles, isSupportedFileName, partitionUploadRows, relativePathOf, sequentialBatches, sha256File,
 } from '../utils/ashleyWildeFolder';
+import { normalizeStagingError, parseStagingResponse, sanitizeDiagnosticMessage } from '../utils/stagingResponse';
 
 const colours = {
   text: '#374151', muted: '#6b7280', line: '#e5e7eb', blue: '#3b82f6',
   green: '#059669', amber: '#b45309', red: '#dc2626', surface: '#f9fafb',
 };
-const STAGING_REQUEST_TIMEOUT_MS = 90 * 1000;
 const PREPARED_WARNING_BYTES = 20 * 1024 * 1024;
 const ABSOLUTE_IMPORTER_FILE_BYTES = 50 * 1024 * 1024;
 
@@ -55,7 +55,7 @@ function stagingLog(step, details = {}) {
 }
 
 function buildStageForm({ folderName, folderFingerprint, manifest, rows, analysisToken, finalBatch }) {
-  const stats = batchStats(rows);
+  const stats = { ...batchStats(rows), ...assertUploadBatch(rows) };
   const form = new FormData();
   stagingLog('form-data-created', stats);
   form.append('ashleyWilde', 'true');
@@ -105,15 +105,17 @@ async function stageBatchRequest(request, form, stats, batchNumber) {
 }
 
 async function adminResponse(request, ...args) {
-  const response = await request(...args);
-  const payload = response?.data || {};
-  if (payload.success === false && payload.data === undefined && payload.results === undefined) {
-    const error = new Error(typeof payload.error === 'string' ? payload.error : payload.message || 'Ashley Wilde request failed.');
-    error.status = payload.error?.status || response?.status;
-    error.response = response;
-    throw error;
+  try {
+    return await parseStagingResponse(await request(...args));
+  } catch (error) {
+    const normalized = await normalizeStagingError(error);
+    if (normalized?.upstreamMessage) stagingLog('safe-upstream-response', {
+      status: normalized.status || null,
+      contentType: normalized.contentType || null,
+      upstreamMessage: sanitizeDiagnosticMessage(normalized.upstreamMessage),
+    });
+    throw normalized;
   }
-  return payload;
 }
 
 function responseStatus(error) {
@@ -135,9 +137,9 @@ function safeErrorMessage(error) {
   if (status === 401) return 'The request could not authenticate. Your administrator credentials were not accepted.';
   if (status === 403) return 'You are signed in, but your administrator account does not have permission to use the Ashley Wilde importer.';
   if (status === 413) return 'The server rejected this upload because the request was too large. Retry; batches are automatically kept below the upload limit.';
+  if (status === 503 || error?.code === 'ASHLEY_WILDE_UPSTREAM_UNAVAILABLE') return 'The image service was temporarily unavailable while processing this batch. No later batches were started. Retry this batch.';
   const serverMessage = responseMessage(error);
-  if (serverMessage) return serverMessage;
-  if (status === 503) return 'Ashley Wilde mapping is unavailable. Check the configured mapping and try again.';
+  if (serverMessage && !/unexpected token|json/i.test(serverMessage)) return serverMessage;
   if (status >= 500) return 'The Ashley Wilde service failed. Try again.';
   if (error?.code === 'ERR_NETWORK' || error?.request && !error?.response) {
     return 'The Ashley Wilde service could not be reached. Check that Strapi is running and try again.';
@@ -234,20 +236,13 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setBusy(true);
     setError('');
     try {
-      const batches = sequentialBatches(selectedRows);
+      const batches = sequentialBatches(selectedRows, MAX_BATCH_FILES, MAX_BATCH_BYTES);
       const manifest = analysis.rows.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
       for (let index = 0; index < batches.length; index += 1) {
         const batch = batches[index];
         setProgress(`Uploading batch ${index + 1} of ${batches.length} (${batch.length} files)`);
-        const form = new FormData();
-        form.append('ashleyWilde', 'true');
-        form.append('folderName', analysis.folderName);
-        form.append('folderFingerprint', analysis.folderFingerprint);
-        form.append('folderManifest', JSON.stringify(manifest));
-        form.append('fileMetadata', JSON.stringify(batch.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }))));
-        form.append('finalBatch', String(index === batches.length - 1));
-        batch.forEach((row) => form.append('files', row.file, row.filename));
-        const payload = await adminResponse(post, adminCatalogRoutes.bulkImageUpload, form);
+        const { form } = buildStageForm({ folderName: analysis.folderName, folderFingerprint: analysis.folderFingerprint, manifest, rows: batch, analysisToken: analysis.analysisToken, finalBatch: index === batches.length - 1 });
+        const payload = await stageBatchRequest(post, form, batchStats(batch), index + 1);
         if (!payload.data) throw new Error(`Batch ${index + 1} failed safely.`);
           setFolderFiles((current) => current.map((row) => {
           const result = payload.data.results.find((item) => item.filename === row.filename);
@@ -260,6 +255,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       setSelected(new Set());
       await refreshHistory();
     } catch (uploadError) {
+      await refreshHistory();
       setError(safeErrorMessage(uploadError));
     } finally {
       setBusy(false);
@@ -343,27 +339,26 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       onStagingStart?.();
       const manifest = fileQueueRef.current.map(({ relativePath, sha256, size }) => ({ relativePath, sha256, size }));
       const folderFingerprint = analysis?.folderFingerprint;
-      const stagingBatches = analysisBatches.map((batch, index) => ({
-        ...batch,
-        index,
-        ready: batch.rows.filter((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES),
-      })).filter((batch) => batch.ready.length > 0);
-      const lastStagingBatchIndex = stagingBatches.at(-1)?.index;
-      if (!stagingBatches.length) throw new Error('There are no confirmed files ready to stage.');
-      for (let index = 0; index < analysisBatches.length; index += 1) {
-        const batch = analysisBatches[index];
+      const stagingBatches = [];
+      analysisBatches.forEach((batch, analysisIndex) => {
         const ready = batch.rows.filter((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES);
-        if (!ready.length) continue;
-        const stats = batchStats(ready);
-        setProgress(`Staging confirmed files from batch ${index + 1} of ${analysisBatches.length} (${stats.fileCount} files, ${formatBytes(stats.totalBytes)} total, ${formatBytes(stats.largestFileBytes)} largest)`);
-        stagingLog('files-ready', { batchNumber: index + 1, ...stats });
+        const { batches, oversized } = partitionUploadRows(ready, MAX_BATCH_FILES, MAX_BATCH_BYTES);
+        if (oversized.length) throw new Error('The staging planner found a file above the supported individual limit.');
+        batches.forEach((rows) => stagingBatches.push({ rows, analysisToken: batch.analysisToken, analysisIndex }));
+      });
+      if (!stagingBatches.length) throw new Error('There are no confirmed files ready to stage.');
+      for (let index = 0; index < stagingBatches.length; index += 1) {
+        const batch = stagingBatches[index];
+        const stats = { ...batchStats(batch.rows), ...assertUploadBatch(batch.rows) };
+        setProgress(`Staging file ${index + 1} of ${stagingBatches.length} (${stats.fileCount} file, ${formatBytes(stats.totalBytes)} total; ${formatBytes(MAX_BATCH_BYTES)} normal target)`);
+        stagingLog('files-ready', { batchNumber: index + 1, totalBatches: stagingBatches.length, targetBytes: MAX_BATCH_BYTES, ...stats });
         const { form } = buildStageForm({
           folderName: queuedFolder.folderName,
           folderFingerprint,
           manifest,
-          rows: ready,
+          rows: batch.rows,
           analysisToken: batch.analysisToken,
-          finalBatch: index === lastStagingBatchIndex,
+          finalBatch: index === stagingBatches.length - 1,
         });
         const upload = await stageBatchRequest(post, form, stats, index + 1);
         if (!upload.data) throw new Error(`Batch ${index + 1} failed safely.`);
@@ -379,6 +374,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       setProgress('Folder import complete');
       await refreshHistory();
     } catch (stageError) {
+      await refreshHistory();
       setError(safeErrorMessage(stageError));
     } finally {
       stagingRunRef.current = false;

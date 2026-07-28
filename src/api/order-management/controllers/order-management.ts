@@ -4,6 +4,7 @@
 
 import { factories } from '@strapi/strapi';
 const catalogUploadConfig = require('../../../catalog/catalog-upload-config');
+const ashleyUploadPolicy = require('../../../plugins/order-management/shared/ashley-wilde-upload-policy.json');
 
 export default factories.createCoreController('api::order-management.order-management', ({ strapi }) => ({
   // Simple test endpoint
@@ -733,6 +734,11 @@ export default factories.createCoreController('api::order-management.order-manag
 
 // Bulk image upload with auto-linking to products
 async bulkImageUpload(ctx) {
+  const requestStartedAt = Date.now();
+  const logStage = (stage: string, details: Record<string, any> = {}) => console.info('[Ashley Wilde bulk upload]', JSON.stringify({
+    timestamp: new Date().toISOString(), stage, elapsedMs: Date.now() - requestStartedAt, ...details,
+  }));
+  logStage('controller-entered');
   console.info('[Ashley Wilde bulk upload] controller-entered', {
     timestamp: new Date().toISOString(),
     batchFileCount: Array.isArray(ctx.request.files?.files) ? ctx.request.files.files.length : (ctx.request.files?.files ? 1 : 0),
@@ -804,6 +810,15 @@ async bulkImageUpload(ctx) {
 
     console.log(`📸 Processing ${fileArray.length} files...`);
 
+    if (isAshleyWildeFolder && fileArray.length > ashleyUploadPolicy.maxBatchFiles) {
+      ctx.status = 413;
+      ctx.body = { success: false, error: 'Ashley Wilde staging batches must contain one file.' };
+      logStage('batch-rejected-before-processing', { batchFileCount: fileArray.length, declaredTotalSize, targetBytes: ashleyUploadPolicy.normalBatchTargetBytes });
+      return;
+    }
+
+    logStage('multipart-validated', { batchFileCount: fileArray.length, declaredTotalSize });
+
     // Read and validate sequentially so multiple large buffers are never read concurrently.
     const fileDescriptors = [];
     const validatedFiles = [];
@@ -858,6 +873,8 @@ async bulkImageUpload(ctx) {
       validatedFiles.push(descriptor);
     }
 
+    logStage('file-validation-complete', { validatedFileCount: validatedFiles.length, validationErrorCount: validationErrors.length });
+
     // If no files could be validated, return error
     if (validatedFiles.length === 0) {
       ctx.status = 400;
@@ -891,9 +908,12 @@ async bulkImageUpload(ctx) {
           error.code = 'ASHLEY_WILDE_SERVICE_UNAVAILABLE';
           throw error;
         }
+        logStage('staging-processing-start', { validatedFileCount: validatedFiles.length });
         const folderResults = await importer.processBatch(strapi, validatedFiles, ctx.request.body, { adminId: importer.adminIdentity(ctx) });
+        logStage('staging-processing-complete', { validatedFileCount: validatedFiles.length, failed: folderResults.failed, uploaded: folderResults.uploaded });
         ctx.body = { success: folderResults.failed === 0, data: folderResults };
       } catch (error: any) {
+        logStage('staging-processing-failed', { errorCode: error?.code || 'unknown' });
         ctx.status = ['ASHLEY_WILDE_MAPPING_INVALID', 'ASHLEY_WILDE_SERVICE_UNAVAILABLE'].includes(error?.code) ? 503 : 400;
         ctx.body = { success: false, error: importer?.safeMessage ? importer.safeMessage(error) : 'The folder import could not be processed safely.' };
       }

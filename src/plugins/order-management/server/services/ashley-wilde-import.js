@@ -9,6 +9,7 @@ const {
   normalizeStem, normalizeToken, parseFilename,
 } = require('../../shared/ashley-wilde-mapping');
 const supplierMappings = require('./supplier-mapping');
+const uploadPolicy = require('../../shared/ashley-wilde-upload-policy.json');
 
 const BATCH_UID = 'api::image-import-batch.image-import-batch';
 const FABRIC_UID = 'api::fabric.fabric';
@@ -34,6 +35,19 @@ function safeLog(strapi, stage, details = {}) {
   const entry = { timestamp: new Date().toISOString(), stage, ...details };
   const logger = strapi?.log?.info ? strapi.log : console;
   logger.info(`[Ashley Wilde bulk upload] ${JSON.stringify(entry)}`);
+}
+
+async function timedStage(strapi, stage, work, details = {}) {
+  const startedAt = Date.now();
+  safeLog(strapi, `${stage}-start`, details);
+  try {
+    const result = await work();
+    safeLog(strapi, `${stage}-complete`, { ...details, durationMs: Date.now() - startedAt });
+    return result;
+  } catch (error) {
+    safeLog(strapi, `${stage}-failed`, { ...details, durationMs: Date.now() - startedAt, errorCode: error?.code || 'unknown' });
+    throw error;
+  }
 }
 
 function analysisTokenSecret() {
@@ -257,8 +271,10 @@ function summaryForRows(rows) {
   };
 }
 
-async function upsertHistory(strapi, data) {
-  const existing = await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: data.folderFingerprint }, limit: 1 });
+async function upsertHistory(strapi, data, existingOverride) {
+  const existing = existingOverride === undefined
+    ? await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: data.folderFingerprint }, limit: 1 })
+    : existingOverride;
   const previous = existing?.[0];
   const priorSummary = previous?.manifestSummary || {};
   const manifestSummary = { ...priorSummary, ...data.manifestSummary, attemptCount: Number(priorSummary.attemptCount || 0) + (data.incrementAttempt ? 1 : 0), lastAttemptAt: new Date().toISOString() };
@@ -417,11 +433,16 @@ async function processFile(strapi, descriptor, metadata, mappings, batchContext 
 }
 
 async function processBatch(strapi, descriptors, body, options = {}) {
-  const mappings = await loadAshleyImporterMappings(strapi, options);
+  const requestStartedAt = Date.now();
+  const requestBytes = descriptors.reduce((sum, item) => sum + Number(item.size || item.buffer?.length || 0), 0);
+  safeLog(strapi, 'staging-request-start', { batchFileCount: descriptors.length, requestBytes, targetBytes: uploadPolicy.normalBatchTargetBytes });
+  const mappings = await timedStage(strapi, 'mapping-load', () => loadAshleyImporterMappings(strapi, options), { batchFileCount: descriptors.length });
+  const manifestStartedAt = Date.now();
   const manifest = normalizeManifest(JSON.parse(body?.folderManifest || '[]'));
   const fingerprint = manifestFingerprint(manifest);
   if (fingerprint !== body?.folderFingerprint) throw new Error('Folder fingerprint does not match the manifest');
   const batchMetadata = JSON.parse(body?.fileMetadata || '[]');
+  safeLog(strapi, 'manifest-validated', { batchFileCount: descriptors.length, manifestFileCount: manifest.length, durationMs: Date.now() - manifestStartedAt });
   safeLog(strapi, 'analysis-token-validation-start', {
     authenticatedAdminId: options.adminId || null,
     batchFileCount: descriptors.length,
@@ -442,24 +463,85 @@ async function processBatch(strapi, descriptors, body, options = {}) {
     metadataPresent: batchMetadata.length > 0,
     analysisTokenPresent: Boolean(body?.analysisToken),
   });
+
+  const priorRows = await timedStage(strapi, 'history-read', () => strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: fingerprint }, limit: 1 }), { folderFingerprint: fingerprint });
+  const old = priorRows?.[0] || {};
+  const previousSummary = old.manifestSummary || {};
+  const previousResultsByPath = previousSummary.resultsByPath || {};
+  await timedStage(strapi, 'history-upsert-uploading', () => upsertHistory(strapi, {
+    supplier: SUPPLIER,
+    folderName: String(body.folderName || '').slice(0, 255),
+    folderFingerprint: fingerprint,
+    status: 'uploading',
+    totalFiles: manifest.length,
+    matchedFiles: Number(old.matchedFiles || 0),
+    uploadedFiles: Number(old.uploadedFiles || 0),
+    alreadyCompleteFiles: Number(old.alreadyCompleteFiles || 0),
+    skippedFiles: Number(old.skippedFiles || 0),
+    conflictFiles: Number(old.conflictFiles || 0),
+    failedFiles: Number(old.failedFiles || 0),
+    firstUploadedAt: old.firstUploadedAt || null,
+    lastUploadedAt: old.lastUploadedAt || null,
+    completedAt: null,
+    mappingSchemaVersion: mappings.colourMap.schemaVersion,
+    manifestSummary: { ...(old.manifestSummary || {}), phase: 'staging', requestStartedAt: new Date(requestStartedAt).toISOString(), requestFileCount: descriptors.length, requestBytes, resultsByPath: previousResultsByPath },
+    incrementAttempt: false,
+  }, priorRows), { folderFingerprint: fingerprint });
+
   const byPath = new Map(batchMetadata.map((item) => [normalizeRelativePath(item.relativePath), item]));
   const results = [];
-  for (const descriptor of descriptors) {
+  for (let fileIndex = 0; fileIndex < descriptors.length; fileIndex += 1) {
+    const descriptor = descriptors[fileIndex];
     const relativePath = normalizeRelativePath(descriptor.relativePath || descriptor.name);
     const metadata = byPath.get(relativePath);
-    if (!metadata || metadata.size !== descriptor.size || path.basename(relativePath) !== descriptor.name) { results.push({ filename: descriptor.name, status: 'failed', failed: true, warning: 'Batch metadata did not match the uploaded file.' }); continue; }
-    results.push(await processFile(strapi, descriptor, metadata, mappings, { folderName: body.folderName, folderFingerprint: fingerprint }));
+    if (!metadata || metadata.size !== descriptor.size || path.basename(relativePath) !== descriptor.name) {
+      results.push({ filename: descriptor.name, relativePath, status: 'failed', failed: true, warning: 'Batch metadata did not match the uploaded file.' });
+      continue;
+    }
+    try {
+      const result = await timedStage(strapi, 'file-processing', () => processFile(strapi, descriptor, metadata, mappings, { folderName: body.folderName, folderFingerprint: fingerprint }), { fileIndex, filename: descriptor.name, bytes: descriptor.size });
+      results.push({ ...result, relativePath });
+    } catch (error) {
+      safeLog(strapi, 'file-processing-failed', { fileIndex, filename: descriptor.name, bytes: descriptor.size, errorCode: error?.code || 'unknown' });
+      results.push({ filename: descriptor.name, relativePath, status: 'failed', failed: true, warning: 'Server processing failed for this file; retry this batch to resume safely.' });
+    }
   }
-  const prior = await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: fingerprint }, limit: 1 });
-  const old = prior?.[0] || {};
+
   const uploadedDelta = results.filter((item) => item.uploaded).length;
   const failedDelta = results.filter((item) => item.failed).length;
   const skippedDelta = results.filter((item) => item.skipped).length;
   const finalBatch = body?.finalBatch === 'true' || body?.finalBatch === true;
-  const totals = { uploadedFiles: Math.min(manifest.length, Number(old.uploadedFiles || 0) + uploadedDelta), failedFiles: Math.min(manifest.length, Number(old.failedFiles || 0) + failedDelta), skippedFiles: Math.min(manifest.length, Number(old.skippedFiles || 0) + skippedDelta) };
-  const status = finalBatch ? (totals.failedFiles ? 'partial' : (totals.skippedFiles ? 'completed_with_skips' : 'completed')) : 'uploading';
+  const resultsByPath = { ...previousResultsByPath };
+  for (const result of results) {
+    const key = normalizeRelativePath(result.relativePath || result.filename);
+    resultsByPath[key] = { ...resultsByPath[key], ...result, uploaded: Boolean(resultsByPath[key]?.uploaded || result.uploaded) };
+  }
+  const persistedResults = Object.values(resultsByPath);
+  const totals = {
+    uploadedFiles: persistedResults.filter((item) => item.uploaded).length,
+    failedFiles: persistedResults.filter((item) => item.failed).length,
+    skippedFiles: persistedResults.filter((item) => item.skipped && !['staged', 'already_staged'].includes(item.status)).length,
+  };
+  const status = finalBatch ? (totals.failedFiles ? 'partial' : (totals.skippedFiles ? 'completed_with_skips' : 'completed')) : (failedDelta ? 'partial' : 'uploading');
   const now = new Date().toISOString();
-  const history = await upsertHistory(strapi, { supplier: SUPPLIER, folderName: String(body.folderName || '').slice(0, 255), folderFingerprint: fingerprint, status, totalFiles: manifest.length, matchedFiles: Number(old.matchedFiles || 0) + results.filter((item) => COLOUR_STATUSES.has(item.status)).length, ...totals, alreadyCompleteFiles: Number(old.alreadyCompleteFiles || 0) + results.filter((item) => item.status === 'already_staged').length, conflictFiles: Number(old.conflictFiles || 0) + results.filter((item) => item.status === 'conflicting_image' || item.status === 'identity_conflict').length, firstUploadedAt: old.firstUploadedAt || (uploadedDelta ? now : null), lastUploadedAt: uploadedDelta ? now : old.lastUploadedAt, completedAt: finalBatch ? now : null, mappingSchemaVersion: mappings.colourMap.schemaVersion, manifestSummary: { ...(old.manifestSummary || {}), lastBatch: results }, incrementAttempt: false });
+  const history = await timedStage(strapi, 'history-upsert-final', () => upsertHistory(strapi, {
+    supplier: SUPPLIER,
+    folderName: String(body.folderName || '').slice(0, 255),
+    folderFingerprint: fingerprint,
+    status,
+    totalFiles: manifest.length,
+    matchedFiles: persistedResults.filter((item) => COLOUR_STATUSES.has(item.status)).length,
+    ...totals,
+    alreadyCompleteFiles: persistedResults.filter((item) => item.status === 'already_staged').length,
+    conflictFiles: persistedResults.filter((item) => item.status === 'conflicting_image' || item.status === 'identity_conflict').length,
+    firstUploadedAt: old.firstUploadedAt || (uploadedDelta ? now : null),
+    lastUploadedAt: uploadedDelta ? now : old.lastUploadedAt,
+    completedAt: finalBatch ? now : null,
+    mappingSchemaVersion: mappings.colourMap.schemaVersion,
+    manifestSummary: { ...(old.manifestSummary || {}), phase: status, lastBatch: results, resultsByPath },
+    incrementAttempt: false,
+  }), { folderFingerprint: fingerprint, status });
+  safeLog(strapi, 'staging-request-complete', { batchFileCount: descriptors.length, durationMs: Date.now() - requestStartedAt, status, uploaded: uploadedDelta, failed: failedDelta, skipped: skippedDelta });
   return { results, history, mappingMode: mappings.mode, status, uploaded: uploadedDelta, failed: failedDelta, skipped: skippedDelta };
 }
 

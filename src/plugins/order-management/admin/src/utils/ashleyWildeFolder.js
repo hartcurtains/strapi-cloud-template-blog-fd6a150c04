@@ -1,11 +1,12 @@
 export const SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
-export const MAX_BATCH_FILES = 10;
-// Use the smallest end-to-end ceiling observed for the deployed bulk path.
-// Keep 5 MiB for multipart boundaries and signed-folder metadata.
-export const EFFECTIVE_BULK_PATH_LIMIT_BYTES = 50 * 1024 * 1024;
-export const MULTIPART_OVERHEAD_BYTES = 5 * 1024 * 1024;
-export const MAX_BATCH_BYTES = EFFECTIVE_BULK_PATH_LIMIT_BYTES - MULTIPART_OVERHEAD_BYTES;
-export const MAX_FILE_BYTES = MAX_BATCH_BYTES;
+import uploadPolicy from '../../../shared/ashley-wilde-upload-policy.json';
+
+export const MAX_BATCH_FILES = uploadPolicy.maxBatchFiles;
+export const EFFECTIVE_BULK_PATH_LIMIT_BYTES = uploadPolicy.effectivePathLimitBytes;
+export const MULTIPART_OVERHEAD_BYTES = uploadPolicy.multipartOverheadBytes;
+export const MAX_BATCH_BYTES = uploadPolicy.normalBatchTargetBytes;
+export const MAX_FILE_BYTES = uploadPolicy.maxFileBytes;
+export const STAGING_REQUEST_TIMEOUT_MS = uploadPolicy.requestTimeoutMs;
 export const READY_STATUSES = new Set([
   'matched', 'would_create_colour', 'would_create_internal_code',
   'would_create_relation', 'would_upload_and_link', 'previously_uploaded',
@@ -58,7 +59,7 @@ export function partitionUploadRows(rows, maxFiles = MAX_BATCH_FILES, maxBytes =
   for (const row of rows) {
     const fileSize = Number(row.file?.size ?? row.size ?? 0);
     if (!Number.isSafeInteger(fileSize) || fileSize < 0) throw new Error(`${row.filename} has an invalid file size.`);
-    const maxSingleFileBytes = Math.min(MAX_FILE_BYTES, maxBytes);
+    const maxSingleFileBytes = MAX_FILE_BYTES;
     if (fileSize > maxSingleFileBytes) {
       oversized.push({
         ...row,
@@ -77,6 +78,22 @@ export function partitionUploadRows(rows, maxFiles = MAX_BATCH_FILES, maxBytes =
   }
   if (current.length) batches.push(current);
   return { batches, oversized };
+}
+
+export function assertUploadBatch(rows, maxFiles = MAX_BATCH_FILES, maxBytes = MAX_BATCH_BYTES) {
+  const stats = rows.reduce((result, row) => {
+    const size = Number(row.file?.size ?? row.size ?? 0);
+    result.totalBytes += size;
+    result.largestFileBytes = Math.max(result.largestFileBytes, size);
+    return result;
+  }, { totalBytes: 0, largestFileBytes: 0 });
+  if (rows.length < 1 || rows.length > maxFiles) throw new Error('Invalid Ashley Wilde staging batch file count.');
+  if (stats.largestFileBytes > MAX_FILE_BYTES) throw new Error('Invalid Ashley Wilde staging batch contains an oversized file.');
+  const permittedSingleFile = rows.length === 1 && stats.totalBytes > maxBytes;
+  if (stats.totalBytes > maxBytes && !permittedSingleFile) {
+    throw new Error(`Invalid Ashley Wilde staging batch: ${stats.totalBytes} bytes exceeds the ${maxBytes} byte target.`);
+  }
+  return stats;
 }
 
 export function sequentialBatches(rows, maxFiles = MAX_BATCH_FILES, maxBytes = MAX_BATCH_BYTES) {
