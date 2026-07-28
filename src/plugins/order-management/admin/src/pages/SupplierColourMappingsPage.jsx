@@ -71,6 +71,7 @@ export default function SupplierColourMappingsPage() {
       const response = await post(adminCatalogRoutes.supplierMappingsUpload, form);
       const data = response?.data?.data || response?.data || {};
       const importDocumentId = data.import?.documentId || data.preview?.importDocumentId;
+      if (typeof importDocumentId !== 'string' || !importDocumentId.trim()) throw new Error('The upload response did not include a valid mapping import documentId.');
       setImportRecord(data.import ? { ...data.import, documentId: importDocumentId } : null);
       setPreview(data.preview ? { ...data.preview, importDocumentId } : null);
       setMessage('Upload validated. Review the preview before applying.');
@@ -81,7 +82,9 @@ export default function SupplierColourMappingsPage() {
     if (!importRecord || !confirm) return;
     setBusy(true); setError(''); setMessage('');
     try {
-      const response = await post(adminCatalogRoutes.supplierMappingsApply, { importDocumentId: importRecord.documentId, confirm: true });
+      const importDocumentId = importRecord.documentId;
+      if (typeof importDocumentId !== 'string' || !importDocumentId.trim()) throw new Error('The selected mapping import does not have a valid documentId.');
+      const response = await post(adminCatalogRoutes.supplierMappingsApply, { importDocumentId, confirm: true });
       const data = response?.data?.data || response?.data || {};
       setImportRecord(data.import); setPreview(data.preview); setMessage('Mapping version activated.'); setConfirm(false); await refresh();
     } catch (requestError) { setError(errorMessage(requestError)); } finally { setBusy(false); }

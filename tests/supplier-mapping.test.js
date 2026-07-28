@@ -16,6 +16,7 @@ function colour(supplierColourCode, officialColourName, internalColourCode = sup
 
 function harness({ fabrics = [], colourCodes = [], registry = [], active = null } = {}) {
   const writes = [];
+  const reads = [];
   const strapi = {
     entityService: {
       async findMany(uid, options = {}) {
@@ -30,12 +31,17 @@ function harness({ fabrics = [], colourCodes = [], registry = [], active = null 
       async update(uid, id, options) { writes.push({ operation: 'update', uid, id, data: options.data }); return { id, documentId: active?.documentId || 'import-1', ...options.data }; },
     },
     documents(uid) {
-      assert.equal(uid, 'api::supplier-mapping-import.supplier-mapping-import');
-      return { async findOne() { return active; } };
+      if (uid === 'api::supplier-mapping-import.supplier-mapping-import') {
+        return { async findOne(options) { reads.push({ operation: 'findOne', uid, options }); return active; } };
+      }
+      if (uid === 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping') {
+        return { async findMany(options) { reads.push({ operation: 'findMany', uid, options }); return active?.mappingRows || []; } };
+      }
+      throw new Error(`Unexpected documents API UID: ${uid}`);
     },
     db: { async transaction(callback) { return callback({ trx: {} }); } },
   };
-  return { strapi, writes };
+  return { strapi, writes, reads };
 }
 
 function fabric(documentId, name, supplierProductCode, productId = `FAB-${supplierProductCode}-1`) {
@@ -166,7 +172,7 @@ test('Colette alias remains blocking when the live catalogue has multiple matchi
 test('activation writes only mapping and registry records and never Colour, Media, Fabric relation, or staging records', async () => {
   const input = document([{ fabricName: 'Activate Fabric', supplierProductCode: 'ACTIVATE', colours: [colour('MI', 'Mist', 'MI', { supplierProductCode: 'ACTIVATE' })] }]);
   const active = { id: 7, documentId: 'import-1', supplier: 'Ashley Wilde', status: 'ready', isActive: false, sourcePayload: input };
-  const { strapi, writes } = harness({ fabrics: [fabric('fabric-activate', 'Activate Fabric', 'ACTIVATE')], active });
+  const { strapi, writes, reads } = harness({ fabrics: [fabric('fabric-activate', 'Activate Fabric', 'ACTIVATE')], active });
   const result = await mapping.applyMapping(strapi, { request: { body: { importDocumentId: 'import-1', confirm: true } }, state: {} });
   assert.equal(result.activated, true);
   assert.equal(writes.some((write) => write.uid === 'api::colour.colour'), false);
@@ -176,4 +182,39 @@ test('activation writes only mapping and registry records and never Colour, Medi
   assert.ok(writes.some((write) => write.uid === 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping'));
   assert.ok(writes.some((write) => write.uid === 'api::canonical-colour-registry.canonical-colour-registry'));
   assert.ok(writes.some((write) => write.uid === 'api::supplier-mapping-import.supplier-mapping-import'));
+  assert.ok(reads.some((read) => read.uid === 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping' && read.options.filters.mappingImport.documentId === 'import-1'));
+  assert.equal(writes.find((write) => write.uid === 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping').data.mappingImport, 'import-1');
+});
+
+test('mapping entry lookup rejects a version without a Strapi documentId', async () => {
+  await assert.rejects(
+    () => mapping.mappingsForVersion({ documents() { throw new Error('documents API should not be called'); } }, { id: 12 }),
+    /mapping import documentId must be a non-empty Strapi documentId/,
+  );
+});
+
+test('mapping export resolves the import by documentId before loading related entries', async () => {
+  const active = {
+    id: 7,
+    documentId: 'import-1',
+    supplier: 'Ashley Wilde',
+    version: 'test-1',
+    schemaVersion: 1,
+    sourceReference: 'focused test',
+    name: 'Ashley Wilde mapping',
+    mappingRows: [{ fabricDocumentId: 'fabric-1', fabricName: 'Fabric 1', supplierProductCode: 'FAB1', supplierColourCode: '01', fabricColourCode: 'FAB101', officialColourName: 'Mist', internalColourCode: 'MI', evidenceStatus: 'verified_manual' }],
+  };
+  const { strapi, reads } = harness({ active });
+  const result = await mapping.exportMapping(strapi, 'import-1');
+  assert.equal(result.mappingVersion, 'test-1');
+  assert.equal(result.fabrics[0].fabricDocumentId, 'fabric-1');
+  assert.ok(reads.some((read) => read.uid === 'api::supplier-mapping-import.supplier-mapping-import' && read.options.documentId === 'import-1'));
+  assert.ok(reads.some((read) => read.uid === 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping' && read.options.filters.mappingImport.documentId === 'import-1'));
+});
+
+test('activation rejects a numeric import identifier instead of coercing it', async () => {
+  await assert.rejects(
+    () => mapping.applyMapping({ documents() { throw new Error('documents API should not be called'); } }, { request: { body: { importDocumentId: 12, confirm: true } } }),
+    /importDocumentId must be a non-empty Strapi documentId/,
+  );
 });

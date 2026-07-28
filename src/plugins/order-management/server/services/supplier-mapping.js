@@ -19,6 +19,14 @@ const APPROVED_CATALOGUE_ALIASES = Object.freeze([
 ]);
 
 function clean(value) { return String(value || '').normalize('NFKC').trim(); }
+function requireDocumentId(value, field = 'documentId') {
+  if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} must be a non-empty Strapi documentId.`);
+  return value.trim();
+}
+function requireNumericId(value, field = 'rowId') {
+  if (!Number.isInteger(value)) throw new Error(`${field} must be an integer SQL row ID.`);
+  return value;
+}
 function nameKey(value) { return clean(value).replace(/\s+/g, ' ').toLocaleLowerCase(); }
 function compactNameKey(value) { return clean(value).toLocaleLowerCase().replace(/[^a-z0-9]/g, ''); }
 function codeKey(value) { return normalizeToken(value); }
@@ -550,12 +558,15 @@ async function validateDocument(strapi, input) {
 
 async function getActiveVersion(strapi, supplier) {
   const versions = await strapi.entityService.findMany(IMPORT_UID, { filters: { supplier, status: 'active', isActive: true }, sort: ['updatedAt:desc'], limit: 1 });
-  return versions?.[0] || null;
+  const version = versions?.[0] || null;
+  if (version) requireDocumentId(version.documentId, 'active mapping import documentId');
+  return version;
 }
 
 async function mappingsForVersion(strapi, version) {
   if (!version) return [];
-  return strapi.entityService.findMany(MAPPING_UID, { filters: { mappingImport: version.documentId || version.id, isActive: true }, populate: ['fabric'], limit: 10000 });
+  const importDocumentId = requireDocumentId(version.documentId, 'mapping import documentId');
+  return strapi.documents(MAPPING_UID).findMany({ filters: { mappingImport: { documentId: importDocumentId }, isActive: true }, populate: ['fabric'], limit: 10000 });
 }
 
 function importerColourMap(version, rows) {
@@ -702,11 +713,12 @@ async function uploadMapping(strapi, ctx) {
 }
 
 async function applyMapping(strapi, ctx) {
-  const documentId = clean(ctx.request.body?.importDocumentId || ctx.request.body?.documentId);
-  if (!documentId) throw new Error('importDocumentId is required.');
+  const importDocumentId = requireDocumentId(ctx.request.body?.importDocumentId || ctx.request.body?.documentId, 'importDocumentId');
   if (!(ctx.request.body?.confirm === true || ctx.request.body?.confirm === 'true')) throw new Error('Explicit confirmation is required to activate a mapping version.');
-  const record = await strapi.documents(IMPORT_UID).findOne({ documentId, populate: ['mappings'] });
+  const record = await strapi.documents(IMPORT_UID).findOne({ documentId: importDocumentId, populate: ['mappings'] });
   if (!record) throw new Error('Mapping import version was not found.');
+  const recordDocumentId = requireDocumentId(record.documentId, 'mapping import documentId');
+  const importRowId = requireNumericId(record.id, 'mapping import row ID');
   if (record.status === 'active' && record.isActive) return { import: safeImportRecord(record), activated: false, alreadyActive: true };
   const preview = await buildPreview(strapi, record.sourcePayload);
   if (!preview.validationSummary.valid) {
@@ -716,10 +728,13 @@ async function applyMapping(strapi, ctx) {
   const mappings = preview.rows;
   const active = await getActiveVersion(strapi, preview.document.supplier);
   const result = await strapi.db.transaction(async ({ trx }) => {
-    if (active && active.id !== record.id) await strapi.entityService.update(IMPORT_UID, active.id, { data: { status: 'superseded', isActive: false }, transacting: trx });
+    if (active && active.documentId !== record.documentId) {
+      const activeImportRowId = requireNumericId(active.id, 'active mapping import row ID');
+      await strapi.entityService.update(IMPORT_UID, activeImportRowId, { data: { status: 'superseded', isActive: false }, transacting: trx });
+    }
     for (const row of mappings) {
       await strapi.entityService.create(MAPPING_UID, { data: {
-        mappingImport: record.documentId, supplier: row.supplier, fabric: row.fabricDocumentId, fabricDocumentId: row.fabricDocumentId, fabricName: row.fabricName, supplierProductCode: row.supplierProductCode, supplierColourCode: row.supplierColourCode, fabricColourCode: row.fabricColourCode, officialColourName: row.officialColourName, internalColourCode: row.internalColourCode, submittedInternalColourCode: row.incomingInternalColourCode, reconciliationReason: row.reconciliationReason, reconciliationEvidence: row.reconciliationEvidence, evidenceStatus: row.evidenceStatus, source: row.source, notes: row.notes, isActive: true,
+        mappingImport: recordDocumentId, supplier: row.supplier, fabric: row.fabricDocumentId, fabricDocumentId: row.fabricDocumentId, fabricName: row.fabricName, supplierProductCode: row.supplierProductCode, supplierColourCode: row.supplierColourCode, fabricColourCode: row.fabricColourCode, officialColourName: row.officialColourName, internalColourCode: row.internalColourCode, submittedInternalColourCode: row.incomingInternalColourCode, reconciliationReason: row.reconciliationReason, reconciliationEvidence: row.reconciliationEvidence, evidenceStatus: row.evidenceStatus, source: row.source, notes: row.notes, isActive: true,
       }, transacting: trx });
       const normalizedCode = codeKey(row.internalColourCode);
       const normalizedName = normalizeCanonicalColourName(row.officialColourName);
@@ -727,7 +742,7 @@ async function applyMapping(strapi, ctx) {
       const existingByCode = await strapi.entityService.findMany(REGISTRY_UID, { filters: { normalizedInternalCode: normalizedCode, status: 'approved' }, limit: 1, transacting: trx });
       if (!existingByName?.length && !existingByCode?.length) await strapi.entityService.create(REGISTRY_UID, { data: { canonicalColourName: row.officialColourName, normalizedColourName: normalizedName, internalColourCode: row.internalColourCode, normalizedInternalCode: normalizedCode, status: 'approved', source: row.source || `Mapping ${preview.document.mappingVersion}`, approvedAt: new Date().toISOString(), approvedBy: adminAudit(ctx) }, transacting: trx });
     }
-    return strapi.entityService.update(IMPORT_UID, record.id, { data: { status: 'active', isActive: true, mappingCount: mappings.length, fabricCount: preview.document.fabrics.length, validationSummary: { ...preview.validationSummary, issues: [] }, sourcePayload: preview.canonicalDocument, sha256: hashJson(preview.canonicalDocument), importedAt: record.importedAt || new Date().toISOString() }, transacting: trx });
+    return strapi.entityService.update(IMPORT_UID, importRowId, { data: { status: 'active', isActive: true, mappingCount: mappings.length, fabricCount: preview.document.fabrics.length, validationSummary: { ...preview.validationSummary, issues: [] }, sourcePayload: preview.canonicalDocument, sha256: hashJson(preview.canonicalDocument), importedAt: record.importedAt || new Date().toISOString() }, transacting: trx });
   });
   return { import: safeImportRecord(result), activated: true, preview: { ...preview, document: undefined } };
 }
@@ -738,8 +753,9 @@ async function getActiveMappings(strapi, supplier) {
   return { version: safeImportRecord(version), rows };
 }
 
-async function exportMapping(strapi, documentId) {
-  const version = await strapi.entityService.findOne(IMPORT_UID, documentId);
+async function exportMapping(strapi, importDocumentId) {
+  const selectedImportDocumentId = requireDocumentId(importDocumentId, 'importDocumentId');
+  const version = await strapi.documents(IMPORT_UID).findOne({ documentId: selectedImportDocumentId });
   if (!version) throw new Error('Mapping import version was not found.');
   const rows = await mappingsForVersion(strapi, version);
   const fabrics = new Map();
@@ -787,7 +803,8 @@ async function exportRepositoryFallback() {
 }
 
 async function mappingRowsForFilters(strapi, options) {
-  const version = options.mappingVersion ? await strapi.entityService.findOne(IMPORT_UID, options.mappingVersion) : await getActiveVersion(strapi, options.supplier);
+  const importDocumentId = options.mappingVersion ? requireDocumentId(options.mappingVersion, 'mappingVersion documentId') : null;
+  const version = importDocumentId ? await strapi.documents(IMPORT_UID).findOne({ documentId: importDocumentId }) : await getActiveVersion(strapi, options.supplier);
   if (!version) return { version: null, rows: [] };
   return { version, rows: await mappingsForVersion(strapi, version) };
 }

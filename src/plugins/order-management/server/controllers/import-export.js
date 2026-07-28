@@ -1384,13 +1384,13 @@ module.exports = {
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
     try {
       const mappings = require('../services/supplier-mapping');
-      let documentId = String(ctx.query?.documentId || '').trim();
-      if (!documentId) {
+      let importDocumentId = String(ctx.query?.documentId || '').trim();
+      if (!importDocumentId) {
         const active = await mappings.getActiveVersion(strapi, String(ctx.query?.supplier || 'Ashley Wilde').trim());
-        documentId = active?.documentId || '';
+        importDocumentId = active?.documentId || '';
       }
-      if (!documentId) throw new Error('No mapping version was selected and no active version exists.');
-      const payload = await mappings.exportMapping(strapi, documentId);
+      if (!importDocumentId) throw new Error('No mapping version was selected and no active version exists.');
+      const payload = await mappings.exportMapping(strapi, importDocumentId);
       ctx.type = 'application/json';
       ctx.set('Content-Disposition', `attachment; filename="${payload.supplier || 'supplier'}-${payload.mappingVersion || 'mapping'}.json"`);
       ctx.body = payload;
