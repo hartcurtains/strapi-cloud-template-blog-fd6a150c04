@@ -1,8 +1,11 @@
 export const SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.webp'];
 export const MAX_BATCH_FILES = 10;
-export const MAX_FILE_BYTES = 50 * 1024 * 1024;
-// Keep headroom for multipart boundaries and metadata under Strapi's 100 MB body limit.
-export const MAX_BATCH_BYTES = 90 * 1024 * 1024;
+// Use the smallest end-to-end ceiling observed for the deployed bulk path.
+// Keep 5 MiB for multipart boundaries and signed-folder metadata.
+export const EFFECTIVE_BULK_PATH_LIMIT_BYTES = 50 * 1024 * 1024;
+export const MULTIPART_OVERHEAD_BYTES = 5 * 1024 * 1024;
+export const MAX_BATCH_BYTES = EFFECTIVE_BULK_PATH_LIMIT_BYTES - MULTIPART_OVERHEAD_BYTES;
+export const MAX_FILE_BYTES = MAX_BATCH_BYTES;
 export const READY_STATUSES = new Set([
   'matched', 'would_create_colour', 'would_create_internal_code',
   'would_create_relation', 'would_upload_and_link', 'previously_uploaded',
@@ -45,16 +48,25 @@ export function boundedBatches(items, size = MAX_BATCH_FILES) {
   return batches;
 }
 
-export function sequentialBatches(rows, maxFiles = MAX_BATCH_FILES, maxBytes = MAX_BATCH_BYTES) {
+export function partitionUploadRows(rows, maxFiles = MAX_BATCH_FILES, maxBytes = MAX_BATCH_BYTES) {
   if (!Number.isSafeInteger(maxFiles) || maxFiles < 1) throw new Error('Batch file limit must be a positive integer.');
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new Error('Batch byte limit must be a positive integer.');
   const batches = [];
+  const oversized = [];
   let current = [];
   let bytes = 0;
   for (const row of rows) {
     const fileSize = Number(row.file?.size ?? row.size ?? 0);
     if (!Number.isSafeInteger(fileSize) || fileSize < 0) throw new Error(`${row.filename} has an invalid file size.`);
-    if (fileSize > MAX_FILE_BYTES) throw new Error(`${row.filename} exceeds the 50 MB file limit.`);
+    const maxSingleFileBytes = Math.min(MAX_FILE_BYTES, maxBytes);
+    if (fileSize > maxSingleFileBytes) {
+      oversized.push({
+        ...row,
+        status: 'unsupported_file',
+        warning: `${row.filename} is larger than the supported ${maxSingleFileBytes / 1024 / 1024} MB upload limit.`,
+      });
+      continue;
+    }
     if (current.length === maxFiles || bytes + fileSize > maxBytes) {
       if (current.length) batches.push(current);
       current = [];
@@ -64,5 +76,9 @@ export function sequentialBatches(rows, maxFiles = MAX_BATCH_FILES, maxBytes = M
     bytes += fileSize;
   }
   if (current.length) batches.push(current);
-  return batches;
+  return { batches, oversized };
+}
+
+export function sequentialBatches(rows, maxFiles = MAX_BATCH_FILES, maxBytes = MAX_BATCH_BYTES) {
+  return partitionUploadRows(rows, maxFiles, maxBytes).batches;
 }

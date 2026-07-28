@@ -25,8 +25,14 @@ const catalogWritePrebodyAuth = async (ctx: any, next: any) => {
     // Strapi's body middleware does not preserve Formidable's HTTP status. Keep
     // authenticated catalog uploads fail-closed with the expected 413 response.
     if (mutation.operation === 'bulk-image-upload' && error?.httpCode === 413) {
+      console.warn('[Catalog upload] multipart body rejected before controller', {
+        timestamp: new Date().toISOString(),
+        contentLength: Number(ctx.get('content-length')) || null,
+        contentType: ctx.get('content-type') || null,
+        reason: 'request-or-file-size-limit',
+      });
       ctx.status = 413;
-      ctx.body = { error: 'Upload limit exceeded' };
+      ctx.body = { error: 'The server rejected this upload because the request was too large.' };
       return;
     }
     throw error;

@@ -38,6 +38,26 @@ async function catalogCounts() {
   return counts;
 }
 
+async function capturedMultipart(path, authorization, form, fileSizes) {
+  const request = new Request(`${server.baseUrl}${path}`, {
+    method: 'POST',
+    headers: { authorization },
+    body: form,
+  });
+  const payloadBytes = (await request.clone().arrayBuffer()).byteLength;
+  const response = await fetch(request);
+  const body = await response.text();
+  return {
+    fileCount: fileSizes.length,
+    fileSizes,
+    totalFileBytes: fileSizes.reduce((total, size) => total + size, 0),
+    payloadBytes,
+    status: response.status,
+    contentType: response.headers.get('content-type'),
+    body,
+  };
+}
+
 test('initialized Strapi router contains the complete protected mutation matrix', () => {
   const allRegistered = server.app.server.listRoutes().flatMap(layer =>
     (layer.methods || []).map(method => ({ method, path: layer.path }))
@@ -384,10 +404,62 @@ test('genuine admin reaches the exact registered bulk uploader controller withou
     method: 'POST', headers: { authorization: `Bearer ${server.adminToken}` }, body: form,
   });
   const payload = await response.json();
+  assert.match(response.headers.get('content-type') || '', /^application\/json/);
   assert.equal(response.status, 200, JSON.stringify(payload));
   assert.ok(server.counters.controllers > controllersBefore);
   assert.equal(payload.success, true);
   assert.equal(payload.results.uploaded, 1);
+});
+
+test('bulk upload captures the small, oversized, and six-file limit boundaries safely', async () => {
+  const onePixelPng = fs.readFileSync(path.join(process.cwd(), 'favicon.png'));
+  const smallForm = new FormData();
+  smallForm.append('files', new Blob([onePixelPng], { type: 'image/png' }), 'boundary-small.png');
+  smallForm.append('productType', 'fabrics');
+  smallForm.append('matchBy', 'productId');
+  smallForm.append('createAsColour', 'false');
+  const controllersBeforeSmall = server.counters.controllers;
+  const small = await capturedMultipart(
+    adminCatalogRoutes.bulkImageUpload,
+    `Bearer ${server.adminToken}`,
+    smallForm,
+    [onePixelPng.length]
+  );
+  assert.equal(small.status, 200, small.body);
+  assert.match(small.contentType || '', /^application\/json/);
+  assert.ok(server.counters.controllers > controllersBeforeSmall);
+
+  const largeSize = uploadConfig.maxFileSize + 1;
+  const largeForm = new FormData();
+  largeForm.append('files', new Blob([Buffer.alloc(largeSize)], { type: 'image/png' }), 'boundary-large.png');
+  const controllersBeforeLarge = server.counters.controllers;
+  const large = await capturedMultipart(
+    adminCatalogRoutes.bulkImageUpload,
+    `Bearer ${server.adminToken}`,
+    largeForm,
+    [largeSize]
+  );
+  assert.equal(large.status, 413, large.body);
+  assert.match(large.contentType || '', /^application\/json/);
+  assert.deepEqual(JSON.parse(large.body), { error: 'The server rejected this upload because the request was too large.' });
+  assert.equal(server.counters.controllers, controllersBeforeLarge);
+
+  const sixPartSize = Math.floor(uploadConfig.maxTotalSize / 6) + 1;
+  const sixForm = new FormData();
+  for (let index = 0; index < 6; index += 1) {
+    sixForm.append('files', new Blob([Buffer.alloc(sixPartSize)], { type: 'image/png' }), `boundary-six-${index}.png`);
+  }
+  const controllersBeforeSix = server.counters.controllers;
+  const six = await capturedMultipart(
+    adminCatalogRoutes.bulkImageUpload,
+    `Bearer ${server.adminToken}`,
+    sixForm,
+    Array.from({ length: 6 }, () => sixPartSize)
+  );
+  assert.equal(six.status, 413, six.body);
+  assert.match(six.contentType || '', /^application\/json/);
+  assert.deepEqual(JSON.parse(six.body), { error: 'The server rejected this upload because the request was too large.' });
+  assert.equal(server.counters.controllers, controllersBeforeSix);
 });
 
 test('initialized abandonment route is server-only and accepts no client-selected state', async () => {

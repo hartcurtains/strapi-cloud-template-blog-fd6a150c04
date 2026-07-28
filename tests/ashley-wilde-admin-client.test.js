@@ -83,10 +83,11 @@ test('Ashley Wilde phase-one queue is bounded to 10 files with sequential hashin
   const utilitySource = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), 'utf8');
   const importerSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
   assert.match(componentSource, /fileQueueRef\s*=\s*useRef\(\[\]\)/);
-  assert.match(componentSource, /const batches = sequentialBatches\(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES\)/);
+  assert.match(componentSource, /const \{ batches, oversized \} = partitionUploadRows\(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES\)/);
   assert.match(componentSource, /for \(let index = 0; index < fileQueueRef\.current\.length; index \+= 1\)[\s\S]*await sha256File\(item\.file\)/);
   assert.match(componentSource, /for \(let index = 0; index < batches\.length; index \+= 1\)[\s\S]*ashleyWildeAnalyse/);
   assert.match(componentSource, /stageQueuedFolder[\s\S]*stageBatchRequest/);
+  assert.match(componentSource, /partitionUploadRows\(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES\)/);
   assert.match(componentSource, /current\.forEach\(\(item\) => item\.previewUrl && URL\.revokeObjectURL\(item\.previewUrl\)\)/);
   assert.match(componentSource, /setFolderFiles\(\(current\)[\s\S]*return analysedRows;/);
   assert.match(utilitySource, /for \(let index = 0; index < items\.length; index \+= size\) batches\.push\(items\.slice\(index, index \+ size\)\)/);
@@ -109,9 +110,24 @@ test('Ashley Wilde staging is a single authenticated multipart request per seque
   assert.match(componentSource, /totalBytes/);
   assert.match(componentSource, /largestFileBytes/);
   assert.match(utilitySource, /MAX_BATCH_FILES = 10/);
-  assert.match(utilitySource, /MAX_BATCH_BYTES = 90 \* 1024 \* 1024/);
+  assert.match(utilitySource, /EFFECTIVE_BULK_PATH_LIMIT_BYTES = 50 \* 1024 \* 1024/);
+  assert.match(utilitySource, /MULTIPART_OVERHEAD_BYTES = 5 \* 1024 \* 1024/);
+  assert.match(utilitySource, /MAX_BATCH_BYTES = EFFECTIVE_BULK_PATH_LIMIT_BYTES - MULTIPART_OVERHEAD_BYTES/);
+  assert.match(utilitySource, /MAX_FILE_BYTES = MAX_BATCH_BYTES/);
   assert.match(utilitySource, /bytes \+ fileSize > maxBytes/);
   assert.match(fetchAllFabricsSource, /signal: options\.signal/);
+});
+
+test('Ashley Wilde batching reserves multipart overhead and skips only oversized files', () => {
+  const utilitySource = fs.readFileSync(path.join(root, 'admin', 'src', 'utils', 'ashleyWildeFolder.js'), 'utf8');
+  assert.match(utilitySource, /export function partitionUploadRows/);
+  assert.match(utilitySource, /const oversized = \[\]/);
+  assert.match(utilitySource, /status: 'unsupported_file'/);
+  assert.match(utilitySource, /continue;/);
+  assert.match(utilitySource, /return \{ batches, oversized \}/);
+  assert.match(componentSource, /summary\.skippedFiles = oversized\.length/);
+  assert.match(componentSource, /The server rejected this upload because the request was too large/);
+  assert.match(componentSource, /Remaining batches were not sent/);
 });
 
 test('Ashley Wilde upload observability exposes only safe request phase metadata', () => {
