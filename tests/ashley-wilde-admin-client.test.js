@@ -15,6 +15,7 @@ const controllerSource = fs.readFileSync(path.join(root, 'server', 'controllers'
 const importerServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
 const uploadDiagnosticsSource = fs.readFileSync(path.join(process.cwd(), 'src', 'middlewares', 'ashley-upload-diagnostics.ts'), 'utf8');
 const middlewareConfigSource = fs.readFileSync(path.join(process.cwd(), 'config', 'middlewares.ts'), 'utf8');
+const compiledUploadDiagnosticsPath = path.join(process.cwd(), 'dist', 'src', 'middlewares', 'ashley-upload-diagnostics.js');
 const sharedRoutes = require(path.join(root, 'shared', 'routes.json'));
 const uploadPolicy = require(path.join(root, 'shared', 'ashley-wilde-upload-policy.json'));
 
@@ -149,6 +150,7 @@ test('Ashley Wilde upload observability exposes only safe request phase metadata
 
 test('Ashley Media upload request diagnostics are trace-gated and lifecycle-shaped', () => {
   assert.match(middlewareConfigSource, /global::ashley-upload-diagnostics/);
+  assert.match(uploadDiagnosticsSource, /String\(ctx\?\.method \|\| ''\)\.toUpperCase\(\) === 'POST'/);
   assert.match(uploadDiagnosticsSource, /String\(ctx\?\.path \|\| ''\) === '\/upload'/);
   assert.match(uploadDiagnosticsSource, /traceIdFromRequest\(ctx\)/);
   assert.match(uploadDiagnosticsSource, /'upload_request_received'/);
@@ -161,6 +163,50 @@ test('Ashley Media upload request diagnostics are trace-gated and lifecycle-shap
   assert.match(uploadDiagnosticsSource, /errorClass/);
   assert.match(uploadDiagnosticsSource, /safeMessage/);
   assert.doesNotMatch(uploadDiagnosticsSource, /analysisToken|fileInfo|buffer/);
+});
+
+test('compiled Ashley upload diagnostics load and preserve downstream success/error behavior', async () => {
+  assert.equal(fs.existsSync(compiledUploadDiagnosticsPath), true);
+  assert.doesNotMatch(fs.readFileSync(compiledUploadDiagnosticsPath, 'utf8'), /plugins[\\/]order-management[\\/]server[\\/]utils[\\/]ashleyWildeDiagnostics/);
+  const factory = require(compiledUploadDiagnosticsPath);
+  assert.equal(typeof factory, 'function');
+  const handler = factory();
+  const previousStrapi = global.strapi;
+  const logs = [];
+  global.strapi = { log: { info: (entry) => logs.push(entry) } };
+  const traceId = 'aw_abcdef01*12345678*1';
+  const requestStream = { untouched: true };
+  const context = {
+    method: 'POST',
+    path: '/upload',
+    status: 201,
+    request: { headers: { 'x-ashley-trace-id': traceId }, stream: requestStream },
+    state: { catalogWriteAuth: { kind: 'admin', user: { isActive: true } } },
+    get: (name) => name === 'content-length' ? '1234' : '',
+  };
+  try {
+    await handler({ ...context, method: 'GET' }, async () => {});
+    await handler({ ...context, request: { headers: {} } }, async () => {});
+    assert.equal(logs.length, 0);
+
+    await handler(context, async () => { assert.equal(context.request.stream, requestStream); });
+    assert.match(logs[0], /upload_request_received/);
+    assert.match(logs[0], /"traceId":"aw_abcdef01\*12345678\*1"/);
+    assert.match(logs[0], /"contentLength":1234/);
+    assert.match(logs[0], /"authenticatedAdminPresent":true/);
+    assert.match(logs[1], /upload_request_completed/);
+    assert.match(logs[1], /"responseStatus":201/);
+    assert.match(logs[1], /"durationMs":/);
+
+    logs.length = 0;
+    const thrown = new Error('safe downstream failure');
+    await assert.rejects(() => handler(context, async () => { throw thrown; }), (error) => error === thrown);
+    assert.match(logs[1], /upload_request_error/);
+    assert.match(logs[1], /"errorClass":"Error"/);
+    assert.match(logs[1], /"safeMessage":"safe downstream failure"/);
+  } finally {
+    global.strapi = previousStrapi;
+  }
 });
 
 test('Ashley Wilde staging has a single safe response parser and stops after a retryable upstream failure', () => {
