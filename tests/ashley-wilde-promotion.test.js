@@ -9,68 +9,181 @@ const IDENTITY_UID = 'api::fabric-colour-identity.fabric-colour-identity';
 const ASSET_UID = 'api::fabric-colour-asset.fabric-colour-asset';
 const COLOUR_UID = 'api::colour.colour';
 
-test('bulk promotion skips legacy Fabrics with live Colours while exact scopes remain available', () => {
+test('existing Colour detection is scoped to the canonical colour name on one Fabric', () => {
   const identity = {
+    officialColourName: 'Flax',
     fabric: {
       documentId: 'fabric-legacy',
-      colours: [{ documentId: 'existing-colour' }],
+      colours: [
+        { documentId: 'existing-flax', name: ' Flax ' },
+        { documentId: 'existing-ocean', name: 'Ocean' },
+      ],
     },
   };
-  assert.deepEqual(promotion.bulkScopeReasons(identity, {}), ['fabric_already_has_live_colours']);
-  assert.deepEqual(promotion.bulkScopeReasons(identity, { fabricName: 'Legacy' }), []);
-  assert.deepEqual(promotion.bulkScopeReasons(identity, { supplierProductCode: 'LEGACY' }), []);
-  assert.deepEqual(promotion.bulkScopeReasons({ fabric: { colours: [] } }, {}), []);
+  const matching = { colour: promotion.existingFabricColour(identity), alreadyLinkedToFabric: true };
+  assert.equal(matching.colour.documentId, 'existing-flax');
+  assert.deepEqual(promotion.existingColourScopeReasons(matching), ['colour_already_exists_for_fabric']);
+  assert.equal(promotion.existingFabricColour({ ...identity, officialColourName: 'Danube' }), null);
+  assert.deepEqual(promotion.existingColourScopeReasons({ colour: null, alreadyLinkedToFabric: false }), []);
 });
 
-test('bulk preview reports existing legacy Fabrics as safely skipped', async () => {
-  const identity = {
+test('bulk preview skips only an existing Colour and keeps a missing sibling eligible', async () => {
+  const fabric = {
+    id: 111,
+    documentId: 'fabric-legacy',
+    name: 'Legacy',
+    colours: [{ id: 999, documentId: 'existing-flax', name: 'Flax' }],
+  };
+  const identity = (overrides) => ({
     id: 11,
-    documentId: 'identity-legacy',
-    identityKey: 'ashley-wilde|fabric-legacy|legacy|da',
+    documentId: 'identity-flax',
+    identityKey: 'ashley-wilde|fabric-legacy|legacy|fl',
     mappingStatus: 'verified',
     evidenceStatus: 'verified_official',
     supplier: 'Ashley Wilde',
-    fabric: {
-      id: 111,
-      documentId: 'fabric-legacy',
-      name: 'Legacy',
-      colours: [{ id: 999, documentId: 'existing-colour' }],
-    },
+    fabric,
     fabricDocumentId: 'fabric-legacy',
     supplierProductCode: 'LEGACY',
+    supplierColourCode: 'FL',
+    fabricColourCode: 'LEGACYFL',
+    officialColourName: 'Flax',
+    internalColourCode: 'FX',
+    assets: [{
+      id: 211,
+      documentId: 'asset-flax',
+      importStatus: 'staged',
+      duplicateStatus: 'unique',
+      assetType: 'ordinary_colour',
+      media: { id: 311, documentId: 'media-flax' },
+    }],
+    ...overrides,
+  });
+  const flax = identity({});
+  const danube = identity({
+    id: 12,
+    documentId: 'identity-danube',
+    identityKey: 'ashley-wilde|fabric-legacy|legacy|da',
     supplierColourCode: 'DA',
     fabricColourCode: 'LEGACYDA',
     officialColourName: 'Danube',
     internalColourCode: 'DAN',
     assets: [{
-      id: 211,
-      documentId: 'asset-legacy',
+      id: 212,
+      documentId: 'asset-danube',
       importStatus: 'staged',
       duplicateStatus: 'unique',
       assetType: 'ordinary_colour',
-      media: { id: 311, documentId: 'media-legacy' },
+      media: { id: 312, documentId: 'media-danube' },
     }],
-  };
+  });
   const strapi = {
     entityService: {
-      findMany: async (uid) => uid === IDENTITY_UID ? [identity] : [],
+      findMany: async (uid) => uid === IDENTITY_UID ? [flax, danube] : [],
     },
   };
   const mappings = {
-    codeRegistry: { codes: { DAN: { colourName: 'Danube' } } },
+    codeRegistry: { codes: { FX: { colourName: 'Flax' }, DAN: { colourName: 'Danube' } } },
     mappingVersion: 'mapping-v1',
     mappingSource: 'test',
   };
 
   const bulk = await promotion.previewPromotion(strapi, { mappings });
-  assert.equal(bulk.summary.eligible, 0);
+  assert.equal(bulk.summary.eligible, 1);
   assert.equal(bulk.summary.blocked, 1);
+  assert.equal(bulk.summary.skippedExistingColours, 1);
   assert.equal(bulk.summary.skippedExistingFabrics, 1);
-  assert.deepEqual(bulk.results[0].skippedReasons, ['fabric_already_has_live_colours']);
+  const flaxResult = bulk.results.find((row) => row.identityDocumentId === flax.documentId);
+  const danubeResult = bulk.results.find((row) => row.identityDocumentId === danube.documentId);
+  assert.deepEqual(flaxResult.skippedReasons, ['colour_already_exists_for_fabric']);
+  assert.equal(flaxResult.eligible, false);
+  assert.equal(danubeResult.eligible, true);
+  assert.equal(danubeResult.colourDecision, 'create_new_colour');
+});
 
-  const targeted = await promotion.previewPromotion(strapi, { mappings, fabricName: 'Legacy' });
-  assert.equal(targeted.summary.eligible, 1);
-  assert.equal(targeted.summary.skippedExistingFabrics, 0);
+test('promotion commits a missing sibling after skipping the existing Colour on the same Fabric', async () => {
+  const fabric = {
+    id: 111,
+    documentId: 'fabric-legacy',
+    name: 'Legacy',
+    colours: [{ id: 401, documentId: 'colour-flax', name: 'Flax' }],
+  };
+  const asset = (id, name) => ({
+    id,
+    documentId: `asset-${name}`,
+    importStatus: 'staged',
+    duplicateStatus: 'unique',
+    assetType: 'ordinary_colour',
+    media: { id: id + 100, documentId: `media-${name}` },
+  });
+  const flax = {
+    id: 11,
+    documentId: 'identity-flax',
+    identityKey: 'ashley-wilde|fabric-legacy|legacy|fl',
+    mappingStatus: 'verified',
+    evidenceStatus: 'verified_official',
+    supplier: 'Ashley Wilde',
+    fabric,
+    fabricDocumentId: fabric.documentId,
+    supplierProductCode: 'LEGACY',
+    supplierColourCode: 'FL',
+    fabricColourCode: 'LEGACYFL',
+    officialColourName: 'Flax',
+    internalColourCode: 'FX',
+    assets: [asset(211, 'flax')],
+  };
+  const danube = {
+    ...flax,
+    id: 12,
+    documentId: 'identity-danube',
+    identityKey: 'ashley-wilde|fabric-legacy|legacy|da',
+    supplierColourCode: 'DA',
+    fabricColourCode: 'LEGACYDA',
+    officialColourName: 'Danube',
+    internalColourCode: 'DAN',
+    assets: [asset(212, 'danube')],
+  };
+  const identities = new Map([[flax.id, flax], [danube.id, danube]]);
+  const writes = [];
+  const strapi = {
+    db: {
+      transaction: async (callback) => callback({ trx: { transaction: true } }),
+    },
+    entityService: {
+      findOne: async (uid, id) => {
+        assert.equal(uid, IDENTITY_UID);
+        return identities.get(id);
+      },
+      findMany: async (uid) => {
+        if (uid === COLOUR_UID) return [];
+        throw new Error(`Unexpected findMany ${uid}`);
+      },
+      create: async (uid, options) => {
+        assert.equal(uid, COLOUR_UID);
+        writes.push({ operation: 'create', uid, options });
+        return { id: 402, documentId: 'colour-danube', name: 'Danube', fabrics: [fabric], thumbnail: danube.assets[0].media };
+      },
+      update: async (uid, id, options) => {
+        writes.push({ operation: 'update', uid, id, options });
+        return { id, ...options.data };
+      },
+    },
+  };
+  const mappings = {
+    codeRegistry: { codes: { FX: { colourName: 'Flax' }, DAN: { colourName: 'Danube' } } },
+    mappingVersion: 'mapping-v1',
+    mappingSource: 'test',
+  };
+
+  const flaxResult = await promotion.promoteIdentity(strapi, flax.id, { commit: true, mappings });
+  const danubeResult = await promotion.promoteIdentity(strapi, danube.id, { commit: true, mappings });
+
+  assert.equal(flaxResult.committed, false);
+  assert.deepEqual(flaxResult.skippedReasons, ['colour_already_exists_for_fabric']);
+  assert.equal(danubeResult.committed, true);
+  assert.equal(danubeResult.colourDecision, 'create_new_colour');
+  assert.equal(writes.filter((write) => write.operation === 'create' && write.uid === COLOUR_UID).length, 1);
+  assert.equal(writes.filter((write) => write.operation === 'update' && write.uid === IDENTITY_UID).length, 1);
+  assert.equal(writes.filter((write) => write.operation === 'update' && write.uid === ASSET_UID).length, 1);
 });
 
 test('confirmed promotion writes Strapi Entity Service relation IDs and commits the reviewed identity', async () => {

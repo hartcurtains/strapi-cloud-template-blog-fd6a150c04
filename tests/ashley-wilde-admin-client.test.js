@@ -97,12 +97,12 @@ test('Ashley Wilde promotion revalidates the original preview scope before check
   );
 });
 
-test('Ashley Wilde All Fabrics promotion is enabled and server-enforced as a safe legacy skip mode', () => {
+test('Ashley Wilde All Fabrics promotion skips existing Colours individually', () => {
   assert.match(productPageSource, /<option value="">All Fabrics<\/option>/);
   assert.match(productPageSource, /onClick=\{previewAshleyWildePromotion\}\s+disabled=\{promotionBusy\}/);
-  assert.match(productPageSource, /Existing Fabrics skipped:/);
-  assert.match(productPageSource, /all Fabrics without existing live Colours/);
-  assert.match(promotionServiceSource, /fabric_already_has_live_colours/);
+  assert.match(productPageSource, /Existing Colours skipped:/);
+  assert.match(productPageSource, /Existing Colours for each Fabric will be skipped individually/);
+  assert.match(promotionServiceSource, /colour_already_exists_for_fabric/);
   assert.match(promotionServiceSource, /fabric\.colours/);
   assert.match(promotionServiceSource, /populate:\s*\[[^\]]*'fabric\.colours'/);
 });

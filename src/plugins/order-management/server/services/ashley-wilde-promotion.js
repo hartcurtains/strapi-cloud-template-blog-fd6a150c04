@@ -16,13 +16,14 @@ function relationKey(value) { return value?.documentId || value?.id || value; }
 function entityRelationId(value) { return value?.id || value?.documentId || value; }
 function first(value) { return Array.isArray(value) ? value[0] : value; }
 function identityDocumentId(identity) { return identity.documentId || identity.id; }
-function isBulkPromotion(options = {}) {
-  return !String(options.fabricName || '').trim() && !String(options.supplierProductCode || '').trim();
-}
-function bulkScopeReasons(identity, options = {}) {
-  if (!isBulkPromotion(options)) return [];
+function existingFabricColour(identity) {
   const fabric = first(identity.fabric);
-  return Array.isArray(fabric?.colours) && fabric.colours.length ? ['fabric_already_has_live_colours'] : [];
+  const expectedName = normalizeCanonicalColourName(identity.officialColourName);
+  if (!expectedName || !Array.isArray(fabric?.colours)) return null;
+  return fabric.colours.find((colour) => normalizeCanonicalColourName(colour?.name) === expectedName) || null;
+}
+function existingColourScopeReasons(matching) {
+  return matching?.alreadyLinkedToFabric ? ['colour_already_exists_for_fabric'] : [];
 }
 function hasFabric(colour, fabric) {
   const expected = String(relationKey(fabric));
@@ -89,14 +90,16 @@ function exactLegacyIdentity(row, identity) {
 }
 
 async function findMatchingColour(strapi, identity) {
-  if (identity.promotedColour) return { colour: identity.promotedColour, conflict: false, priority: 'promoted_relation' };
+  if (identity.promotedColour) return { colour: identity.promotedColour, conflict: false, priority: 'promoted_relation', alreadyLinkedToFabric: true };
+  const linkedColour = existingFabricColour(identity);
+  if (linkedColour) return { colour: linkedColour, conflict: false, priority: 'fabric_canonical_colour_name', alreadyLinkedToFabric: true };
   const rows = await strapi.entityService.findMany(COLOUR_UID, { populate: ['fabrics', 'thumbnail'], limit: 1000 });
   for (const row of rows || []) {
-    if (exactLegacyIdentity(row, identity).exact) return { colour: row, conflict: false, priority: 'exact_legacy_identity' };
+    if (exactLegacyIdentity(row, identity).exact) return { colour: row, conflict: false, priority: 'exact_legacy_identity', alreadyLinkedToFabric: hasFabric(row, first(identity.fabric)) };
   }
   // Colour records without the complete legacy identity are not evidence of a conflict.
   // Names, internal codes, suffixes, and filenames are deliberately not match keys.
-  return { colour: null, conflict: false, priority: null };
+  return { colour: null, conflict: false, priority: null, alreadyLinkedToFabric: false };
 }
 
 async function loadIdentity(strapi, identityId) {
@@ -168,6 +171,7 @@ function buildPlan(identity, matching, eligible, scopeReasons = []) {
     assetDecision: asset ? 'reuse_staged_media' : 'blocked_no_approved_asset',
     eligible: eligible.eligible && !matching.conflict && scopeReasons.length === 0,
     skippedReasons: [...eligible.reasons, ...scopeReasons, ...(matching.conflict ? ['existing_colour_identity_conflict'] : [])],
+    alreadyExistsForFabric: Boolean(matching.alreadyLinkedToFabric),
     preserveExistingThumbnail: Boolean(colour?.thumbnail),
     preserveExistingFabricRelations: Boolean(colour?.fabrics?.length),
   };
@@ -219,13 +223,13 @@ async function previewPromotion(strapi, options = {}) {
   const validation = validateIdentitySet(identities);
   const results = [];
   for (const identity of identities) {
-    const scopeReasons = [
-      ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
-      ...bulkScopeReasons(identity, options),
-    ];
     try {
       const eligible = eligibility(identity, mappings);
       const matching = await findMatchingColour(strapi, identity);
+      const scopeReasons = [
+        ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
+        ...existingColourScopeReasons(matching),
+      ];
       results.push(buildPlan(identity, matching, eligible, scopeReasons));
     } catch (error) {
       results.push({ identityDocumentId: identityDocumentId(identity), eligible: false, action: 'blocked', colourDecision: null, skippedReasons: [error.message] });
@@ -241,7 +245,8 @@ async function previewPromotion(strapi, options = {}) {
     newColours: orderedResults.filter((item) => item.eligible && item.colourDecision === 'create_new_colour').length,
     mediaToReuse: orderedResults.filter((item) => item.eligible && item.assetDecision === 'reuse_staged_media').length,
     conflicts: orderedResults.filter((item) => item.skippedReasons?.includes('existing_colour_identity_conflict') || item.skippedReasons?.includes('unresolved_asset_conflict')).length,
-    skippedExistingFabrics: new Set(orderedResults.filter((item) => item.skippedReasons?.includes('fabric_already_has_live_colours')).map((item) => item.fabricDocumentId)).size,
+    skippedExistingColours: orderedResults.filter((item) => item.skippedReasons?.includes('colour_already_exists_for_fabric')).length,
+    skippedExistingFabrics: new Set(orderedResults.filter((item) => item.skippedReasons?.includes('colour_already_exists_for_fabric')).map((item) => item.fabricDocumentId)).size,
     duplicateFabricColourCodes: validation.duplicateFabricColourCodes,
     duplicateIdentityScopes: validation.duplicateIdentityScopes,
     internalCodeCollisions: validation.internalCodeCollisions,
@@ -263,7 +268,8 @@ async function promoteIdentity(strapi, identityId, options = {}) {
   const mappings = options.mappings || await loadPromotionMappings(strapi);
   const eligible = eligibility(identity, mappings);
   const matching = await findMatchingColour(strapi, identity);
-  const plan = buildPlan(identity, matching, eligible, options.scopeReasons || []);
+  const scopeReasons = [...(options.scopeReasons || []), ...existingColourScopeReasons(matching)];
+  const plan = buildPlan(identity, matching, eligible, scopeReasons);
   if (options.commit !== true || !plan.eligible) return { ...plan, committed: false };
   const result = await inTransaction(strapi, async (trx) => {
     const latest = await loadIdentity(strapi, identity.id);
@@ -271,6 +277,7 @@ async function promoteIdentity(strapi, identityId, options = {}) {
     if (!latestEligible.eligible) throw new Error(`Promotion eligibility changed: ${latestEligible.reasons.join(', ')}`);
     const latestMatching = await findMatchingColour(strapi, latest);
     if (latestMatching.conflict) throw new Error('Existing Colour identity conflicts with the staged identity.');
+    if (existingColourScopeReasons(latestMatching).length) throw new Error('colour_already_exists_for_fabric');
     const asset = latestEligible.approvedAssets[0];
     const fabricId = entityRelationId(latest.fabric);
     const mediaId = entityRelationId(asset.media) || entityRelationId(asset.existingMedia);
@@ -290,7 +297,7 @@ async function promoteIdentity(strapi, identityId, options = {}) {
     for (const assetItem of latestEligible.approvedAssets) await strapi.entityService.update(ASSET_UID, assetItem.id, { data: { importStatus: 'promoted' }, transacting: trx });
     return { colour, colourWasCreated, promotedId, latest };
   });
-  const committedPlan = buildPlan(result.latest, { colour: result.colour, conflict: false, priority: matching.priority || 'created_colour' }, eligibility(result.latest, mappings), options.scopeReasons || []);
+  const committedPlan = buildPlan(result.latest, { colour: result.colour, conflict: false, priority: matching.priority || 'created_colour', alreadyLinkedToFabric: true }, eligibility(result.latest, mappings), options.scopeReasons || []);
   return {
     ...committedPlan,
     action: result.colourWasCreated ? 'create_colour' : 'match_existing_colour',
@@ -314,10 +321,7 @@ async function promoteVerified(strapi, options = {}) {
   const validation = validateIdentitySet(verified);
   const results = [];
   for (const identity of verified) {
-    const scopeReasons = [
-      ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
-      ...bulkScopeReasons(identity, options),
-    ];
+    const scopeReasons = [...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || [])];
     try { results.push(await promoteIdentity(strapi, identity.id, { ...options, mappings, scopeReasons })); }
     catch (error) { results.push({ identityDocumentId: identityDocumentId(identity), committed: false, eligible: false, skippedReasons: [error.message] }); }
   }
@@ -329,6 +333,7 @@ async function promoteVerified(strapi, options = {}) {
       verifiedCandidates: verified.length,
       eligible: results.filter((item) => item.eligible).length,
       blocked: results.filter((item) => !item.eligible).length,
+      skippedExistingColours: results.filter((item) => item.skippedReasons?.includes('colour_already_exists_for_fabric')).length,
       existingColoursToReuse: results.filter((item) => item.eligible && item.colourDecision === 'reuse_existing_colour').length,
       newColours: results.filter((item) => item.committed && item.colourDecision === 'create_new_colour').length,
       mediaToReuse: results.filter((item) => item.committed && item.assetDecision === 'reuse_staged_media').length,
@@ -338,4 +343,4 @@ async function promoteVerified(strapi, options = {}) {
   };
 }
 
-module.exports = { buildPlan, bulkScopeReasons, eligibility, findMatchingColour, previewPromotion, promoteIdentity, promoteVerified, validateIdentitySet };
+module.exports = { buildPlan, eligibility, existingColourScopeReasons, existingFabricColour, findMatchingColour, previewPromotion, promoteIdentity, promoteVerified, validateIdentitySet };
