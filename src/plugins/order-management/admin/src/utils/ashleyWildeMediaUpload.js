@@ -42,9 +42,15 @@ export function getSafeBasename(relativePath) {
   return String(relativePath || '').normalize('NFKC').replace(/\\/g, '/').split('/').pop() || '';
 }
 
-export function mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }) {
-  const signature = String(analysisToken || '').split('.').pop();
-  return `aw-ashley:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
+export function mediaBindingFor({ mediaBinding }) {
+  const binding = String(mediaBinding || '');
+  if (!binding.startsWith('aw-ashley:v2:')) {
+    const error = new Error('The server did not return a secure Media binding for this analysed image.');
+    error.code = 'ASHLEY_WILDE_MEDIA_BINDING_INVALID';
+    error.status = 400;
+    throw error;
+  }
+  return binding;
 }
 
 /**
@@ -81,7 +87,7 @@ export function safeMediaUploadErrorMessage(error) {
   return sanitizeDiagnosticMessage(error?.message) || 'The image could not be uploaded. Please retry it.';
 }
 
-export async function uploadAshleyWildeMedia(file, { analysisToken, folderFingerprint, relativePath, fileFingerprint, traceId, attempt, adminPost, signal } = {}) {
+export async function uploadAshleyWildeMedia(file, { analysisToken, folderFingerprint, relativePath, fileFingerprint, mediaBinding, traceId, attempt, adminPost, signal } = {}) {
   const size = Number(file?.size || 0);
   const mimeType = String(file?.type || '').toLowerCase();
   if (!Number.isSafeInteger(size) || size < 1 || size > ASHLEY_PREPARED_IMAGE_MAX_BYTES) {
@@ -110,12 +116,7 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
   form.append('fileInfo', JSON.stringify({
     name: canonicalFilename,
     alternativeText: null,
-    caption: mediaBindingFor({
-      analysisToken,
-      folderFingerprint,
-      relativePath,
-      fileFingerprint,
-    }),
+    caption: mediaBindingFor({ mediaBinding }),
     folder: undefined,
   }));
 

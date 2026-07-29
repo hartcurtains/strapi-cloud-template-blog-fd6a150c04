@@ -223,9 +223,15 @@ function assetKey(parsed, sha256) {
   return `${identityKey(parsed)}|${String(sha256 || '').toLowerCase()}`;
 }
 
-function mediaBindingFor({ analysisToken, folderFingerprint, relativePath, fileFingerprint }) {
-  const signature = String(analysisToken || '').split('.').pop();
-  return `aw-ashley:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
+function mediaBindingFor({ adminId, folderFingerprint, relativePath, fileFingerprint }) {
+  const payload = [
+    String(adminId || ''),
+    String(folderFingerprint || '').toLowerCase(),
+    normalizeRelativePath(relativePath),
+    String(fileFingerprint || '').toLowerCase(),
+  ].join('\0');
+  const signature = crypto.createHmac('sha256', analysisTokenSecret()).update(payload, 'utf8').digest('base64url');
+  return `aw-ashley:v2:${signature}:${folderFingerprint}:${normalizeRelativePath(relativePath)}:${fileFingerprint}`;
 }
 
 function blockedAssetKey(relativePath, sha256) {
@@ -352,7 +358,16 @@ async function analyseFolder(strapi, body, options = {}) {
     if (seenHashes.has(entry.sha256) && COLOUR_STATUSES.has(parsed.status)) parsed = { ...parsed, status: 'exact_duplicate', duplicateStatus: 'exact_duplicate', warning: 'Identical content appears more than once in this folder.' };
     else parsed = await inspectMatch(strapi, parsed, entry);
     seenHashes.add(entry.sha256);
-    rows.push({ ...entry, ...parsed });
+    rows.push({
+      ...entry,
+      ...parsed,
+      mediaBinding: mediaBindingFor({
+        adminId: options.adminId,
+        folderFingerprint: fingerprint,
+        relativePath: entry.relativePath,
+        fileFingerprint: entry.sha256,
+      }),
+    });
   }
   const summary = summaryForRows(rows);
   if (body?.queueBatch) return {
@@ -511,7 +526,7 @@ async function validateAshleyMedia(strapi, body, analysedFile, adminId) {
   if (!ACCEPTED_MEDIA_TYPES.has(mimeType) || (expectedMimeType && mimeType !== expectedMimeType)
     || Math.abs(mediaSizeBytes(media) - expectedSize) >= 4096
     || normalizedAssetFilename(mediaFilename) !== normalizedAssetFilename(expectedFilename)
-    || String(media.caption || '') !== mediaBindingFor({ analysisToken: body.analysisToken, folderFingerprint: body.folderFingerprint, relativePath: analysedFile.relativePath, fileFingerprint: analysedFile.sha256 })) {
+    || String(media.caption || '') !== mediaBindingFor({ adminId, folderFingerprint: body.folderFingerprint, relativePath: analysedFile.relativePath, fileFingerprint: analysedFile.sha256 })) {
     throw finalisationError('The uploaded Media record failed Ashley Wilde identity, size, type, or binding validation.', 'ASHLEY_WILDE_MEDIA_INVALID', 400);
   }
   const createdBy = mediaCreatedBy(media);
@@ -523,7 +538,7 @@ async function validateAshleyMedia(strapi, body, analysedFile, adminId) {
 
 async function findUnfinalisedAshleyMedia(strapi, body, analysedFile, adminId) {
   const binding = mediaBindingFor({
-    analysisToken: body.analysisToken,
+    adminId,
     folderFingerprint: body.folderFingerprint,
     relativePath: analysedFile.relativePath,
     fileFingerprint: analysedFile.sha256,

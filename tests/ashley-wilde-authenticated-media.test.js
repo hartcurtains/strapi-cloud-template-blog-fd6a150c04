@@ -41,6 +41,7 @@ test('Media staging uses the injected Strapi admin client and preserves the Medi
     folderFingerprint: 'folder-fingerprint',
     relativePath: 'Ashley/ALASKAAQ.jpg',
     fileFingerprint: 'file-fingerprint',
+    mediaBinding: `aw-ashley:v2:${'s'.repeat(43)}:folder-fingerprint:Ashley/ALASKAAQ.jpg:file-fingerprint`,
     traceId,
     attempt: 2,
     adminPost: async (...args) => {
@@ -62,7 +63,7 @@ test('Media staging uses the injected Strapi admin client and preserves the Medi
   assert.deepEqual(fileInfo, {
     name: 'ALASKAAQ.jpg',
     alternativeText: null,
-    caption: 'aw-ashley:signature:folder-fingerprint:Ashley/ALASKAAQ.jpg:file-fingerprint',
+    caption: `aw-ashley:v2:${'s'.repeat(43)}:folder-fingerprint:Ashley/ALASKAAQ.jpg:file-fingerprint`,
   });
 });
 

@@ -198,7 +198,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       traceId, filename: row.filename, relativePath: row.relativePath, sizeBytes: Number(row.size || row.file?.size || 0),
       mimeType: row.mimeType || row.file?.type || null, attempt,
     };
-    let media = row.mediaRecord || (persisted?.mediaId ? { id: persisted.mediaId, documentId: persisted.mediaDocumentId, name: row.filename } : null);
+    let media = row.mediaRecord || null;
     ashleyUploadLog({ ...diagnostic, stage: 'attempt_start', mediaAlreadyKnown: Boolean(media) });
     const finaliseBody = {
       analysisToken,
@@ -240,7 +240,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       setProgress(`Uploading image ${index + 1} of ${total}: ${row.filename}`);
       updateFolderRow(row.relativePath, { phase: 'uploading_media' });
       try {
-        media = await uploadAshleyWildeMedia(row.file, { analysisToken, folderFingerprint, relativePath: row.relativePath, fileFingerprint: row.sha256, traceId, attempt, adminPost: post });
+        media = await uploadAshleyWildeMedia(row.file, { analysisToken, folderFingerprint, relativePath: row.relativePath, fileFingerprint: row.sha256, mediaBinding: row.mediaBinding, traceId, attempt, adminPost: post });
       } catch (error) {
         error.ashleyPhase = 'upload';
         updateFolderRow(row.relativePath, { phase: 'retryable_upload_failure', status: 'failed', warning: safeMediaUploadErrorMessage(error) });

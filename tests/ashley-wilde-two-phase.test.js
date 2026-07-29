@@ -12,7 +12,22 @@ after(() => {
   else process.env.STRAPI_INTERNAL_SECURITY_SECRET = previousSecret;
 });
 
-function twoPhaseFixture({ badCaption = false, failAssetOnce = false } = {}) {
+function renewAnalysisToken(token) {
+  const [, encoded] = token.split('.');
+  const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+  payload.expiresAt += 1;
+  const renewedEncoded = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  const signature = crypto.createHmac('sha256', process.env.STRAPI_INTERNAL_SECURITY_SECRET).update(renewedEncoded, 'utf8').digest('base64url');
+  return `aw-analysis.${renewedEncoded}.${signature}`;
+}
+
+function stableMediaBinding({ adminId, folderFingerprint, relativePath, fileFingerprint }) {
+  const payload = [adminId, folderFingerprint.toLowerCase(), relativePath, fileFingerprint.toLowerCase()].join('\0');
+  const signature = crypto.createHmac('sha256', process.env.STRAPI_INTERNAL_SECURITY_SECRET).update(payload, 'utf8').digest('base64url');
+  return `aw-ashley:v2:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
+}
+
+function twoPhaseFixture({ badCaption = false, failAssetOnce = false, reanalysed = false } = {}) {
   const relativePath = 'Ashley/ALASKAAQ.jpg';
   const fileFingerprint = 'a'.repeat(64);
   const fileSize = 123;
@@ -37,13 +52,20 @@ function twoPhaseFixture({ badCaption = false, failAssetOnce = false } = {}) {
     }],
     adminId: 'admin-1',
   });
+  const uploadAnalysisToken = analysisToken;
+  const currentAnalysisToken = reanalysed ? renewAnalysisToken(uploadAnalysisToken) : uploadAnalysisToken;
   const media = {
     id: 123,
     documentId: 'media-123',
     name: 'ALASKAAQ.jpg',
     mime: 'image/jpeg',
     size: fileSize / 1024,
-    caption: badCaption ? 'wrong-binding' : `aw-ashley:${analysisToken.split('.').pop()}:${folderFingerprint}:${relativePath}:${fileFingerprint}`,
+    caption: badCaption ? 'wrong-binding' : stableMediaBinding({
+      adminId: 'admin-1',
+      folderFingerprint,
+      relativePath,
+      fileFingerprint,
+    }),
     createdBy: { id: 'admin-1' },
   };
   const identities = [];
@@ -103,7 +125,7 @@ function twoPhaseFixture({ badCaption = false, failAssetOnce = false } = {}) {
     },
   };
   const body = {
-    analysisToken,
+    analysisToken: currentAnalysisToken,
     manifestFileCount: 1,
     folderName: 'Ashley',
     folderFingerprint,
@@ -153,6 +175,14 @@ test('finalisation retry reuses the uploaded Media and does not duplicate the id
   assert.equal(fixture.assets.length, 1);
 });
 
+test('re-analysis retry accepts the stable server-signed Media binding', async () => {
+  const fixture = twoPhaseFixture({ reanalysed: true });
+  const response = await importer.finaliseAshleyWildeMedia(fixture.strapi, fixture.body, { adminId: 'admin-1' });
+  assert.equal(response.result.phase, 'complete');
+  assert.equal(response.result.mediaId, 123);
+  assert.equal(fixture.assets.length, 1);
+});
+
 test('refresh recovery finds the bound uploaded Media without image bytes', async () => {
   const fixture = twoPhaseFixture();
   const lookup = await importer.getAshleyWildeMediaStatus(fixture.strapi, { ...fixture.body, mediaId: undefined, mediaDocumentId: undefined }, { adminId: 'admin-1' });
@@ -160,6 +190,13 @@ test('refresh recovery finds the bound uploaded Media without image bytes', asyn
   assert.equal(lookup.result.mediaId, 123);
   assert.equal(fixture.assets.length, 0);
   assert.ok(!fixture.writes.some((write) => write.data?.buffer || write.data?.files));
+});
+
+test('refresh recovery still finds the same server-bound Media after re-analysis', async () => {
+  const fixture = twoPhaseFixture({ reanalysed: true });
+  const lookup = await importer.getAshleyWildeMediaStatus(fixture.strapi, { ...fixture.body, mediaId: undefined, mediaDocumentId: undefined }, { adminId: 'admin-1' });
+  assert.equal(lookup.result.phase, 'media_uploaded');
+  assert.equal(lookup.result.mediaId, 123);
 });
 
 test('upload failure records retryable progress without calling finalisation or creating staging rows', async () => {
