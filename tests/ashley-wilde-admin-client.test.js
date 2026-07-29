@@ -14,6 +14,7 @@ const routeSource = fs.readFileSync(path.join(root, 'server', 'routes', 'index.j
 const controllerSource = fs.readFileSync(path.join(root, 'server', 'controllers', 'import-export.js'), 'utf8');
 const importerServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
 const promotionServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-promotion.js'), 'utf8');
+const productPageSource = fs.readFileSync(path.join(root, 'admin', 'src', 'pages', 'ProductManagementPage.jsx'), 'utf8');
 const uploadDiagnosticsSource = fs.readFileSync(path.join(process.cwd(), 'src', 'middlewares', 'ashley-upload-diagnostics.ts'), 'utf8');
 const middlewareConfigSource = fs.readFileSync(path.join(process.cwd(), 'config', 'middlewares.ts'), 'utf8');
 const compiledUploadDiagnosticsPath = path.join(process.cwd(), 'dist', 'src', 'middlewares', 'ashley-upload-diagnostics.js');
@@ -94,6 +95,16 @@ test('Ashley Wilde promotion revalidates the original preview scope before check
     promotionServiceSource,
     /expected\s*!==\s*current\.identityDocumentIds\.slice\(\)\.sort\(\)\.join\(['"]\|['"]\)/
   );
+});
+
+test('Ashley Wilde All Fabrics promotion is enabled and server-enforced as a safe legacy skip mode', () => {
+  assert.match(productPageSource, /<option value="">All Fabrics<\/option>/);
+  assert.match(productPageSource, /onClick=\{previewAshleyWildePromotion\}\s+disabled=\{promotionBusy\}/);
+  assert.match(productPageSource, /Existing Fabrics skipped:/);
+  assert.match(productPageSource, /all Fabrics without existing live Colours/);
+  assert.match(promotionServiceSource, /fabric_already_has_live_colours/);
+  assert.match(promotionServiceSource, /fabric\.colours/);
+  assert.match(promotionServiceSource, /populate:\s*\[[^\]]*'fabric\.colours'/);
 });
 
 test('Ashley Wilde production multipart staging is retired without changing generic bulk upload routing', () => {

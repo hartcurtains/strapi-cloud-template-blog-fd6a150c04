@@ -16,6 +16,14 @@ function relationKey(value) { return value?.documentId || value?.id || value; }
 function entityRelationId(value) { return value?.id || value?.documentId || value; }
 function first(value) { return Array.isArray(value) ? value[0] : value; }
 function identityDocumentId(identity) { return identity.documentId || identity.id; }
+function isBulkPromotion(options = {}) {
+  return !String(options.fabricName || '').trim() && !String(options.supplierProductCode || '').trim();
+}
+function bulkScopeReasons(identity, options = {}) {
+  if (!isBulkPromotion(options)) return [];
+  const fabric = first(identity.fabric);
+  return Array.isArray(fabric?.colours) && fabric.colours.length ? ['fabric_already_has_live_colours'] : [];
+}
 function hasFabric(colour, fabric) {
   const expected = String(relationKey(fabric));
   return Array.isArray(colour?.fabrics) && colour.fabrics.some((item) => String(relationKey(item)) === expected);
@@ -92,7 +100,7 @@ async function findMatchingColour(strapi, identity) {
 }
 
 async function loadIdentity(strapi, identityId) {
-  const populate = { populate: ['fabric', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'] };
+  const populate = { populate: ['fabric', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'] };
   let identity = await strapi.entityService.findOne(IDENTITY_UID, identityId, populate);
   if (!identity) {
     const matches = await strapi.entityService.findMany(IDENTITY_UID, { filters: { documentId: { $eq: identityId } }, ...populate, limit: 1 });
@@ -198,7 +206,7 @@ function scopeFilters(options = {}) {
 async function scopedIdentities(strapi, options = {}) {
   return strapi.entityService.findMany(IDENTITY_UID, {
     filters: scopeFilters(options),
-    populate: ['fabric', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'],
+    populate: ['fabric', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'],
     sort: ['documentId:asc'],
     limit: options.limit || 1000,
   });
@@ -211,7 +219,10 @@ async function previewPromotion(strapi, options = {}) {
   const validation = validateIdentitySet(identities);
   const results = [];
   for (const identity of identities) {
-    const scopeReasons = [...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || [])];
+    const scopeReasons = [
+      ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
+      ...bulkScopeReasons(identity, options),
+    ];
     try {
       const eligible = eligibility(identity, mappings);
       const matching = await findMatchingColour(strapi, identity);
@@ -230,6 +241,7 @@ async function previewPromotion(strapi, options = {}) {
     newColours: orderedResults.filter((item) => item.eligible && item.colourDecision === 'create_new_colour').length,
     mediaToReuse: orderedResults.filter((item) => item.eligible && item.assetDecision === 'reuse_staged_media').length,
     conflicts: orderedResults.filter((item) => item.skippedReasons?.includes('existing_colour_identity_conflict') || item.skippedReasons?.includes('unresolved_asset_conflict')).length,
+    skippedExistingFabrics: new Set(orderedResults.filter((item) => item.skippedReasons?.includes('fabric_already_has_live_colours')).map((item) => item.fabricDocumentId)).size,
     duplicateFabricColourCodes: validation.duplicateFabricColourCodes,
     duplicateIdentityScopes: validation.duplicateIdentityScopes,
     internalCodeCollisions: validation.internalCodeCollisions,
@@ -302,7 +314,10 @@ async function promoteVerified(strapi, options = {}) {
   const validation = validateIdentitySet(verified);
   const results = [];
   for (const identity of verified) {
-    const scopeReasons = [...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || [])];
+    const scopeReasons = [
+      ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
+      ...bulkScopeReasons(identity, options),
+    ];
     try { results.push(await promoteIdentity(strapi, identity.id, { ...options, mappings, scopeReasons })); }
     catch (error) { results.push({ identityDocumentId: identityDocumentId(identity), committed: false, eligible: false, skippedReasons: [error.message] }); }
   }
@@ -323,4 +338,4 @@ async function promoteVerified(strapi, options = {}) {
   };
 }
 
-module.exports = { buildPlan, eligibility, findMatchingColour, previewPromotion, promoteIdentity, promoteVerified, validateIdentitySet };
+module.exports = { buildPlan, bulkScopeReasons, eligibility, findMatchingColour, previewPromotion, promoteIdentity, promoteVerified, validateIdentitySet };

@@ -9,6 +9,70 @@ const IDENTITY_UID = 'api::fabric-colour-identity.fabric-colour-identity';
 const ASSET_UID = 'api::fabric-colour-asset.fabric-colour-asset';
 const COLOUR_UID = 'api::colour.colour';
 
+test('bulk promotion skips legacy Fabrics with live Colours while exact scopes remain available', () => {
+  const identity = {
+    fabric: {
+      documentId: 'fabric-legacy',
+      colours: [{ documentId: 'existing-colour' }],
+    },
+  };
+  assert.deepEqual(promotion.bulkScopeReasons(identity, {}), ['fabric_already_has_live_colours']);
+  assert.deepEqual(promotion.bulkScopeReasons(identity, { fabricName: 'Legacy' }), []);
+  assert.deepEqual(promotion.bulkScopeReasons(identity, { supplierProductCode: 'LEGACY' }), []);
+  assert.deepEqual(promotion.bulkScopeReasons({ fabric: { colours: [] } }, {}), []);
+});
+
+test('bulk preview reports existing legacy Fabrics as safely skipped', async () => {
+  const identity = {
+    id: 11,
+    documentId: 'identity-legacy',
+    identityKey: 'ashley-wilde|fabric-legacy|legacy|da',
+    mappingStatus: 'verified',
+    evidenceStatus: 'verified_official',
+    supplier: 'Ashley Wilde',
+    fabric: {
+      id: 111,
+      documentId: 'fabric-legacy',
+      name: 'Legacy',
+      colours: [{ id: 999, documentId: 'existing-colour' }],
+    },
+    fabricDocumentId: 'fabric-legacy',
+    supplierProductCode: 'LEGACY',
+    supplierColourCode: 'DA',
+    fabricColourCode: 'LEGACYDA',
+    officialColourName: 'Danube',
+    internalColourCode: 'DAN',
+    assets: [{
+      id: 211,
+      documentId: 'asset-legacy',
+      importStatus: 'staged',
+      duplicateStatus: 'unique',
+      assetType: 'ordinary_colour',
+      media: { id: 311, documentId: 'media-legacy' },
+    }],
+  };
+  const strapi = {
+    entityService: {
+      findMany: async (uid) => uid === IDENTITY_UID ? [identity] : [],
+    },
+  };
+  const mappings = {
+    codeRegistry: { codes: { DAN: { colourName: 'Danube' } } },
+    mappingVersion: 'mapping-v1',
+    mappingSource: 'test',
+  };
+
+  const bulk = await promotion.previewPromotion(strapi, { mappings });
+  assert.equal(bulk.summary.eligible, 0);
+  assert.equal(bulk.summary.blocked, 1);
+  assert.equal(bulk.summary.skippedExistingFabrics, 1);
+  assert.deepEqual(bulk.results[0].skippedReasons, ['fabric_already_has_live_colours']);
+
+  const targeted = await promotion.previewPromotion(strapi, { mappings, fabricName: 'Legacy' });
+  assert.equal(targeted.summary.eligible, 1);
+  assert.equal(targeted.summary.skippedExistingFabrics, 0);
+});
+
 test('confirmed promotion writes Strapi Entity Service relation IDs and commits the reviewed identity', async () => {
   const originalActiveMappings = supplierMappings.getActiveImporterMappings;
   const originalLoadRegistry = supplierMappings.loadRegistry;

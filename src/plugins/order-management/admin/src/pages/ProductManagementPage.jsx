@@ -1674,7 +1674,7 @@ export default function ProductManagementPage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div>
             <h2 style={{ margin: '0 0 6px', color: '#1e3a8a', fontSize: '20px' }}>Staged fabric colours</h2>
-            <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>Review an exact supplier/Fabric/product scope before promoting verified staged identities.</p>
+            <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>Review one Fabric or safely promote every verified staged Fabric that has no existing live Colours.</p>
           </div>
           <div style={{ color: '#475569', fontSize: '12px' }}>Preview expires after 10 minutes or any staging/mapping change.</div>
         </div>
@@ -1695,13 +1695,13 @@ export default function ProductManagementPage() {
           </label>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginTop: '18px' }}>
-          <button type="button" onClick={previewAshleyWildePromotion} disabled={promotionBusy || !promotionScope.fabricName || !promotionScope.supplierProductCode} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionBusy ? 'wait' : 'pointer', opacity: promotionBusy || !promotionScope.fabricName || !promotionScope.supplierProductCode ? 0.55 : 1 }}>Preview promotion</button>
+          <button type="button" onClick={previewAshleyWildePromotion} disabled={promotionBusy} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionBusy ? 'wait' : 'pointer', opacity: promotionBusy ? 0.55 : 1 }}>Preview promotion</button>
           <button type="button" onClick={() => setPromotionConfirmOpen(true)} disabled={promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible} style={{ background: '#047857', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionPreview ? 'pointer' : 'not-allowed', opacity: promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible ? 0.55 : 1 }}>Promote verified</button>
           {promotionError && <span style={{ color: '#b91c1c', fontSize: '13px' }}>{promotionError}</span>}
         </div>
         {promotionPreview && <div style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '13px', color: '#334155' }}>
-            <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Blocked: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
+            <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Safely skipped: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Existing Fabrics skipped: <strong>{promotionPreview.summary?.skippedExistingFabrics ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
           </div>
           <div style={{ marginTop: '10px', fontSize: '11px', color: '#64748b' }}>Plan fingerprint: {promotionPreview.planFingerprint}</div>
           {promotionPreview.results?.length > 0 && <div style={{ marginTop: '12px', maxHeight: '220px', overflow: 'auto', fontSize: '12px' }}>{promotionPreview.results.map((item) => <div key={item.identityDocumentId} style={{ padding: '6px 0', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', gap: '8px' }}><span>{item.fabricColourCode} — {item.officialColourName}</span><span style={{ color: item.eligible ? '#047857' : '#b91c1c', fontWeight: 700 }}>{item.eligible ? item.colourDecision : `Blocked: ${(item.skippedReasons || []).join(', ')}`}</span></div>)}</div>}
@@ -1711,7 +1711,7 @@ export default function ProductManagementPage() {
       {promotionConfirmOpen && promotionPreview && <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
         <div style={{ background: '#fff', borderRadius: '14px', padding: '24px', maxWidth: '520px', width: '100%' }}>
           <h3 style={{ marginTop: 0, color: '#0f172a' }}>Confirm exact promotion scope</h3>
-          <p style={{ color: '#475569', fontSize: '14px' }}>Promote {promotionPreview.summary?.eligible || 0} verified staged identities for {promotionScope.supplier}, Fabric “{promotionScope.fabricName}”, product code “{promotionScope.supplierProductCode}”. The reviewed plan will reuse staged media and will not overwrite existing Colours or images.</p>
+          <p style={{ color: '#475569', fontSize: '14px' }}>Promote {promotionPreview.summary?.eligible || 0} verified staged identities for {promotionScope.supplier}, {promotionScope.fabricName ? `Fabric “${promotionScope.fabricName}”` : 'all Fabrics without existing live Colours'}, {promotionScope.supplierProductCode ? `product code “${promotionScope.supplierProductCode}”` : 'all staged product codes'}. The reviewed plan will reuse staged media and will not overwrite existing Colours or images.</p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}><button type="button" onClick={() => setPromotionConfirmOpen(false)} style={{ padding: '9px 13px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>Cancel</button><button type="button" onClick={applyAshleyWildePromotion} disabled={promotionBusy} style={{ padding: '9px 13px', border: 0, borderRadius: '8px', background: '#047857', color: '#fff', fontWeight: 700 }}>Confirm promotion</button></div>
         </div>
       </div>}
