@@ -27,7 +27,7 @@ function stableMediaBinding({ adminId, folderFingerprint, relativePath, fileFing
   return `aw-ashley:v2:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
 }
 
-function twoPhaseFixture({ badCaption = false, failAssetOnce = false, reanalysed = false } = {}) {
+function twoPhaseFixture({ badCaption = false, emptyMedia = false, failAssetOnce = false, reanalysed = false } = {}) {
   const relativePath = 'Ashley/ALASKAAQ.jpg';
   const fileFingerprint = 'a'.repeat(64);
   const fileSize = 2_981_739;
@@ -59,7 +59,9 @@ function twoPhaseFixture({ badCaption = false, failAssetOnce = false, reanalysed
     documentId: 'media-123',
     name: 'ALASKAAQ.jpg',
     mime: 'image/jpeg',
-    size: Math.round((fileSize / 1000) * 100) / 100,
+    // Strapi's default Media settings optimize uploaded images, so persisted
+    // size is not expected to equal the pre-upload analysis size.
+    size: emptyMedia ? 0 : 1_234.57,
     caption: badCaption ? 'wrong-binding' : stableMediaBinding({
       adminId: 'admin-1',
       folderFingerprint,
@@ -173,6 +175,15 @@ test('finalisation retry reuses the uploaded Media and does not duplicate the id
   assert.equal(response.result.phase, 'complete');
   assert.equal(fixture.identities.length, firstIdentityCount);
   assert.equal(fixture.assets.length, 1);
+});
+
+test('empty optimized Media is rejected before staging writes', async () => {
+  const fixture = twoPhaseFixture({ emptyMedia: true });
+  await assert.rejects(
+    () => importer.finaliseAshleyWildeMedia(fixture.strapi, fixture.body, { adminId: 'admin-1' }),
+    (error) => error.code === 'ASHLEY_WILDE_MEDIA_INVALID',
+  );
+  assert.equal(fixture.assets.length, 0);
 });
 
 test('re-analysis retry accepts the stable server-signed Media binding', async () => {

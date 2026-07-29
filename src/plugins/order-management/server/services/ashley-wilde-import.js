@@ -524,9 +524,9 @@ async function validateAshleyMedia(strapi, body, analysedFile, adminId) {
   const expectedMimeType = String(analysedFile.mimeType || body.mimeType || '').toLowerCase();
   const expectedFilename = analysedFile.filename;
   const mediaFilename = media.name || media.alternativeText || '';
-  const expectedSize = Number(analysedFile.size);
+  const storedSize = mediaSizeBytes(media);
   if (!ACCEPTED_MEDIA_TYPES.has(mimeType) || (expectedMimeType && mimeType !== expectedMimeType)
-    || Math.abs(mediaSizeBytes(media) - expectedSize) >= 4096
+    || !Number.isFinite(storedSize) || storedSize < 1 || storedSize > uploadPolicy.maxFileBytes
     || normalizedAssetFilename(mediaFilename) !== normalizedAssetFilename(expectedFilename)
     || String(media.caption || '') !== mediaBindingFor({ adminId, folderFingerprint: body.folderFingerprint, relativePath: analysedFile.relativePath, fileFingerprint: analysedFile.sha256 })) {
     throw finalisationError('The uploaded Media record failed Ashley Wilde identity, size, type, or binding validation.', 'ASHLEY_WILDE_MEDIA_INVALID', 400);
