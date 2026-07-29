@@ -62,7 +62,7 @@ test('Media staging uses the injected Strapi admin client and preserves the Medi
   assert.deepEqual(fileInfo, {
     name: 'ALASKAAQ.jpg',
     alternativeText: null,
-    caption: null,
+    caption: 'aw-ashley:signature:folder-fingerprint:Ashley/ALASKAAQ.jpg:file-fingerprint',
   });
 });
 

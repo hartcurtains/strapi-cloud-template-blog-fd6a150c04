@@ -110,7 +110,12 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
   form.append('fileInfo', JSON.stringify({
     name: canonicalFilename,
     alternativeText: null,
-    caption: null,
+    caption: mediaBindingFor({
+      analysisToken,
+      folderFingerprint,
+      relativePath,
+      fileFingerprint,
+    }),
     folder: undefined,
   }));
 
