@@ -24,12 +24,14 @@ function rejectAshleyWildeUnauthorized(ctx) {
 function hasAshleyWildePromotionPermission(ctx) {
   const ability = ctx?.state?.catalogWriteAuth?.ability;
   if (!ability || typeof ability.can !== 'function') return true;
+  const createAction = 'plugin::content-manager.explorer.create';
+  const updateAction = 'plugin::content-manager.explorer.update';
   const subjects = [
     'api::colour.colour',
     'api::fabric-colour-identity.fabric-colour-identity',
     'api::fabric-colour-asset.fabric-colour-asset',
   ];
-  return subjects.every((subject) => ability.can('create', subject) || ability.can('update', subject));
+  return subjects.every((subject) => ability.can(createAction, subject) || ability.can(updateAction, subject));
 }
 
 function logAshleyWildeUpload(ctx, stage) {

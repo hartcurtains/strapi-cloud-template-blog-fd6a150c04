@@ -75,6 +75,15 @@ test('Ashley Wilde mode and analysis responses expose server mapping metadata', 
   assert.match(importerSource, /mappingGeneratedAt:\s*mappings\.colourMap\.generatedAt/);
 });
 
+test('Ashley Wilde promotion checks the registered Strapi Content Manager actions', () => {
+  assert.match(controllerSource, /plugin::content-manager\.explorer\.create/);
+  assert.match(controllerSource, /plugin::content-manager\.explorer\.update/);
+  assert.doesNotMatch(
+    controllerSource,
+    /ability\.can\(['"](?:create|update)['"],\s*subject\)/
+  );
+});
+
 test('Ashley Wilde production multipart staging is retired without changing generic bulk upload routing', () => {
   const apiController = fs.readFileSync(path.join(process.cwd(), 'src', 'api', 'order-management', 'controllers', 'order-management.ts'), 'utf8');
   const pluginEntry = fs.readFileSync(path.join(root, 'strapi-server.js'), 'utf8');
