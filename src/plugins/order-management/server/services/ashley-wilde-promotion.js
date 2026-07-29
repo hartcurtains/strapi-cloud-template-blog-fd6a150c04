@@ -13,6 +13,7 @@ const PLAN_TTL_MS = 10 * 60 * 1000;
 
 function key(value) { return String(value || '').normalize('NFKC').trim().toUpperCase(); }
 function relationKey(value) { return value?.documentId || value?.id || value; }
+function entityRelationId(value) { return value?.id || value?.documentId || value; }
 function first(value) { return Array.isArray(value) ? value[0] : value; }
 function identityDocumentId(identity) { return identity.documentId || identity.id; }
 function hasFabric(colour, fabric) {
@@ -259,22 +260,32 @@ async function promoteIdentity(strapi, identityId, options = {}) {
     const latestMatching = await findMatchingColour(strapi, latest);
     if (latestMatching.conflict) throw new Error('Existing Colour identity conflicts with the staged identity.');
     const asset = latestEligible.approvedAssets[0];
-    const fabricId = relationKey(latest.fabric);
-    const mediaId = relationKey(asset.media) || relationKey(asset.existingMedia);
+    const fabricId = entityRelationId(latest.fabric);
+    const mediaId = entityRelationId(asset.media) || entityRelationId(asset.existingMedia);
     let colour = latestMatching.colour;
+    let colourWasCreated = false;
     if (!colour) {
       colour = await strapi.entityService.create(COLOUR_UID, { data: { name: latest.officialColourName, thumbnail: mediaId, fabrics: fabricId ? [fabricId] : undefined, publishedAt: new Date() }, transacting: trx });
+      colourWasCreated = true;
     } else {
       const update = {};
       if (!hasFabric(colour, latest.fabric) && fabricId) update.fabrics = { connect: [fabricId] };
       if (Object.keys(update).length) colour = await strapi.entityService.update(COLOUR_UID, colour.id, { data: update, transacting: trx });
     }
+    const promotedRelationId = entityRelationId(colour);
     const promotedId = colour.documentId || colour.id;
-    await strapi.entityService.update(IDENTITY_UID, latest.id, { data: { mappingStatus: 'promoted', promotedColour: { connect: [promotedId] } }, transacting: trx });
+    await strapi.entityService.update(IDENTITY_UID, latest.id, { data: { mappingStatus: 'promoted', promotedColour: { connect: [promotedRelationId] } }, transacting: trx });
     for (const assetItem of latestEligible.approvedAssets) await strapi.entityService.update(ASSET_UID, assetItem.id, { data: { importStatus: 'promoted' }, transacting: trx });
-    return { colour, promotedId, latest };
+    return { colour, colourWasCreated, promotedId, latest };
   });
-  return { ...buildPlan(result.latest, { colour: result.colour, conflict: false, priority: matching.priority || 'created_colour' }, eligibility(result.latest, mappings), options.scopeReasons || []), committed: true, promotedColourDocumentId: result.promotedId };
+  const committedPlan = buildPlan(result.latest, { colour: result.colour, conflict: false, priority: matching.priority || 'created_colour' }, eligibility(result.latest, mappings), options.scopeReasons || []);
+  return {
+    ...committedPlan,
+    action: result.colourWasCreated ? 'create_colour' : 'match_existing_colour',
+    colourDecision: result.colourWasCreated ? 'create_new_colour' : 'reuse_existing_colour',
+    committed: true,
+    promotedColourDocumentId: result.promotedId,
+  };
 }
 
 async function promoteVerified(strapi, options = {}) {
