@@ -507,9 +507,11 @@ async function findMediaByIdentity(strapi, mediaId, mediaDocumentId) {
 }
 
 function mediaSizeBytes(media) {
+  const exactSize = Number(media?.sizeInBytes || 0);
+  if (Number.isSafeInteger(exactSize) && exactSize > 0) return exactSize;
   const size = Number(media?.size || 0);
-  // Strapi's upload file schema stores `size` in KiB, including for large files.
-  return size * 1024;
+  // @strapi/utils file.bytesToKbytes stores decimal KB, rounded to two places.
+  return size * 1000;
 }
 
 function mediaCreatedBy(media) {

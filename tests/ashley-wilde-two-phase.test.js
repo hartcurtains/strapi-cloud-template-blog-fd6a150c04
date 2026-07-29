@@ -30,7 +30,7 @@ function stableMediaBinding({ adminId, folderFingerprint, relativePath, fileFing
 function twoPhaseFixture({ badCaption = false, failAssetOnce = false, reanalysed = false } = {}) {
   const relativePath = 'Ashley/ALASKAAQ.jpg';
   const fileFingerprint = 'a'.repeat(64);
-  const fileSize = 123;
+  const fileSize = 2_981_739;
   const folderFingerprint = importer.manifestFingerprint([{ relativePath, sha256: fileFingerprint, size: fileSize }]);
   const analysisToken = importer.createAnalysisToken({
     mappingImportDocumentId: null,
@@ -59,7 +59,7 @@ function twoPhaseFixture({ badCaption = false, failAssetOnce = false, reanalysed
     documentId: 'media-123',
     name: 'ALASKAAQ.jpg',
     mime: 'image/jpeg',
-    size: fileSize / 1024,
+    size: Math.round((fileSize / 1000) * 100) / 100,
     caption: badCaption ? 'wrong-binding' : stableMediaBinding({
       adminId: 'admin-1',
       folderFingerprint,
