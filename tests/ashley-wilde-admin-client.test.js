@@ -13,6 +13,7 @@ const componentSource = fs.readFileSync(
 const routeSource = fs.readFileSync(path.join(root, 'server', 'routes', 'index.js'), 'utf8');
 const controllerSource = fs.readFileSync(path.join(root, 'server', 'controllers', 'import-export.js'), 'utf8');
 const importerServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
+const promotionServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-promotion.js'), 'utf8');
 const uploadDiagnosticsSource = fs.readFileSync(path.join(process.cwd(), 'src', 'middlewares', 'ashley-upload-diagnostics.ts'), 'utf8');
 const middlewareConfigSource = fs.readFileSync(path.join(process.cwd(), 'config', 'middlewares.ts'), 'utf8');
 const compiledUploadDiagnosticsPath = path.join(process.cwd(), 'dist', 'src', 'middlewares', 'ashley-upload-diagnostics.js');
@@ -81,6 +82,17 @@ test('Ashley Wilde promotion checks the registered Strapi Content Manager action
   assert.doesNotMatch(
     controllerSource,
     /ability\.can\(['"](?:create|update)['"],\s*subject\)/
+  );
+});
+
+test('Ashley Wilde promotion revalidates the original preview scope before checking confirmed identities', () => {
+  assert.match(
+    promotionServiceSource,
+    /previewPromotion\(strapi,\s*\{\s*\.\.\.options,\s*identityDocumentIds:\s*undefined,\s*commit:\s*false,\s*mappings\s*\}\)/
+  );
+  assert.match(
+    promotionServiceSource,
+    /expected\s*!==\s*current\.identityDocumentIds\.slice\(\)\.sort\(\)\.join\(['"]\|['"]\)/
   );
 });
 

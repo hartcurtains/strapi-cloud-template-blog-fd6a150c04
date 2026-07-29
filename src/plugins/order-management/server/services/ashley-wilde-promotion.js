@@ -281,7 +281,7 @@ async function promoteVerified(strapi, options = {}) {
   const mappings = await loadPromotionMappings(strapi);
   if (options.commit === true && options.planFingerprint) {
     if (options.planExpiresAt && Date.parse(options.planExpiresAt) <= Date.now()) throw new Error('The promotion preview has expired. Run Preview promotion again.');
-    const current = await previewPromotion(strapi, { ...options, commit: false, mappings });
+    const current = await previewPromotion(strapi, { ...options, identityDocumentIds: undefined, commit: false, mappings });
     if (current.planFingerprint !== options.planFingerprint) throw new Error('The promotion preview is stale because staging, mapping, scope, or eligibility changed. Run Preview promotion again.');
     const expected = [...(options.identityDocumentIds || [])].sort().join('|');
     if (expected !== current.identityDocumentIds.slice().sort().join('|')) throw new Error('The promotion scope no longer matches the approved preview. Run Preview promotion again.');
