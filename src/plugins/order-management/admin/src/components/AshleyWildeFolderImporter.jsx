@@ -99,6 +99,17 @@ function safeErrorMessage(error) {
   return error?.message || 'The Ashley Wilde request failed. Try again.';
 }
 
+function abortRemainingFiles(error) {
+  const status = responseStatus(error);
+  return status === 401 || status === 403 || error?.code === 'ASHLEY_WILDE_ANALYSIS_INVALID';
+}
+
+function partialStageMessage(total, failures) {
+  const names = failures.slice(0, 5).map((item) => item.filename).join(', ');
+  const remainder = failures.length > 5 ? ` and ${failures.length - 5} more` : '';
+  return `Staged ${total - failures.length} of ${total} files. ${failures.length} file(s) need retrying: ${names}${remainder}.`;
+}
+
 const dateLabel = (value) => value ? new Date(value).toLocaleString() : 'Not uploaded';
 const statusTone = (status) => status === 'completed' || status === 'staged' ? colours.green
   : ['failed', 'unsupported_file', 'identity_conflict', 'conflicting_image', 'colour_conflict', 'thumbnail_conflict'].includes(status) ? colours.red
@@ -281,12 +292,24 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setBusy(true);
     setError('');
     try {
+      const failures = [];
       for (let index = 0; index < selectedRows.length; index += 1) {
-        await stageAshleyRow({ row: selectedRows[index], analysisToken: analysis.analysisToken, folderName: analysis.folderName, folderFingerprint: analysis.folderFingerprint, manifestFileCount: analysis.rows.length, index, total: selectedRows.length });
+        const row = selectedRows[index];
+        try {
+          await stageAshleyRow({ row, analysisToken: analysis.analysisToken, folderName: analysis.folderName, folderFingerprint: analysis.folderFingerprint, manifestFileCount: analysis.rows.length, index, total: selectedRows.length });
+        } catch (rowError) {
+          if (abortRemainingFiles(rowError)) throw rowError;
+          failures.push({ filename: row.filename, error: rowError });
+        }
       }
-      setProgress('Folder import complete');
-      setSelected(new Set());
       await refreshHistory();
+      if (failures.length) {
+        setProgress(`Folder import partial: ${selectedRows.length - failures.length} of ${selectedRows.length} staged`);
+        setError(partialStageMessage(selectedRows.length, failures));
+      } else {
+        setProgress('Folder import complete');
+        setSelected(new Set());
+      }
     } catch (uploadError) {
       await refreshHistory();
       setError(safeErrorMessage(uploadError));
@@ -379,15 +402,32 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         });
       });
       if (!stagingRows.length) throw new Error('There are no confirmed files ready to stage.');
+      const failures = [];
+      const successfulPaths = new Set();
       for (let index = 0; index < stagingRows.length; index += 1) {
         const { row, analysisToken } = stagingRows[index];
-        await stageAshleyRow({ row, analysisToken, folderName: queuedFolder.folderName, folderFingerprint, manifestFileCount: fileQueueRef.current.length, index, total: stagingRows.length });
+        try {
+          await stageAshleyRow({ row, analysisToken, folderName: queuedFolder.folderName, folderFingerprint, manifestFileCount: fileQueueRef.current.length, index, total: stagingRows.length });
+          successfulPaths.add(row.relativePath);
+        } catch (rowError) {
+          if (abortRemainingFiles(rowError)) throw rowError;
+          failures.push({ filename: row.filename, relativePath: row.relativePath, error: rowError });
+        }
+      }
+      await refreshHistory();
+      if (failures.length) {
+        setAnalysisBatches((current) => current.map((batch) => ({
+          ...batch,
+          rows: batch.rows.map((row) => successfulPaths.has(row.relativePath) ? { ...row, status: 'already_complete' } : row),
+        })));
+        setProgress(`Folder import partial: ${stagingRows.length - failures.length} of ${stagingRows.length} staged`);
+        setError(partialStageMessage(stagingRows.length, failures));
+        return;
       }
       fileQueueRef.current = [];
       setQueuedFolder(null);
       setAnalysisBatches([]);
       setProgress('Folder import complete');
-      await refreshHistory();
     } catch (stageError) {
       await refreshHistory();
       setError(safeErrorMessage(stageError));

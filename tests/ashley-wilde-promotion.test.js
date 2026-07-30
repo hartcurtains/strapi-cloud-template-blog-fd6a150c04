@@ -100,6 +100,57 @@ test('bulk preview skips only an existing Colour and keeps a missing sibling eli
   assert.equal(danubeResult.colourDecision, 'create_new_colour');
 });
 
+test('promotion fingerprint is stable when Strapi returns staged relations in a different order', async () => {
+  const fabric = { id: 111, documentId: 'fabric-order', name: 'Order', colours: [] };
+  const assets = [
+    { id: 201, documentId: 'asset-a', sha256: 'aaa', importStatus: 'staged', duplicateStatus: 'unique', assetType: 'ordinary_colour', media: { id: 301, documentId: 'media-a' } },
+    { id: 202, documentId: 'asset-b', sha256: 'bbb', importStatus: 'staged', duplicateStatus: 'unique', assetType: 'numbered_alternate', media: { id: 302, documentId: 'media-b' } },
+  ];
+  const identity = {
+    id: 11,
+    documentId: 'identity-order',
+    updatedAt: '2026-07-30T06:00:00.000Z',
+    identityKey: 'ashley-wilde|fabric-order|order|da',
+    mappingStatus: 'verified',
+    evidenceStatus: 'verified_official',
+    mappingVersion: 'mapping-v1',
+    supplier: 'Ashley Wilde',
+    fabric,
+    fabricDocumentId: fabric.documentId,
+    supplierProductCode: 'ORDER',
+    supplierColourCode: 'DA',
+    fabricColourCode: 'ORDERDA',
+    officialColourName: 'Danube',
+    internalColourCode: 'DAN',
+    assets,
+  };
+  let reverse = false;
+  const strapi = {
+    entityService: {
+      findMany: async (uid) => {
+        if (uid === IDENTITY_UID) {
+          reverse = !reverse;
+          return [{ ...identity, assets: reverse ? [...assets].reverse() : [...assets] }];
+        }
+        if (uid === COLOUR_UID) return [];
+        throw new Error(`Unexpected findMany ${uid}`);
+      },
+    },
+  };
+  const mappings = {
+    codeRegistry: { codes: { DAN: { colourName: 'Danube' } } },
+    mappingVersion: 'mapping-v1',
+    mappingSource: 'test',
+  };
+
+  const first = await promotion.previewPromotion(strapi, { mappings });
+  const second = await promotion.previewPromotion(strapi, { mappings });
+
+  assert.equal(first.planFingerprint, second.planFingerprint);
+  assert.deepEqual(first.results[0].stagedAssetDocumentIds, ['asset-a', 'asset-b']);
+  assert.equal(first.results[0].stagedMediaId, 'media-a');
+});
+
 test('promotion commits a missing sibling after skipping the existing Colour on the same Fabric', async () => {
   const fabric = {
     id: 111,

@@ -16,11 +16,22 @@ function relationKey(value) { return value?.documentId || value?.id || value; }
 function entityRelationId(value) { return value?.id || value?.documentId || value; }
 function first(value) { return Array.isArray(value) ? value[0] : value; }
 function identityDocumentId(identity) { return identity.documentId || identity.id; }
+function stableEntityKey(value) {
+  return [
+    String(value?.documentId || ''),
+    String(value?.id || ''),
+    String(value?.assetType || ''),
+    String(value?.sha256 || ''),
+  ].join('|');
+}
+function stableEntities(values) {
+  return [...(values || [])].sort((left, right) => stableEntityKey(left).localeCompare(stableEntityKey(right)));
+}
 function existingFabricColour(identity) {
   const fabric = first(identity.fabric);
   const expectedName = normalizeCanonicalColourName(identity.officialColourName);
   if (!expectedName || !Array.isArray(fabric?.colours)) return null;
-  return fabric.colours.find((colour) => normalizeCanonicalColourName(colour?.name) === expectedName) || null;
+  return stableEntities(fabric.colours).find((colour) => normalizeCanonicalColourName(colour?.name) === expectedName) || null;
 }
 function existingColourScopeReasons(matching) {
   return matching?.alreadyLinkedToFabric ? ['colour_already_exists_for_fabric'] : [];
@@ -94,7 +105,7 @@ async function findMatchingColour(strapi, identity) {
   const linkedColour = existingFabricColour(identity);
   if (linkedColour) return { colour: linkedColour, conflict: false, priority: 'fabric_canonical_colour_name', alreadyLinkedToFabric: true };
   const rows = await strapi.entityService.findMany(COLOUR_UID, { populate: ['fabrics', 'thumbnail'], limit: 1000 });
-  for (const row of rows || []) {
+  for (const row of stableEntities(rows)) {
     if (exactLegacyIdentity(row, identity).exact) return { colour: row, conflict: false, priority: 'exact_legacy_identity', alreadyLinkedToFabric: hasFabric(row, first(identity.fabric)) };
   }
   // Colour records without the complete legacy identity are not evidence of a conflict.
@@ -141,7 +152,7 @@ function eligibility(identity, mappings) {
   if (!fabric || !fabric.documentId || String(fabric.documentId) !== String(identity.fabricDocumentId)) reasons.push('fabric_relation_not_unique_or_scalar_disagrees');
   const assets = Array.isArray(identity.assets) ? identity.assets : [];
   if (assets.some((asset) => asset.duplicateStatus === 'conflicting_image' || asset.conflictGroup)) reasons.push('unresolved_asset_conflict');
-  const approvedAssets = assets.filter((asset) => asset.importStatus === 'staged' && PROMOTABLE_ASSET_TYPES.has(asset.assetType) && (asset.media || asset.existingMedia));
+  const approvedAssets = stableEntities(assets.filter((asset) => asset.importStatus === 'staged' && PROMOTABLE_ASSET_TYPES.has(asset.assetType) && (asset.media || asset.existingMedia)));
   if (!approvedAssets.length) reasons.push('no_approved_promotable_asset');
   return { eligible: reasons.length === 0, reasons, approvedAssets };
 }

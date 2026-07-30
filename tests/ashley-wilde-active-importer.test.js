@@ -175,3 +175,10 @@ test('folder UI does not display zero-count analysis or allow stage before analy
   assert.match(source, /<button[^>]*disabled(?:\s|=)[^>]*>[^<]*<Upload[^>]*\/>Stage \{queuedFolder\.totalFiles\} file\(s\)/s);
   assert.match(source, /analysisToken:\s*batch\.analysisToken/);
 });
+
+test('folder staging continues after per-file failures and leaves only failed rows retryable', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/plugins/order-management/admin/src/components/AshleyWildeFolderImporter.jsx'), 'utf8');
+  assert.match(source, /const failures = \[\][\s\S]*for \(let index = 0; index < stagingRows\.length; index \+= 1\)[\s\S]*try \{[\s\S]*await stageAshleyRow/);
+  assert.match(source, /failures\.push\(\{ filename: row\.filename, relativePath: row\.relativePath, error: rowError \}\)/);
+  assert.match(source, /successfulPaths\.has\(row\.relativePath\) \? \{ \.\.\.row, status: 'already_complete' \} : row/);
+});
