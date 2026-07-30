@@ -121,7 +121,7 @@ test('promotion fingerprint is stable when Strapi returns staged relations in a 
     supplierColourCode: 'DA',
     fabricColourCode: 'ORDERDA',
     officialColourName: 'Danube',
-    internalColourCode: 'DAN',
+    internalColourCode: 'DA',
     assets,
   };
   let reverse = false;
@@ -149,6 +149,75 @@ test('promotion fingerprint is stable when Strapi returns staged relations in a 
   assert.equal(first.planFingerprint, second.planFingerprint);
   assert.deepEqual(first.results[0].stagedAssetDocumentIds, ['asset-a', 'asset-b']);
   assert.equal(first.results[0].stagedMediaId, 'media-a');
+});
+
+test('preview repairs a colliding staged code to the existing canonical code instead of blocking it', async () => {
+  const fabric = { id: 111, documentId: 'fabric-flax', name: 'Flax Fabric', colours: [] };
+  const identity = {
+    id: 11,
+    documentId: 'identity-flax-collision',
+    identityKey: 'ashley-wilde|fabric-flax|flax|fl',
+    mappingStatus: 'verified',
+    evidenceStatus: 'verified_official',
+    supplier: 'Ashley Wilde',
+    fabric,
+    fabricDocumentId: fabric.documentId,
+    supplierProductCode: 'FLAX',
+    supplierColourCode: 'FL',
+    fabricColourCode: 'FLAXFL',
+    officialColourName: 'Flax',
+    internalColourCode: 'FL',
+    assets: [{ id: 211, documentId: 'asset-flax-collision', importStatus: 'staged', duplicateStatus: 'unique', assetType: 'ordinary_colour', media: { id: 311, documentId: 'media-flax-collision' } }],
+  };
+  const strapi = { entityService: { findMany: async (uid) => uid === IDENTITY_UID ? [identity] : [] } };
+  const mappings = {
+    codeRegistry: { codes: { FL: { colourName: 'Flint' }, FX: { colourName: 'Flax' } } },
+    mappingVersion: 'mapping-v1',
+    mappingSource: 'test',
+  };
+
+  const preview = await promotion.previewPromotion(strapi, { mappings });
+
+  assert.equal(preview.summary.eligible, 1);
+  assert.equal(preview.summary.internalCodeCollisions?.length || 0, 0);
+  assert.equal(preview.results[0].internalColourCode, 'FX');
+  assert.equal(preview.results[0].internalCodeDecision, 'repair_to_canonical_code');
+  assert.doesNotMatch(preview.results[0].skippedReasons.join(','), /internal_code/);
+});
+
+test('preview deterministically generates a safe code for a verified colour missing from the registry', async () => {
+  const fabric = { id: 112, documentId: 'fabric-new-colour', name: 'New Colour Fabric', colours: [] };
+  const identity = {
+    id: 12,
+    documentId: 'identity-new-colour',
+    identityKey: 'ashley-wilde|fabric-new-colour|new|gd',
+    mappingStatus: 'verified',
+    evidenceStatus: 'verified_official',
+    supplier: 'Ashley Wilde',
+    fabric,
+    fabricDocumentId: fabric.documentId,
+    supplierProductCode: 'NEW',
+    supplierColourCode: 'GD',
+    fabricColourCode: 'NEWGD',
+    officialColourName: 'Galactic Dust',
+    internalColourCode: 'GD',
+    assets: [{ id: 212, documentId: 'asset-new-colour', importStatus: 'staged', duplicateStatus: 'unique', assetType: 'ordinary_colour', media: { id: 312, documentId: 'media-new-colour' } }],
+  };
+  const strapi = { entityService: { findMany: async (uid) => uid === IDENTITY_UID ? [identity] : [] } };
+  const mappings = {
+    codeRegistry: { codes: { GD: { colourName: 'Golden' } } },
+    mappingVersion: 'mapping-v1',
+    mappingSource: 'test',
+  };
+
+  const first = await promotion.previewPromotion(strapi, { mappings: structuredClone(mappings) });
+  const second = await promotion.previewPromotion(strapi, { mappings: structuredClone(mappings) });
+
+  assert.equal(first.summary.eligible, 1);
+  assert.match(first.results[0].internalColourCode, /^AW[A-F0-9]{8,}$/);
+  assert.equal(first.results[0].internalColourCode, second.results[0].internalColourCode);
+  assert.equal(first.planFingerprint, second.planFingerprint);
+  assert.equal(first.results[0].internalCodeDecision, 'generate_deterministic_code');
 });
 
 test('promotion commits a missing sibling after skipping the existing Colour on the same Fabric', async () => {
@@ -267,7 +336,7 @@ test('confirmed promotion writes Strapi Entity Service relation IDs and commits 
     supplierColourCode: 'DA',
     fabricColourCode: 'TUNBRIDGEDA',
     officialColourName: 'Danube',
-    internalColourCode: 'DAN',
+    internalColourCode: 'DA',
     promotedColour: null,
     assets: [asset],
   };
@@ -309,7 +378,10 @@ test('confirmed promotion writes Strapi Entity Service relation IDs and commits 
     version: { documentId: 'mapping-v1', version: 'mapping-v1' },
   });
   supplierMappings.loadRegistry = async () => ({
-    byCode: new Map([['DAN', { canonicalColourName: 'Danube' }]]),
+    byCode: new Map([
+      ['DA', { canonicalColourName: 'Dawn' }],
+      ['DAN', { canonicalColourName: 'Danube' }],
+    ]),
   });
 
   try {
@@ -338,6 +410,7 @@ test('confirmed promotion writes Strapi Entity Service relation IDs and commits 
     assert.deepEqual(colourCreate.options.data.fabrics, [fabric.id]);
     const identityUpdate = writes.find((write) => write.operation === 'update' && write.uid === IDENTITY_UID);
     assert.deepEqual(identityUpdate.options.data.promotedColour, { connect: [401] });
+    assert.equal(identityUpdate.options.data.internalColourCode, 'DAN');
     const assetUpdate = writes.find((write) => write.operation === 'update' && write.uid === ASSET_UID);
     assert.equal(assetUpdate.options.data.importStatus, 'promoted');
   } finally {

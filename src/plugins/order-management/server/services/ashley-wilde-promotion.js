@@ -27,6 +27,44 @@ function stableEntityKey(value) {
 function stableEntities(values) {
   return [...(values || [])].sort((left, right) => stableEntityKey(left).localeCompare(stableEntityKey(right)));
 }
+function registryEntries(mappings) {
+  return Object.entries(mappings?.codeRegistry?.codes || {})
+    .map(([code, entry]) => [normalizeToken(code), entry])
+    .filter(([code, entry]) => code && entry?.colourName)
+    .sort(([left], [right]) => left.localeCompare(right));
+}
+function resolveInternalColourCode(identity, mappings) {
+  const officialName = normalizeCanonicalColourName(identity.officialColourName);
+  const currentCode = normalizeToken(identity.internalColourCode);
+  const entries = registryEntries(mappings);
+  const currentOwner = entries.find(([code]) => code === currentCode)?.[1];
+  if (currentCode && normalizeCanonicalColourName(currentOwner?.colourName) === officialName) {
+    return { code: currentCode, repaired: false, generated: false };
+  }
+  const canonical = entries.find(([, entry]) => normalizeCanonicalColourName(entry.colourName) === officialName);
+  if (canonical) return { code: canonical[0], repaired: canonical[0] !== currentCode, generated: false };
+
+  const digest = crypto.createHash('sha256').update(officialName || key(identity.officialColourName), 'utf8').digest('hex').toUpperCase();
+  for (let length = 8; length <= digest.length; length += 2) {
+    const candidate = `AW${digest.slice(0, length)}`;
+    const owner = entries.find(([code]) => code === candidate)?.[1];
+    if (!owner || normalizeCanonicalColourName(owner.colourName) === officialName) {
+      mappings.codeRegistry.codes[candidate] = { colourName: identity.officialColourName, generated: true };
+      return { code: candidate, repaired: candidate !== currentCode, generated: true };
+    }
+  }
+  throw new Error(`Unable to allocate a deterministic internal colour code for ${identity.officialColourName}`);
+}
+function reconcileIdentityInternalCode(identity, mappings) {
+  const resolution = resolveInternalColourCode(identity, mappings);
+  return {
+    ...identity,
+    storedInternalColourCode: identity.internalColourCode || null,
+    internalColourCode: resolution.code,
+    internalCodeReconciled: resolution.repaired,
+    internalCodeGenerated: resolution.generated,
+  };
+}
 function existingFabricColour(identity) {
   const fabric = first(identity.fabric);
   const expectedName = normalizeCanonicalColourName(identity.officialColourName);
@@ -171,6 +209,7 @@ function buildPlan(identity, matching, eligible, scopeReasons = []) {
     fabricColourCode: identity.fabricColourCode,
     officialColourName: identity.officialColourName,
     internalColourCode: identity.internalColourCode,
+    internalCodeDecision: identity.internalCodeReconciled ? (identity.internalCodeGenerated ? 'generate_deterministic_code' : 'repair_to_canonical_code') : 'reuse_verified_code',
     mappingStatus: identity.mappingStatus,
     evidenceStatus: identity.evidenceStatus,
     action: matching.conflict ? 'promotion_conflict' : colour ? 'match_existing_colour' : 'create_colour',
@@ -201,6 +240,7 @@ function identitySnapshot(identity) {
     supplierColourCode: identity.supplierColourCode || null,
     fabricColourCode: identity.fabricColourCode || null,
     officialColourName: identity.officialColourName || null,
+    storedInternalColourCode: identity.storedInternalColourCode ?? identity.internalColourCode ?? null,
     internalColourCode: identity.internalColourCode || null,
     promotedColour: relationKey(identity.promotedColour) || null,
     assets: (identity.assets || []).map((asset) => ({ documentId: asset.documentId || asset.id, updatedAt: asset.updatedAt || null, sha256: asset.sha256 || null, importStatus: asset.importStatus || null, duplicateStatus: asset.duplicateStatus || null, media: relationKey(asset.media) || relationKey(asset.existingMedia) || null })).sort((a, b) => String(a.documentId).localeCompare(String(b.documentId))),
@@ -229,8 +269,11 @@ async function scopedIdentities(strapi, options = {}) {
 
 async function previewPromotion(strapi, options = {}) {
   const allIdentities = await scopedIdentities(strapi, options);
-  const identities = (allIdentities || []).filter((identity) => identity.mappingStatus === 'verified');
   const mappings = options.mappings || await loadPromotionMappings(strapi);
+  const identities = (allIdentities || [])
+    .filter((identity) => identity.mappingStatus === 'verified')
+    .map((identity) => reconcileIdentityInternalCode(identity, mappings));
+  const reconciledById = new Map(identities.map((identity) => [identityDocumentId(identity), identity]));
   const validation = validateIdentitySet(identities);
   const results = [];
   for (const identity of identities) {
@@ -263,7 +306,7 @@ async function previewPromotion(strapi, options = {}) {
     internalCodeCollisions: validation.internalCodeCollisions,
   };
   const expiresAt = new Date(Date.now() + PLAN_TTL_MS).toISOString();
-  const snapshot = (allIdentities || []).map(identitySnapshot).sort((a, b) => String(a.identityDocumentId).localeCompare(String(b.identityDocumentId)));
+  const snapshot = (allIdentities || []).map((identity) => identitySnapshot(reconciledById.get(identityDocumentId(identity)) || identity)).sort((a, b) => String(a.identityDocumentId).localeCompare(String(b.identityDocumentId)));
   const scope = { supplier: SUPPLIER, supplierProductCode: options.supplierProductCode || null, fabricName: options.fabricName || null, identityDocumentIds: Array.isArray(options.identityDocumentIds) ? [...options.identityDocumentIds].sort() : null };
   const planFingerprint = stableFingerprint({ scope, mappingVersion: mappings.mappingVersion || null, snapshot, results: orderedResults });
   return { planFingerprint, planExpiresAt: expiresAt, scope, mappingVersion: mappings.mappingVersion || null, mappingSource: mappings.mappingSource || null, identityDocumentIds: identities.map(identityDocumentId), snapshot, summary, results: orderedResults, committed: false };
@@ -275,15 +318,15 @@ async function inTransaction(strapi, callback) {
 }
 
 async function promoteIdentity(strapi, identityId, options = {}) {
-  const identity = await loadIdentity(strapi, identityId);
   const mappings = options.mappings || await loadPromotionMappings(strapi);
+  const identity = reconcileIdentityInternalCode(await loadIdentity(strapi, identityId), mappings);
   const eligible = eligibility(identity, mappings);
   const matching = await findMatchingColour(strapi, identity);
   const scopeReasons = [...(options.scopeReasons || []), ...existingColourScopeReasons(matching)];
   const plan = buildPlan(identity, matching, eligible, scopeReasons);
   if (options.commit !== true || !plan.eligible) return { ...plan, committed: false };
   const result = await inTransaction(strapi, async (trx) => {
-    const latest = await loadIdentity(strapi, identity.id);
+    const latest = reconcileIdentityInternalCode(await loadIdentity(strapi, identity.id), mappings);
     const latestEligible = eligibility(latest, mappings);
     if (!latestEligible.eligible) throw new Error(`Promotion eligibility changed: ${latestEligible.reasons.join(', ')}`);
     const latestMatching = await findMatchingColour(strapi, latest);
@@ -304,7 +347,11 @@ async function promoteIdentity(strapi, identityId, options = {}) {
     }
     const promotedRelationId = entityRelationId(colour);
     const promotedId = colour.documentId || colour.id;
-    await strapi.entityService.update(IDENTITY_UID, latest.id, { data: { mappingStatus: 'promoted', promotedColour: { connect: [promotedRelationId] } }, transacting: trx });
+    await strapi.entityService.update(IDENTITY_UID, latest.id, { data: {
+      mappingStatus: 'promoted',
+      promotedColour: { connect: [promotedRelationId] },
+      ...(latest.internalCodeReconciled ? { internalColourCode: latest.internalColourCode } : {}),
+    }, transacting: trx });
     for (const assetItem of latestEligible.approvedAssets) await strapi.entityService.update(ASSET_UID, assetItem.id, { data: { importStatus: 'promoted' }, transacting: trx });
     return { colour, colourWasCreated, promotedId, latest };
   });
@@ -328,7 +375,9 @@ async function promoteVerified(strapi, options = {}) {
     if (expected !== current.identityDocumentIds.slice().sort().join('|')) throw new Error('The promotion scope no longer matches the approved preview. Run Preview promotion again.');
   }
   const identities = await scopedIdentities(strapi, options);
-  const verified = (identities || []).filter((identity) => identity.mappingStatus === 'verified');
+  const verified = (identities || [])
+    .filter((identity) => identity.mappingStatus === 'verified')
+    .map((identity) => reconcileIdentityInternalCode(identity, mappings));
   const validation = validateIdentitySet(verified);
   const results = [];
   for (const identity of verified) {
