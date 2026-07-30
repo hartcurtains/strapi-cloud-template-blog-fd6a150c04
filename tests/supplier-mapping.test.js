@@ -69,6 +69,60 @@ test('supplier colour codes stay product-scoped across fabrics, including MI →
   assert.equal(preview.validationSummary.productScopedSupplierCodeReuse.length, 1);
 });
 
+test('stale approved registry collisions cannot override deterministic Flax, Flint, and Noir codes', async () => {
+  const { strapi } = harness({
+    fabrics: [
+      fabric('fabric-collier', 'Collier', 'COLLIER'),
+      fabric('fabric-leonard', 'Leonard', 'LEONARD'),
+    ],
+    registry: [
+      { id: 1, canonicalColourName: 'Flax', normalizedColourName: 'flax', internalColourCode: 'FL', normalizedInternalCode: 'FL', status: 'approved' },
+      { id: 2, canonicalColourName: 'Noir', normalizedColourName: 'noir', internalColourCode: 'NO', normalizedInternalCode: 'NO', status: 'approved' },
+    ],
+  });
+  const preview = await mapping.validateDocument(strapi, document([
+    {
+      fabricName: 'Collier',
+      supplierProductCode: 'COLLIER',
+      colours: [
+        colour('FL', 'Flax', 'FX', { supplierProductCode: 'COLLIER' }),
+        colour('NO', 'Noir', 'N', { supplierProductCode: 'COLLIER' }),
+      ],
+    },
+    {
+      fabricName: 'Leonard',
+      supplierProductCode: 'LEONARD',
+      colours: [colour('FL', 'Flint', 'FL', { supplierProductCode: 'LEONARD' })],
+    },
+  ]));
+
+  assert.equal(preview.validationSummary.valid, true);
+  assert.deepEqual(preview.rows.map((row) => [row.fabricColourCode, row.officialColourName, row.internalColourCode]), [
+    ['COLLIERFL', 'Flax', 'FX'],
+    ['COLLIERNO', 'Noir', 'N'],
+    ['LEONARDFL', 'Flint', 'FL'],
+  ]);
+  assert.equal(preview.validationSummary.productScopedSupplierCodeReuse.length, 1);
+  assert.equal(preview.issues.some((issue) => issue.type === 'mapping_identity_conflict'), false);
+});
+
+test('a submitted collision-free code is retained before falling back to the supplier code', async () => {
+  const { strapi } = harness({
+    fabrics: [fabric('fabric-new', 'New Fabric', 'NEWFAB')],
+    colourCodes: [{ code: 'AB', name: 'Amber' }],
+  });
+  const preview = await mapping.validateDocument(strapi, document([
+    {
+      fabricName: 'New Fabric',
+      supplierProductCode: 'NEWFAB',
+      colours: [colour('AB', 'Abyss', 'AY', { supplierProductCode: 'NEWFAB' })],
+    },
+  ]));
+
+  assert.equal(preview.validationSummary.valid, true);
+  assert.equal(preview.rows[0].internalColourCode, 'AY');
+});
+
 test('existing canonical codes are reused and provisional submitted conflicts are reconciled', async () => {
   const { strapi } = harness({
     fabrics: [fabric('fabric-sage', 'Sage Fabric', 'SAGEFAB')],

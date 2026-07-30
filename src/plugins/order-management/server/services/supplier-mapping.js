@@ -225,22 +225,44 @@ async function loadRegistry(strapi, supplier) {
   const colourCodeRows = await strapi.entityService.findMany(COLOR_CODE_UID, { filters: {}, publicationState: 'preview', limit: 10000 });
   const byCode = new Map();
   const byName = new Map();
-  const add = (entry, prefer = false) => {
+  const conflicts = [];
+  const add = (entry) => {
     const code = codeKey(entry.internalColourCode);
     const name = normalizeCanonicalColourName(entry.canonicalColourName);
     if (!code || !name) return;
-    if (prefer || !byCode.has(code)) byCode.set(code, entry);
-    if (prefer || !byName.has(name)) byName.set(name, entry);
+    const codeOwner = byCode.get(code);
+    const nameOwner = byName.get(name);
+    const codeOwnerName = normalizeCanonicalColourName(codeOwner?.canonicalColourName);
+    const nameOwnerCode = codeKey(nameOwner?.internalColourCode);
+    if ((codeOwner && codeOwnerName !== name) || (nameOwner && nameOwnerCode !== code)) {
+      conflicts.push({ rejected: entry, codeOwner: codeOwner || null, nameOwner: nameOwner || null });
+      return;
+    }
+    if (!codeOwner) byCode.set(code, entry);
+    if (!nameOwner) byName.set(name, entry);
   };
-  for (const row of colourCodeRows || []) add({ internalColourCode: row.code, canonicalColourName: row.name, source: 'Strapi ColorCode collection', locked: false });
-  for (const row of registryRows || []) add({ internalColourCode: row.normalizedInternalCode || row.internalColourCode, canonicalColourName: row.normalizedColourName || row.canonicalColourName, displayColourName: row.canonicalColourName, source: row.source || 'approved Strapi canonical colour registry', locked: true, registry: row }, true);
+
+  // The checked-in Ashley Wilde registry is the stable global namespace.
+  // Database rows may add colours, but cannot redefine an existing name or code.
   if (nameKey(supplier) === nameKey('Ashley Wilde')) {
     try {
       const fallback = loadProductionMappings({ mode: 'production' }).codeRegistry.codes || {};
       for (const [code, entry] of Object.entries(fallback)) add({ internalColourCode: code, canonicalColourName: entry.colourName, source: 'approved repository registry', locked: true });
     } catch { /* repository fallback is optional for non-Ashley or incomplete installs */ }
   }
-  return { byCode, byName, registryRows: registryRows || [] };
+  const orderedRegistryRows = [...(registryRows || [])].sort((left, right) => [
+    normalizeCanonicalColourName(left.normalizedColourName || left.canonicalColourName),
+    codeKey(left.normalizedInternalCode || left.internalColourCode),
+    String(left.documentId || left.id || ''),
+  ].join('|').localeCompare([
+    normalizeCanonicalColourName(right.normalizedColourName || right.canonicalColourName),
+    codeKey(right.normalizedInternalCode || right.internalColourCode),
+    String(right.documentId || right.id || ''),
+  ].join('|')));
+  for (const row of orderedRegistryRows) add({ internalColourCode: row.normalizedInternalCode || row.internalColourCode, canonicalColourName: row.normalizedColourName || row.canonicalColourName, displayColourName: row.canonicalColourName, source: row.source || 'approved Strapi canonical colour registry', locked: true, registry: row });
+  const orderedColourCodeRows = [...(colourCodeRows || [])].sort((left, right) => `${codeKey(left.code)}|${normalizeCanonicalColourName(left.name)}`.localeCompare(`${codeKey(right.code)}|${normalizeCanonicalColourName(right.name)}`));
+  for (const row of orderedColourCodeRows) add({ internalColourCode: row.code, canonicalColourName: row.name, source: 'Strapi ColorCode collection', locked: false });
+  return { byCode, byName, registryRows: registryRows || [], conflicts };
 }
 
 function addIssue(issues, type, message, rowIndex = null, details = null) {
@@ -305,21 +327,32 @@ function reconcileInternalCodes(rows, registry) {
     const representative = group.slice().sort((left, right) => `${codeKey(left.supplierProductCode)}|${codeKey(left.supplierColourCode)}|${left.rowIndex}`.localeCompare(`${codeKey(right.supplierProductCode)}|${codeKey(right.supplierColourCode)}|${right.rowIndex}`))[0];
     const existing = byName.get(canonicalName);
     const submittedCode = codeKey(representative.incomingInternalColourCode);
-    let resolvedCode = existing ? codeKey(existing.internalColourCode) : null;
-    let allocationReason = existing ? 'approved_registry_code_reused' : null;
+    const existingCode = codeKey(existing?.internalColourCode);
+    const existingCodeOwner = existingCode ? byCode.get(existingCode) : null;
+    const existingIsSafe = Boolean(existingCode) && (!existingCodeOwner || normalizeCanonicalColourName(existingCodeOwner.canonicalColourName) === canonicalName);
+    const safeExisting = existingIsSafe ? existing : null;
+    let resolvedCode = safeExisting ? existingCode : null;
+    let allocationReason = safeExisting ? 'approved_registry_code_reused' : null;
+    if (!resolvedCode && submittedCode) {
+      const submittedOwner = byCode.get(submittedCode);
+      if (!submittedOwner || normalizeCanonicalColourName(submittedOwner.canonicalColourName) === canonicalName) {
+        resolvedCode = submittedCode;
+        allocationReason = existing ? 'approved_registry_collision_repaired' : 'submitted_code_reused';
+      }
+    }
     if (!resolvedCode) {
       const supplierCode = codeKey(representative.supplierColourCode);
       const supplierOwner = supplierCode ? byCode.get(supplierCode) : null;
       if (!supplierOwner || normalizeCanonicalColourName(supplierOwner.canonicalColourName) === canonicalName) {
         resolvedCode = supplierCode;
-        allocationReason = supplierCode ? 'supplier_code_reused' : null;
+        allocationReason = existing ? 'approved_registry_collision_repaired' : (supplierCode ? 'supplier_code_reused' : null);
       }
     }
     if (!resolvedCode) {
       resolvedCode = allocateInternalCode(representative.officialColourName, representative.supplierColourCode, new Set(byCode.keys()), new Map([...byCode.entries()].map(([code, entry]) => [code, normalizeCanonicalColourName(entry.canonicalColourName)])));
-      allocationReason = 'deterministic_internal_code_allocated';
+      allocationReason = existing ? 'approved_registry_collision_repaired' : 'deterministic_internal_code_allocated';
     }
-    const resolvedEntry = { internalColourCode: resolvedCode, canonicalColourName: representative.officialColourName, source: existing?.source || 'mapping preview allocation', locked: Boolean(existing?.locked) };
+    const resolvedEntry = { internalColourCode: resolvedCode, canonicalColourName: representative.officialColourName, source: safeExisting?.source || 'mapping preview allocation', locked: Boolean(safeExisting?.locked) };
     byName.set(canonicalName, resolvedEntry);
     byCode.set(resolvedCode, resolvedEntry);
     for (const row of group) {
@@ -328,9 +361,11 @@ function reconcileInternalCodes(rows, registry) {
       const submittedOwner = incoming ? byCode.get(incoming) : null;
       const submittedName = submittedOwner ? normalizeCanonicalColourName(submittedOwner.canonicalColourName) : null;
       let reason = null;
-      if (incoming !== resolvedCode) {
+      if (existing && !existingIsSafe) {
+        reason = 'approved_registry_collision_repaired';
+      } else if (incoming !== resolvedCode) {
         if (submittedOwner && submittedName !== canonicalName) reason = 'submitted_code_belongs_to_different_canonical_colour';
-        else if (existing) reason = 'approved_registry_code_reused';
+        else if (safeExisting) reason = 'approved_registry_code_reused';
         else if (allocationReason === 'deterministic_internal_code_allocated') reason = 'deterministic_internal_code_allocated';
         else reason = 'internal_code_reconciled';
       } else if (!incoming && allocationReason === 'deterministic_internal_code_allocated') {
@@ -342,10 +377,11 @@ function reconcileInternalCodes(rows, registry) {
         resolvedInternalColourCode: resolvedCode,
         canonicalColourName: row.officialColourName,
         submittedCodeOwner: submittedOwner ? { internalColourCode: submittedOwner.internalColourCode, canonicalColourName: submittedOwner.canonicalColourName, source: submittedOwner.source } : null,
-        resolvedFrom: existing ? existing.source : allocationReason,
+        resolvedFrom: safeExisting ? safeExisting.source : allocationReason,
+        rejectedRegistryAssignment: existing && !existingIsSafe ? { internalColourCode: existing.internalColourCode, canonicalColourName: existing.canonicalColourName, source: existing.source } : null,
         submittedEvidence: row.submittedReconciliationEvidence || null,
       };
-      row.reusedExistingGlobalColour = Boolean(existing);
+      row.reusedExistingGlobalColour = Boolean(safeExisting);
       if (reason) reconciliations.push({
         rowIndex: row.rowIndex,
         supplierProductCode: row.supplierProductCode,
