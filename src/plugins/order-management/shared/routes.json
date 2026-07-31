@@ -12,6 +12,8 @@
   "ashleyWildePromote": "/order-management/ashley-wilde/promote",
   "ashleyWildePromotionPreview": "/order-management/ashley-wilde/promote/preview",
   "ashleyWildePromotionApply": "/order-management/ashley-wilde/promote/apply",
+  "ashleyWildeLegacyColourCleanupPreview": "/order-management/ashley-wilde/legacy-colours/cleanup/preview",
+  "ashleyWildeLegacyColourCleanupApply": "/order-management/ashley-wilde/legacy-colours/cleanup/apply",
   "supplierMappings": "/order-management/supplier-colour-mappings",
   "supplierMappingsUpload": "/order-management/supplier-colour-mappings/upload",
   "supplierMappingsApply": "/order-management/supplier-colour-mappings/apply",

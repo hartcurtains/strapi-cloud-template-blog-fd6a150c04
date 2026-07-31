@@ -34,6 +34,14 @@ function hasAshleyWildePromotionPermission(ctx) {
   return subjects.every((subject) => ability.can(createAction, subject) || ability.can(updateAction, subject));
 }
 
+function hasAshleyWildeLegacyCleanupPermission(ctx) {
+  const ability = ctx?.state?.catalogWriteAuth?.ability;
+  if (!ability || typeof ability.can !== 'function') return true;
+  const subject = 'api::colour.colour';
+  return ability.can('plugin::content-manager.explorer.delete', subject)
+    && ability.can('plugin::content-manager.explorer.update', subject);
+}
+
 function logAshleyWildeUpload(ctx, stage) {
   const files = ctx?.request?.files?.files;
   const fileArray = Array.isArray(files) ? files : (files ? [files] : []);
@@ -1430,6 +1438,44 @@ module.exports = {
     } catch (error) {
       ctx.status = error.status === 403 ? 403 : 409;
       ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Ashley Wilde promotion could not be applied safely' } };
+    }
+  },
+
+  async previewAshleyWildeLegacyColourCleanup(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    if (!hasAshleyWildeLegacyCleanupPermission(ctx)) {
+      ctx.status = 403;
+      ctx.body = { success: false, error: { status: 403, message: 'The signed-in administrator lacks permission to clean up legacy Colours.' } };
+      return;
+    }
+    try {
+      const cleanup = require('../services/ashley-wilde-legacy-colour-cleanup');
+      ctx.body = { success: true, preview: true, data: await cleanup.previewCleanup(strapi, ctx.request.body || {}) };
+    } catch (error) {
+      ctx.status = error.status === 403 ? 403 : 400;
+      ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Legacy Colour cleanup preview could not be completed safely.' } };
+    }
+  },
+
+  async applyAshleyWildeLegacyColourCleanup(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    if (!hasAshleyWildeLegacyCleanupPermission(ctx)) {
+      ctx.status = 403;
+      ctx.body = { success: false, error: { status: 403, message: 'The signed-in administrator lacks permission to clean up legacy Colours.' } };
+      return;
+    }
+    try {
+      const body = ctx.request.body || {};
+      if (!(body.confirm === true || body.confirm === 'true')) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: { status: 400, message: 'Explicit confirmation is required to remove unlinked legacy Colours.' } };
+        return;
+      }
+      const cleanup = require('../services/ashley-wilde-legacy-colour-cleanup');
+      ctx.body = { success: true, preview: false, data: await cleanup.applyCleanup(strapi, { ...body, confirm: true }) };
+    } catch (error) {
+      ctx.status = error.status === 403 ? 403 : 409;
+      ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Legacy Colour cleanup could not be applied safely.' } };
     }
   },
 

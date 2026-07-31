@@ -14,6 +14,7 @@ const routeSource = fs.readFileSync(path.join(root, 'server', 'routes', 'index.j
 const controllerSource = fs.readFileSync(path.join(root, 'server', 'controllers', 'import-export.js'), 'utf8');
 const importerServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
 const promotionServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-promotion.js'), 'utf8');
+const legacyCleanupServiceSource = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-legacy-colour-cleanup.js'), 'utf8');
 const productPageSource = fs.readFileSync(path.join(root, 'admin', 'src', 'pages', 'ProductManagementPage.jsx'), 'utf8');
 const uploadDiagnosticsSource = fs.readFileSync(path.join(process.cwd(), 'src', 'middlewares', 'ashley-upload-diagnostics.ts'), 'utf8');
 const middlewareConfigSource = fs.readFileSync(path.join(process.cwd(), 'config', 'middlewares.ts'), 'utf8');
@@ -105,6 +106,22 @@ test('Ashley Wilde All Fabrics promotion skips existing Colours individually', (
   assert.match(promotionServiceSource, /colour_already_exists_for_fabric/);
   assert.match(promotionServiceSource, /fabric\.colours/);
   assert.match(promotionServiceSource, /populate:\s*\[[^\]]*'fabric\.colours'/);
+});
+
+test('Ashley Wilde legacy cleanup is preview-gated and preserves identity-linked Colours and Media', () => {
+  for (const routeKey of ['ashleyWildeLegacyColourCleanupPreview', 'ashleyWildeLegacyColourCleanupApply']) {
+    assert.ok(sharedRoutes[routeKey], `missing shared route ${routeKey}`);
+    assert.match(routeSource, new RegExp(`path: relativePath\\(adminCatalogRoutes\\.${routeKey}\\)[\\s\\S]{0,260}global::ashley-wilde-admin`));
+  }
+  assert.match(controllerSource, /plugin::content-manager\.explorer\.delete/);
+  assert.match(productPageSource, /Preview legacy cleanup/);
+  assert.match(productPageSource, /Remove reviewed legacy Colours/);
+  assert.match(productPageSource, /Media deleted:/);
+  assert.match(legacyCleanupServiceSource, /protectedPairs/);
+  assert.match(legacyCleanupServiceSource, /identityLinkedAssociationsPreserved/);
+  assert.match(legacyCleanupServiceSource, /mediaRecordsToDelete:\s*0/);
+  assert.match(legacyCleanupServiceSource, /planFingerprint/);
+  assert.match(legacyCleanupServiceSource, /preview is stale/);
 });
 
 test('Ashley Wilde production multipart staging is retired without changing generic bulk upload routing', () => {

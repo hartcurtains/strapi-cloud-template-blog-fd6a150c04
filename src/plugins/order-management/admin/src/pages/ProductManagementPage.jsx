@@ -48,6 +48,11 @@ export default function ProductManagementPage() {
   const [promotionBusy, setPromotionBusy] = useState(false);
   const [promotionError, setPromotionError] = useState('');
   const [promotionConfirmOpen, setPromotionConfirmOpen] = useState(false);
+  const [legacyCleanupPreview, setLegacyCleanupPreview] = useState(null);
+  const [legacyCleanupBusy, setLegacyCleanupBusy] = useState(false);
+  const [legacyCleanupError, setLegacyCleanupError] = useState('');
+  const [legacyCleanupSuccess, setLegacyCleanupSuccess] = useState('');
+  const [legacyCleanupConfirmOpen, setLegacyCleanupConfirmOpen] = useState(false);
 
   // Product types configuration
   const productTypes = {
@@ -1595,6 +1600,51 @@ export default function ProductManagementPage() {
     }
   };
 
+  const previewAshleyWildeLegacyCleanup = async () => {
+    setLegacyCleanupBusy(true);
+    setLegacyCleanupError('');
+    setLegacyCleanupSuccess('');
+    setLegacyCleanupPreview(null);
+    try {
+      const response = await adminPost(adminCatalogRoutes.ashleyWildeLegacyColourCleanupPreview, {
+        supplier: promotionScope.supplier,
+        fabricName: promotionScope.fabricName,
+      });
+      setLegacyCleanupPreview(response.data?.data || response.data);
+    } catch (error) {
+      setLegacyCleanupError(promotionErrorMessage(error));
+    } finally {
+      setLegacyCleanupBusy(false);
+    }
+  };
+
+  const applyAshleyWildeLegacyCleanup = async () => {
+    if (!legacyCleanupPreview) return;
+    setLegacyCleanupBusy(true);
+    setLegacyCleanupError('');
+    setLegacyCleanupSuccess('');
+    try {
+      const response = await adminPost(adminCatalogRoutes.ashleyWildeLegacyColourCleanupApply, {
+        supplier: promotionScope.supplier,
+        fabricName: promotionScope.fabricName,
+        confirm: true,
+        planFingerprint: legacyCleanupPreview.planFingerprint,
+        planExpiresAt: legacyCleanupPreview.planExpiresAt,
+        operationKeys: legacyCleanupPreview.operationKeys,
+      });
+      const result = response.data?.data || response.data;
+      setLegacyCleanupConfirmOpen(false);
+      setLegacyCleanupPreview(null);
+      setPromotionPreview(null);
+      setLegacyCleanupSuccess(`Cleanup complete: ${result.summary?.unlinkedAssociationsToRemove || 0} unlinked Colour association(s) removed; ${result.summary?.identityLinkedAssociationsPreserved || 0} identity-linked association(s) preserved.`);
+      await fetchProducts();
+    } catch (error) {
+      setLegacyCleanupError(promotionErrorMessage(error));
+    } finally {
+      setLegacyCleanupBusy(false);
+    }
+  };
+
   return (
     <div>
       <style>{spinnerStyle}</style>
@@ -1680,12 +1730,12 @@ export default function ProductManagementPage() {
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginTop: '18px' }}>
           <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Supplier
-            <select value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
+            <select value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
               <option value="Ashley Wilde">Ashley Wilde</option>
             </select>
           </label>
           <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Fabric
-            <select value={promotionScope.fabricName} onChange={(event) => { setPromotionScope({ ...promotionScope, fabricName: event.target.value }); setPromotionPreview(null); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
+            <select value={promotionScope.fabricName} onChange={(event) => { setPromotionScope({ ...promotionScope, fabricName: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
               <option value="">All Fabrics</option>
               {(products.fabrics || []).map((fabric) => <option key={fabric.documentId || fabric.id} value={fabric.name}>{fabric.name}</option>)}
             </select>
@@ -1706,6 +1756,32 @@ export default function ProductManagementPage() {
           <div style={{ marginTop: '10px', fontSize: '11px', color: '#64748b' }}>Plan fingerprint: {promotionPreview.planFingerprint}</div>
           {promotionPreview.results?.length > 0 && <div style={{ marginTop: '12px', maxHeight: '220px', overflow: 'auto', fontSize: '12px' }}>{promotionPreview.results.map((item) => <div key={item.identityDocumentId} style={{ padding: '6px 0', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', gap: '8px' }}><span>{item.fabricColourCode} — {item.officialColourName}</span><span style={{ color: item.eligible ? '#047857' : '#b91c1c', fontWeight: 700 }}>{item.eligible ? item.colourDecision : `Blocked: ${(item.skippedReasons || []).join(', ')}`}</span></div>)}</div>}
         </div>}
+        <div style={{ marginTop: '22px', paddingTop: '18px', borderTop: '1px solid #fecaca' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
+            <div>
+              <h3 style={{ margin: '0 0 5px', color: '#991b1b', fontSize: '16px' }}>Remove unlinked legacy Colours</h3>
+              <p style={{ margin: 0, color: '#64748b', fontSize: '12px', maxWidth: '680px' }}>Targets only Colour–Fabric associations with no Fabric colour identity promotion link. Promoted Colours and upload-media records are always preserved; shared Colours are disconnected instead of deleted.</p>
+            </div>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+              <button type="button" onClick={previewAshleyWildeLegacyCleanup} disabled={legacyCleanupBusy} style={{ background: '#fff', color: '#b91c1c', border: '1px solid #ef4444', borderRadius: '8px', padding: '9px 13px', fontWeight: 700, cursor: legacyCleanupBusy ? 'wait' : 'pointer', opacity: legacyCleanupBusy ? 0.55 : 1 }}>Preview legacy cleanup</button>
+              <button type="button" onClick={() => setLegacyCleanupConfirmOpen(true)} disabled={legacyCleanupBusy || !legacyCleanupPreview?.summary?.unlinkedAssociationsToRemove} style={{ background: '#b91c1c', color: '#fff', border: 0, borderRadius: '8px', padding: '9px 13px', fontWeight: 700, cursor: legacyCleanupPreview?.summary?.unlinkedAssociationsToRemove ? 'pointer' : 'not-allowed', opacity: legacyCleanupBusy || !legacyCleanupPreview?.summary?.unlinkedAssociationsToRemove ? 0.55 : 1 }}>Remove reviewed legacy Colours</button>
+            </div>
+          </div>
+          {legacyCleanupError && <div style={{ marginTop: '10px', color: '#b91c1c', fontSize: '13px' }}>{legacyCleanupError}</div>}
+          {legacyCleanupSuccess && <div style={{ marginTop: '10px', color: '#047857', fontSize: '13px', fontWeight: 700 }}>{legacyCleanupSuccess}</div>}
+          {legacyCleanupPreview && <div style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: '#fff7ed', border: '1px solid #fed7aa' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', fontSize: '13px', color: '#7c2d12' }}>
+              <span>Fabrics scanned: <strong>{legacyCleanupPreview.summary?.fabricsScanned ?? 0}</strong></span>
+              <span>Unlinked associations: <strong>{legacyCleanupPreview.summary?.unlinkedAssociationsToRemove ?? 0}</strong></span>
+              <span>Linked preserved: <strong>{legacyCleanupPreview.summary?.identityLinkedAssociationsPreserved ?? 0}</strong></span>
+              <span>Colour rows deleted: <strong>{legacyCleanupPreview.summary?.colourRecordsToDelete ?? 0}</strong></span>
+              <span>Shared rows disconnected: <strong>{legacyCleanupPreview.summary?.sharedColourRecordsToDisconnect ?? 0}</strong></span>
+              <span>Media deleted: <strong>{legacyCleanupPreview.summary?.mediaRecordsToDelete ?? 0}</strong></span>
+            </div>
+            <div style={{ marginTop: '10px', fontSize: '11px', color: '#9a3412' }}>Cleanup fingerprint: {legacyCleanupPreview.planFingerprint}</div>
+            {legacyCleanupPreview.results?.length > 0 && <div style={{ marginTop: '12px', maxHeight: '180px', overflow: 'auto', fontSize: '12px' }}>{legacyCleanupPreview.results.map((item) => <div key={item.operationKey} style={{ padding: '6px 0', borderTop: '1px solid #fed7aa', display: 'flex', justifyContent: 'space-between', gap: '8px' }}><span>{item.colourName || item.colourDocumentId} — {item.targetFabrics?.map((fabric) => fabric.name).join(', ')}</span><span style={{ color: '#b91c1c', fontWeight: 700 }}>{item.action === 'delete_colour' ? 'delete Colour row' : 'disconnect Fabric only'}</span></div>)}</div>}
+          </div>}
+        </div>
       </div>
 
       {promotionConfirmOpen && promotionPreview && <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
@@ -1713,6 +1789,15 @@ export default function ProductManagementPage() {
           <h3 style={{ marginTop: 0, color: '#0f172a' }}>Confirm exact promotion scope</h3>
           <p style={{ color: '#475569', fontSize: '14px' }}>Promote {promotionPreview.summary?.eligible || 0} missing verified staged identities for {promotionScope.supplier}, {promotionScope.fabricName ? `Fabric “${promotionScope.fabricName}”` : 'all Fabrics'}, {promotionScope.supplierProductCode ? `product code “${promotionScope.supplierProductCode}”` : 'all staged product codes'}. Existing Colours for each Fabric will be skipped individually; the reviewed plan will reuse staged media and will not overwrite existing Colours or images.</p>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}><button type="button" onClick={() => setPromotionConfirmOpen(false)} style={{ padding: '9px 13px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>Cancel</button><button type="button" onClick={applyAshleyWildePromotion} disabled={promotionBusy} style={{ padding: '9px 13px', border: 0, borderRadius: '8px', background: '#047857', color: '#fff', fontWeight: 700 }}>Confirm promotion</button></div>
+        </div>
+      </div>}
+
+      {legacyCleanupConfirmOpen && legacyCleanupPreview && <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+        <div style={{ background: '#fff', borderRadius: '14px', padding: '24px', maxWidth: '560px', width: '100%', border: '2px solid #ef4444' }}>
+          <h3 style={{ marginTop: 0, color: '#991b1b' }}>Confirm legacy Colour cleanup</h3>
+          <p style={{ color: '#475569', fontSize: '14px' }}>Remove {legacyCleanupPreview.summary?.unlinkedAssociationsToRemove || 0} reviewed legacy Colour association(s) from {promotionScope.fabricName ? `Ashley Wilde Fabric “${promotionScope.fabricName}”` : 'all Ashley Wilde Fabrics'}? This preserves {legacyCleanupPreview.summary?.identityLinkedAssociationsPreserved || 0} identity-linked association(s), every staged/promoted identity, and every uploaded Media record. Empty unlinked Colour rows will be permanently deleted.</p>
+          <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#fef2f2', color: '#991b1b', fontSize: '12px', fontWeight: 700 }}>After cleanup, run Preview promotion again and then Promote verified to rebuild the Colours from staged data.</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}><button type="button" onClick={() => setLegacyCleanupConfirmOpen(false)} style={{ padding: '9px 13px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>Cancel</button><button type="button" onClick={applyAshleyWildeLegacyCleanup} disabled={legacyCleanupBusy} style={{ padding: '9px 13px', border: 0, borderRadius: '8px', background: '#b91c1c', color: '#fff', fontWeight: 700 }}>Confirm cleanup</button></div>
         </div>
       </div>}
 

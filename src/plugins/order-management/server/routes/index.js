@@ -122,6 +122,18 @@ module.exports = [
     },
     {
       method: 'POST',
+      path: relativePath(adminCatalogRoutes.ashleyWildeLegacyColourCleanupPreview),
+      handler: 'import-export.previewAshleyWildeLegacyColourCleanup',
+      config: { auth: false, policies: ['global::ashley-wilde-admin'], middlewares: [] },
+    },
+    {
+      method: 'POST',
+      path: relativePath(adminCatalogRoutes.ashleyWildeLegacyColourCleanupApply),
+      handler: 'import-export.applyAshleyWildeLegacyColourCleanup',
+      config: { auth: false, policies: ['global::ashley-wilde-admin'], middlewares: [] },
+    },
+    {
+      method: 'POST',
       path: relativePath(adminCatalogRoutes.supplierMappingsUpload),
       handler: 'import-export.uploadSupplierMapping',
       config: { auth: false, policies: ['global::supplier-mapping-admin'], middlewares: [] },
