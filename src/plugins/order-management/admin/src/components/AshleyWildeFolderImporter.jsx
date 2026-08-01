@@ -9,7 +9,7 @@ import {
 import { normalizeStagingError, parseStagingResponse, sanitizeDiagnosticMessage, STAGING_PARSER_VERSION, STAGING_RETRY_MESSAGE } from '../utils/stagingResponse';
 import {
   ashleyDiagnosticError, ashleyTraceRequestConfig, ashleyUploadLog, createAshleyTraceId,
-  safeMediaUploadErrorMessage, uploadAshleyWildeMedia,
+  safeMediaUploadErrorMessage, startAshleyDiagnosticSpan, uploadAshleyWildeMedia,
 } from '../utils/ashleyWildeMediaUpload';
 
 const colours = {
@@ -210,7 +210,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       mimeType: row.mimeType || row.file?.type || null, attempt,
     };
     let media = row.mediaRecord || null;
-    ashleyUploadLog({ ...diagnostic, stage: 'attempt_start', mediaAlreadyKnown: Boolean(media) });
+    const attemptSpan = startAshleyDiagnosticSpan('attempt', { ...diagnostic, queueIndex: index + 1, queueTotal: total, mediaAlreadyKnown: Boolean(media), persistedPhase: persisted?.phase || null });
     const finaliseBody = {
       analysisToken,
       manifestFileCount,
@@ -230,18 +230,19 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     };
 
     if (!media) {
-      ashleyUploadLog({ ...diagnostic, stage: 'media_recovery_start' });
+      const recoverySpan = startAshleyDiagnosticSpan('media_recovery', diagnostic);
       try {
         const lookupPayload = await adminResponse(post, adminCatalogRoutes.ashleyWildeMediaStatus, { ...finaliseBody, phase: 'lookup_media' }, ashleyTraceRequestConfig(traceId));
         const lookupResult = lookupPayload.data?.result || lookupPayload.data;
-        ashleyUploadLog({ ...diagnostic, stage: 'media_recovery_result', found: lookupResult?.phase === 'media_uploaded' });
+        recoverySpan.complete({ found: lookupResult?.phase === 'media_uploaded', responsePhase: lookupResult?.phase || null });
         if (lookupResult?.phase === 'media_uploaded' && lookupResult.mediaId) {
           media = { id: lookupResult.mediaId, documentId: lookupResult.mediaDocumentId || null, name: row.filename };
           fileQueueRef.current = fileQueueRef.current.map((queued) => queued.relativePath === row.relativePath ? { ...queued, mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId, phase: 'media_uploaded' } : queued);
           updateFolderRow(row.relativePath, { phase: 'media_uploaded', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId });
         }
       } catch (error) {
-        ashleyUploadLog({ ...diagnostic, stage: 'media_recovery_failure', ...ashleyDiagnosticError(error) });
+        recoverySpan.fail(error);
+        attemptSpan.fail(error, { activePhase: 'media_recovery' });
         error.ashleyPhase = 'media_status';
         throw error;
       }
@@ -256,13 +257,14 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         error.ashleyPhase = 'upload';
         updateFolderRow(row.relativePath, { phase: 'retryable_upload_failure', status: 'failed', warning: safeMediaUploadErrorMessage(error) });
         ashleyUploadLog({ ...diagnostic, stage: 'attempt_failure', failedStage: 'upload', ...ashleyDiagnosticError(error) });
+        const progressSpan = startAshleyDiagnosticSpan('retry_progress', diagnostic);
         try {
-          ashleyUploadLog({ ...diagnostic, stage: 'progress_start' });
           await adminResponse(post, adminCatalogRoutes.ashleyWildeProgress, { ...finaliseBody, phase: 'retryable_upload_failure', errorCode: error.code || 'unknown' }, ashleyTraceRequestConfig(traceId));
-          ashleyUploadLog({ ...diagnostic, stage: 'progress_success' });
+          progressSpan.complete();
         } catch (progressError) {
-          ashleyUploadLog({ ...diagnostic, stage: 'progress_failure', ...ashleyDiagnosticError(progressError) });
+          progressSpan.fail(progressError);
         }
+        attemptSpan.fail(error, { activePhase: 'media_upload', failedStage: 'upload' });
         throw error;
       }
       fileQueueRef.current = fileQueueRef.current.map((queued) => queued.relativePath === row.relativePath ? { ...queued, mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null, phase: 'media_uploaded' } : queued);
@@ -271,17 +273,21 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
 
     setProgress(`Finalising image ${index + 1} of ${total}: ${row.filename}`);
     updateFolderRow(row.relativePath, { phase: 'finalising_staging', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null });
-    ashleyUploadLog({ ...diagnostic, stage: 'finalise_start', mediaId: media.id || null, mediaDocumentId: media.documentId || null });
+    const finaliseSpan = startAshleyDiagnosticSpan('finalisation', { ...diagnostic, mediaId: media.id || null, mediaDocumentId: media.documentId || null });
     try {
       const payload = await adminResponse(post, adminCatalogRoutes.ashleyWildeFinalise, { ...finaliseBody, mediaId: media.id, mediaDocumentId: media.documentId || null }, ashleyTraceRequestConfig(traceId));
       const result = payload.data?.result || payload.data;
       updateFolderRow(row.relativePath, { ...result, phase: 'complete', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null });
-      ashleyUploadLog({ ...diagnostic, stage: 'finalise_success', mediaId: media.id || null, mediaDocumentId: media.documentId || null });
+      finaliseSpan.complete({ resultStatus: result?.status || null, resultPhase: result?.phase || null });
+      const historySpan = startAshleyDiagnosticSpan('history_refresh', diagnostic);
       await refreshHistory();
+      historySpan.complete();
+      attemptSpan.complete({ finalPhase: 'complete', resultStatus: result?.status || null, mediaId: media.id || null, mediaDocumentId: media.documentId || null });
       return result;
     } catch (error) {
       error.ashleyPhase = 'finalisation';
-      ashleyUploadLog({ ...diagnostic, stage: 'attempt_failure', failedStage: 'finalise', ...ashleyDiagnosticError(error) });
+      finaliseSpan.fail(error);
+      attemptSpan.fail(error, { activePhase: 'finalisation', failedStage: 'finalise' });
       updateFolderRow(row.relativePath, { phase: 'retryable_finalisation_failure', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null, warning: 'Image uploaded; staging link still needs to be completed.' });
       throw error;
     }

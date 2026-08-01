@@ -10,7 +10,7 @@ const {
 } = require('../../shared/ashley-wilde-mapping');
 const supplierMappings = require('./supplier-mapping');
 const uploadPolicy = require('../../shared/ashley-wilde-upload-policy.json');
-const { diagnosticContext, logAshleyDiagnostic } = require('../utils/ashleyWildeDiagnostics');
+const { diagnosticContext, logAshleyDiagnostic, safeDiagnosticMessage } = require('../utils/ashleyWildeDiagnostics');
 
 const BATCH_UID = 'api::image-import-batch.image-import-batch';
 const FABRIC_UID = 'api::fabric.fabric';
@@ -54,13 +54,21 @@ function serviceDiagnostic(body, options = {}) {
 
 async function timedStage(strapi, stage, work, details = {}) {
   const startedAt = Date.now();
-  safeLog(strapi, `${stage}-start`, details);
+  let heartbeatCount = 0;
+  logAshleyDiagnostic(strapi, `${stage}_start`, details);
+  const heartbeat = setInterval(() => {
+    heartbeatCount += 1;
+    logAshleyDiagnostic(strapi, `${stage}_waiting`, { ...details, elapsedMs: Date.now() - startedAt, heartbeatCount });
+  }, 10_000);
+  heartbeat.unref?.();
   try {
     const result = await work();
-    safeLog(strapi, `${stage}-complete`, { ...details, durationMs: Date.now() - startedAt });
+    clearInterval(heartbeat);
+    logAshleyDiagnostic(strapi, `${stage}_complete`, { ...details, durationMs: Date.now() - startedAt, heartbeatCount });
     return result;
   } catch (error) {
-    safeLog(strapi, `${stage}-failed`, { ...details, durationMs: Date.now() - startedAt, errorCode: error?.code || 'unknown' });
+    clearInterval(heartbeat);
+    logAshleyDiagnostic(strapi, `${stage}_failed`, { ...details, durationMs: Date.now() - startedAt, heartbeatCount, errorCode: error?.code || 'unknown', errorClass: error?.constructor?.name || error?.name || 'Error', status: Number(error?.status) || null, safeMessage: safeDiagnosticMessage(error?.message || error?.name) });
     throw error;
   }
 }
@@ -557,10 +565,11 @@ async function findUnfinalisedAshleyMedia(strapi, body, analysedFile, adminId) {
 }
 
 async function persistFilePhase(strapi, mappings, body, phase, details = {}) {
-  const rows = await strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: body.folderFingerprint }, limit: 1 });
+  const relativePath = normalizeRelativePath(body.relativePath);
+  const historyDiagnostic = diagnosticContext({ traceId: details.traceId, relativePath, filename: details.filename, sizeBytes: body?.fileSize, mimeType: body?.mimeType, attempt: details.attempt });
+  const rows = await timedStage(strapi, 'history_phase_read', () => strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: body.folderFingerprint }, limit: 1 }), { ...historyDiagnostic, phase });
   const previous = rows?.[0] || {};
   const oldSummary = previous.manifestSummary || {};
-  const relativePath = normalizeRelativePath(body.relativePath);
   const resultsByPath = { ...(oldSummary.resultsByPath || {}), [relativePath]: { ...(oldSummary.resultsByPath?.[relativePath] || {}), relativePath, phase, ...details, updatedAt: new Date().toISOString() } };
   const persisted = Object.values(resultsByPath);
   const totalFiles = Number(previous.totalFiles || body.manifestFileCount || 0);
@@ -570,7 +579,8 @@ async function persistFilePhase(strapi, mappings, body, phase, details = {}) {
   const readyFiles = Math.max(0, initialReadyFiles - completeFiles);
   const status = phase === 'complete' && completeFiles >= totalFiles ? 'completed'
     : failedFiles ? 'partial' : 'uploading';
-  return upsertHistory(strapi, {
+  logAshleyDiagnostic(strapi, 'history_status_decision', { ...historyDiagnostic, phase, chosenStatus: status, totalFiles, trackedFileCount: persisted.length, completeFiles, failedFiles, initialReadyFiles, readyFiles, previousSkippedFiles: Number(previous.skippedFiles || 0), previousConflictFiles: Number(previous.conflictFiles || 0), completionThresholdMet: completeFiles >= totalFiles, outstandingAgainstManifest: Math.max(0, totalFiles - completeFiles) });
+  return timedStage(strapi, 'history_phase_upsert', () => upsertHistory(strapi, {
     supplier: SUPPLIER,
     folderName: String(body.folderName || previous.folderName || '').slice(0, 255),
     folderFingerprint: body.folderFingerprint,
@@ -598,7 +608,7 @@ async function persistFilePhase(strapi, mappings, body, phase, details = {}) {
       folderFingerprint: body.folderFingerprint,
     },
     incrementAttempt: false,
-  }, rows);
+  }, rows), { ...historyDiagnostic, phase, chosenStatus: status, totalFiles, completeFiles, failedFiles });
 }
 
 function analysedFileFor(tokenPayload, relativePath) {

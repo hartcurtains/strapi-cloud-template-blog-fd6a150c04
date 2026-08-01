@@ -145,3 +145,18 @@ test('finalisation failures keep the uploaded Media bound for retry and do not w
   assert.match(importer, /validateAshleyMedia/);
   assert.match(routes, /ashleyWildeFinalise[\s\S]*admin::isAuthenticatedAdmin/);
 });
+
+test('upload diagnostics correlate long-running browser and server phases without exposing request secrets', () => {
+  const utility = fs.readFileSync(mediaUploadPath, 'utf8');
+  const component = fs.readFileSync(componentPath, 'utf8');
+  const importer = fs.readFileSync(path.join(root, 'server', 'services', 'ashley-wilde-import.js'), 'utf8');
+  assert.match(utility, /ASHLEY_DIAGNOSTIC_HEARTBEAT_MS = 10_000/);
+  assert.match(utility, /stage: `\$\{stage\}_waiting`/);
+  assert.match(component, /startAshleyDiagnosticSpan\('media_recovery'/);
+  assert.match(component, /startAshleyDiagnosticSpan\('finalisation'/);
+  assert.match(component, /startAshleyDiagnosticSpan\('history_refresh'/);
+  assert.match(importer, /history_status_decision/);
+  assert.match(importer, /outstandingAgainstManifest/);
+  assert.match(importer, /history_phase_upsert/);
+  assert.doesNotMatch(utility, /console\.info\([^\n]*analysisToken/);
+});

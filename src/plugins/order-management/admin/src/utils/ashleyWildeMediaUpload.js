@@ -5,6 +5,7 @@ export const ASHLEY_PREPARED_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
 export const ACCEPTED_ASHLEY_MEDIA_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 export const MEDIA_UPLOAD_RETRY_MESSAGE = 'The image service was temporarily unavailable. This image was not uploaded. Please retry it.';
 export const MEDIA_UPLOAD_UNAUTHORISED_MESSAGE = 'The image upload was not authorised. Refresh your administrator session and retry.';
+export const ASHLEY_DIAGNOSTIC_HEARTBEAT_MS = 10_000;
 
 function tracePrefix(value) {
   const prefix = String(value || '').toLowerCase().replace(/[^a-f0-9]/g, '').slice(0, 8);
@@ -19,7 +20,28 @@ export function createAshleyTraceId({ folderFingerprint, fileFingerprint, attemp
 export function ashleyUploadLog(details = {}) {
   if (typeof console === 'undefined' || typeof console.info !== 'function') return;
   const { analysisToken, fileFingerprint, folderFingerprint, ...safeDetails } = details;
-  console.info('[AshleyUpload]', safeDetails);
+  console.info('[AshleyUpload]', { timestamp: new Date().toISOString(), ...safeDetails });
+}
+
+export function startAshleyDiagnosticSpan(stage, details = {}, heartbeatMs = ASHLEY_DIAGNOSTIC_HEARTBEAT_MS) {
+  const startedAt = Date.now();
+  let heartbeatCount = 0;
+  let finished = false;
+  ashleyUploadLog({ ...details, stage: `${stage}_start` });
+  const timer = typeof globalThis?.setInterval === 'function' ? globalThis.setInterval(() => {
+    heartbeatCount += 1;
+    ashleyUploadLog({ ...details, stage: `${stage}_waiting`, elapsedMs: Date.now() - startedAt, heartbeatCount });
+  }, heartbeatMs) : null;
+  const finish = (outcome, extra = {}) => {
+    if (finished) return;
+    finished = true;
+    if (timer !== null && typeof globalThis?.clearInterval === 'function') globalThis.clearInterval(timer);
+    ashleyUploadLog({ ...details, ...extra, stage: `${stage}_${outcome}`, durationMs: Date.now() - startedAt, heartbeatCount });
+  };
+  return {
+    complete: (extra) => finish('complete', extra),
+    fail: (error, extra = {}) => finish('failed', { ...extra, ...ashleyDiagnosticError(error) }),
+  };
 }
 
 export function ashleyDiagnosticError(error) {
@@ -109,9 +131,8 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
   // The injected admin client supplies the current authenticated session and
   // deliberately owns the request headers/boundary.
   const canonicalFilename = getSafeBasename(relativePath || file.name);
-  const diagnostic = { traceId, stage: 'upload_start', filename: canonicalFilename, relativePath: relativePath || null, sizeBytes: size, mimeType, attempt };
-  const startedAt = Date.now();
-  ashleyUploadLog(diagnostic);
+  const diagnostic = { traceId, filename: canonicalFilename, relativePath: relativePath || null, sizeBytes: size, mimeType, attempt };
+  const uploadSpan = startAshleyDiagnosticSpan('media_upload', diagnostic);
   form.append('files', file, canonicalFilename);
   form.append('fileInfo', JSON.stringify({
     name: canonicalFilename,
@@ -125,12 +146,12 @@ export async function uploadAshleyWildeMedia(file, { analysisToken, folderFinger
     const response = await adminPost(ASHLEY_MEDIA_UPLOAD_PATH, form, ashleyTraceRequestConfig(traceId, signal));
     const payload = await parseStagingResponse(response);
     const media = normalizeMediaRecord(payload);
-    ashleyUploadLog({ ...diagnostic, stage: 'upload_success', durationMs: Date.now() - startedAt, mediaId: media.id || null, mediaDocumentId: media.documentId || null });
+    uploadSpan.complete({ responseStatus: Number(response?.status) || null, mediaId: media.id || null, mediaDocumentId: media.documentId || null });
     return media;
   } catch (error) {
     const normalized = await normalizeStagingError(error);
     normalized.safeMessage = safeMediaUploadErrorMessage(normalized);
-    ashleyUploadLog({ ...diagnostic, stage: 'upload_failure', durationMs: Date.now() - startedAt, ...ashleyDiagnosticError(normalized) });
+    uploadSpan.fail(normalized, { browserOnline: typeof navigator === 'undefined' ? null : navigator.onLine });
     throw normalized;
   }
 }
