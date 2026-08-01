@@ -3,6 +3,9 @@
 const path = require('node:path');
 
 const SUPPLIER = 'Ashley Wilde';
+const KIELDER_SUPPLIER_PRODUCT_CODE = 'KIELDER';
+const KIELDER_NATURAL_FABRIC_NAME = 'Kielder Natural';
+const KIELDER_OTHER_COLOURS_FABRIC_NAME = 'Kielder Other cols';
 const MAPPING_MODES = Object.freeze(['production', 'pilot']);
 const SUPPORTED_EXTENSIONS = Object.freeze(['.jpg', '.jpeg', '.png', '.webp']);
 const ASSET_TYPES = Object.freeze(['ordinary_colour', 'full_colour_name', 'numbered_alternate', 'lifestyle', 'cameo', 'roomset', 'moodboard', 'main_image', 'non_colour', 'unknown']);
@@ -175,6 +178,42 @@ function normalizeStem(value) {
   return normalizeToken(stem);
 }
 
+function isKielderProduct(productOrCode) {
+  return normalizeToken(typeof productOrCode === 'object' ? productOrCode?.supplierProductCode : productOrCode) === KIELDER_SUPPLIER_PRODUCT_CODE;
+}
+
+function kielderFabricNameForSuffix(supplierColourCode) {
+  return normalizeToken(supplierColourCode) === 'NA'
+    ? KIELDER_NATURAL_FABRIC_NAME
+    : KIELDER_OTHER_COLOURS_FABRIC_NAME;
+}
+
+function kielderFilenameMatch(stem) {
+  const normalizedStem = normalizeStem(stem);
+  if (normalizedStem === `${KIELDER_SUPPLIER_PRODUCT_CODE}NA`) {
+    return {
+      supplierProductCode: KIELDER_SUPPLIER_PRODUCT_CODE,
+      supplierColourCode: 'NA',
+      fabricName: KIELDER_NATURAL_FABRIC_NAME,
+    };
+  }
+  if (!normalizedStem.startsWith(KIELDER_SUPPLIER_PRODUCT_CODE)) return null;
+  const supplierColourCode = normalizedStem.slice(KIELDER_SUPPLIER_PRODUCT_CODE.length);
+  if (!supplierColourCode || !/^[A-Z0-9]+$/.test(supplierColourCode)) return null;
+  return {
+    supplierProductCode: KIELDER_SUPPLIER_PRODUCT_CODE,
+    supplierColourCode,
+    fabricName: KIELDER_OTHER_COLOURS_FABRIC_NAME,
+  };
+}
+
+function exactKielderProduct(products, supplierColourCode) {
+  const targetName = normalizeToken(kielderFabricNameForSuffix(supplierColourCode));
+  const matches = (products || []).filter((product) => normalizeToken(product.fabricName) === targetName
+    && (!product.supplierProductCode || isKielderProduct(product)));
+  return matches.length === 1 ? matches[0] : null;
+}
+
 function classifyFilename(filename) {
   const value = String(filename || '').normalize('NFKC').trim().toLowerCase();
   const stem = value.replace(/\.[^.]+$/, '');
@@ -210,21 +249,44 @@ function parseFilename(filename, colourMap) {
   const stem = normalizeStem(path.basename(filename, extension));
   if (!stem) return { status: 'ambiguous_filename', filename, warning: 'Filename has no usable product and colour code.' };
 
-  const candidates = [];
-  for (const [productKey, product] of Object.entries(colourMap.products)) {
-    for (const rawPrefix of product.filenamePrefixes) {
-      const prefix = normalizeStem(rawPrefix);
-      if (stem.startsWith(prefix) && stem.length > prefix.length) candidates.push({ productKey, product, prefix });
+  const kielder = kielderFilenameMatch(stem);
+  let winner;
+  let isKielderResolution = false;
+  if (kielder) {
+    const productEntries = Object.entries(colourMap.products)
+      .filter(([, product]) => exactKielderProduct([product], kielder.supplierColourCode));
+    if (productEntries.length !== 1) {
+      return {
+        status: productEntries.length ? 'ambiguous_filename' : 'unknown_mapping_product',
+        filename,
+        warning: productEntries.length
+          ? 'The exact Kielder Fabric name belongs to multiple catalogue mappings.'
+          : `The exact Kielder Fabric ${kielder.fabricName} is absent from the active mapping.`,
+      };
     }
+    const [productKey, product] = productEntries[0];
+    winner = { productKey, product, prefix: KIELDER_SUPPLIER_PRODUCT_CODE };
+    isKielderResolution = true;
   }
-  if (!candidates.length) return { status: 'unknown_mapping_product', filename };
-  const longest = Math.max(...candidates.map((candidate) => candidate.prefix.length));
-  const winners = candidates.filter((candidate) => candidate.prefix.length === longest);
-  const productKeys = [...new Set(winners.map((candidate) => candidate.productKey))];
-  if (productKeys.length !== 1) return { status: 'ambiguous_filename', filename, warning: 'The longest approved prefix belongs to multiple products.' };
 
-  const winner = winners[0];
-  let supplierColourCode = stem.slice(winner.prefix.length);
+  if (!winner) {
+    const candidates = [];
+    for (const [productKey, product] of Object.entries(colourMap.products)) {
+      for (const rawPrefix of product.filenamePrefixes) {
+        const prefix = normalizeStem(rawPrefix);
+        if (stem.startsWith(prefix) && stem.length > prefix.length) candidates.push({ productKey, product, prefix });
+      }
+    }
+    if (!candidates.length) return { status: 'unknown_mapping_product', filename };
+    const longest = Math.max(...candidates.map((candidate) => candidate.prefix.length));
+    const winners = candidates.filter((candidate) => candidate.prefix.length === longest);
+    const productKeys = [...new Set(winners.map((candidate) => candidate.productKey))];
+    if (productKeys.length !== 1) return { status: 'ambiguous_filename', filename, warning: 'The longest approved prefix belongs to multiple products.' };
+    winner = winners[0];
+  }
+
+  let supplierColourCode = isKielderResolution ? kielder.supplierColourCode : stem.slice(winner.prefix.length);
+  const supplierProductCode = isKielderResolution ? KIELDER_SUPPLIER_PRODUCT_CODE : winner.product.supplierProductCode;
   let numberedAlternate = false;
   const numbered = supplierColourCode.match(/^(.+?)[_-](\d+)$/);
   if (numbered) {
@@ -240,13 +302,14 @@ function parseFilename(filename, colourMap) {
   });
   const fullNameColour = !colour && namedColourKey ? winner.product.colours[namedColourKey] : null;
   if (fullNameColour) {
-    supplierColourCode = fullNameColour.supplierColourCode;
+    if (!isKielderResolution) supplierColourCode = fullNameColour.supplierColourCode;
     return {
       status: 'matched', assetType: 'full_colour_name', filename, productKey: winner.productKey,
       productName: winner.product.productName, fabricName: winner.product.fabricName,
-      approvedAliases: winner.product.approvedAliases || [], supplierProductCode: winner.product.supplierProductCode,
+      approvedAliases: winner.product.approvedAliases || [], supplierProductCode,
       fabricDocumentId: winner.product.fabricDocumentId, mappingVersion: winner.product.mappingVersion, supplierColourCode,
       supplierColourName: fullNameColour.supplierColourName, internalColourCode: fullNameColour.internalColourCode,
+      ...(isKielderResolution ? { fabricColourCode: `${KIELDER_SUPPLIER_PRODUCT_CODE}${supplierColourCode}` } : {}),
       mappingSource: fullNameColour.evidence?.source || 'approved Ashley Wilde mapping', evidence: fullNameColour.evidence || null,
     };
   }
@@ -254,17 +317,19 @@ function parseFilename(filename, colourMap) {
     return {
       status: 'pending_manual_mapping', assetType: numberedAlternate ? 'numbered_alternate' : 'ordinary_colour', filename, productKey: winner.productKey,
       productName: winner.product.productName, fabricName: winner.product.fabricName,
-      approvedAliases: winner.product.approvedAliases || [], supplierProductCode: winner.product.supplierProductCode,
+      approvedAliases: winner.product.approvedAliases || [], supplierProductCode,
       fabricDocumentId: winner.product.fabricDocumentId, mappingVersion: winner.product.mappingVersion, supplierColourCode,
+      ...(isKielderResolution ? { fabricColourCode: `${KIELDER_SUPPLIER_PRODUCT_CODE}${supplierColourCode}` } : {}),
       warning: colour?.reason || 'This product-scoped supplier colour code is not mapped.',
     };
   }
   return {
     status: 'matched', assetType: numberedAlternate ? 'numbered_alternate' : 'ordinary_colour', filename, productKey: winner.productKey,
     productName: winner.product.productName, fabricName: winner.product.fabricName,
-    approvedAliases: winner.product.approvedAliases || [], supplierProductCode: winner.product.supplierProductCode,
+    approvedAliases: winner.product.approvedAliases || [], supplierProductCode,
     fabricDocumentId: winner.product.fabricDocumentId, mappingVersion: winner.product.mappingVersion, supplierColourCode,
     supplierColourName: colour.supplierColourName, internalColourCode: colour.internalColourCode,
+    ...(isKielderResolution ? { fabricColourCode: `${KIELDER_SUPPLIER_PRODUCT_CODE}${supplierColourCode}` } : {}),
     mappingSource: colour.evidence?.source || 'approved Ashley Wilde mapping', evidence: colour.evidence || null,
   };
 }
@@ -276,9 +341,11 @@ function canonicalManifestLines(entries) {
 
 module.exports = {
   AshleyWildeMappingError, STATUSES, SUPPLIER, SUPPORTED_EXTENSIONS,
+  KIELDER_SUPPLIER_PRODUCT_CODE, KIELDER_NATURAL_FABRIC_NAME, KIELDER_OTHER_COLOURS_FABRIC_NAME,
   ASSET_TYPES, classifyFilename, safeFilename,
   MAPPING_MODES, resolveMappingMode,
   canonicalManifestLines, loadProductionMappings, normalizeRelativePath,
-  normalizeCanonicalColourName, normalizeStem, normalizeToken, parseFilename, validateCodeRegistry,
+  normalizeCanonicalColourName, normalizeStem, normalizeToken, isKielderProduct, kielderFabricNameForSuffix,
+  kielderFilenameMatch, exactKielderProduct, parseFilename, validateCodeRegistry,
   validateColourMap, validateImageIndex,
 };

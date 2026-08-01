@@ -4,7 +4,8 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  AshleyWildeMappingError, SUPPLIER, loadProductionMappings, normalizeCanonicalColourName, normalizeToken, validateColourMap,
+  AshleyWildeMappingError, KIELDER_NATURAL_FABRIC_NAME, KIELDER_OTHER_COLOURS_FABRIC_NAME, KIELDER_SUPPLIER_PRODUCT_CODE,
+  SUPPLIER, loadProductionMappings, normalizeCanonicalColourName, normalizeToken, validateColourMap,
 } = require('../../shared/ashley-wilde-mapping');
 
 const IMPORT_UID = 'api::supplier-mapping-import.supplier-mapping-import';
@@ -185,13 +186,22 @@ function exactOne(candidates, method) {
 }
 
 function resolveFabricFromCatalogue(catalogue, row, aliases = new Map()) {
+  const supplierCode = codeKey(row.supplierProductCode);
+  if (supplierCode === KIELDER_SUPPLIER_PRODUCT_CODE
+    && [KIELDER_NATURAL_FABRIC_NAME, KIELDER_OTHER_COLOURS_FABRIC_NAME].some((name) => nameKey(row.fabricName) === nameKey(name))) {
+    const byKielderFabricName = exactOne(
+      catalogue.filter((fabric) => nameKey(fabric.name) === nameKey(row.fabricName)),
+      'kielder_exact_fabric_name',
+    );
+    if (byKielderFabricName) return byKielderFabricName;
+  }
+
   const byDocumentId = exactOne(
     row.fabricDocumentId ? catalogue.filter((fabric) => String(fabric.documentId) === String(row.fabricDocumentId)) : [],
     'existing_fabric_document_id',
   );
   if (byDocumentId) return byDocumentId;
 
-  const supplierCode = codeKey(row.supplierProductCode);
   const bySchemaSupplierCode = exactOne(
     supplierCode ? catalogue.filter((fabric) => codeKey(fabric.supplierProductCode) === supplierCode) : [],
     'fabric_supplier_product_code',

@@ -4,8 +4,9 @@ const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  SUPPLIER, SUPPORTED_EXTENSIONS, loadProductionMappings, normalizeRelativePath,
-  normalizeToken, validateCodeRegistry, validateColourMap,
+  KIELDER_SUPPLIER_PRODUCT_CODE, SUPPLIER, SUPPORTED_EXTENSIONS, loadProductionMappings, normalizeRelativePath,
+  exactKielderProduct, isKielderProduct, kielderFilenameMatch, normalizeToken,
+  validateCodeRegistry, validateColourMap,
 } = require('../src/plugins/order-management/shared/ashley-wilde-mapping');
 
 const SOURCE_DOMAIN = 'ashleywildegroup.com';
@@ -117,8 +118,10 @@ function knownProducts(catalogue, pilotMap, approvedMap = { products: {} }) {
     const catalogueCode = normalizeName(fabric.productId);
     // Existing FAB...#### values are internal catalogue IDs, not Ashley Wilde
     // supplier product codes. Official Ashley Wilde codes use the product name.
-    const supplierProductCode = catalogueCode && !/^FAB[A-Z0-9]+\d{3,}$/.test(catalogueCode)
-      ? catalogueCode : normalizeName(fabric.name);
+    const supplierProductCode = /^KIELDER(?:NATURAL|OTHERCOLS)$/.test(normalizeName(fabric.name))
+      ? KIELDER_SUPPLIER_PRODUCT_CODE
+      : catalogueCode && !/^FAB[A-Z0-9]+\d{3,}$/.test(catalogueCode)
+        ? catalogueCode : normalizeName(fabric.name);
     values.push({
       productName: String(fabric.name).trim(), fabricName: String(fabric.name).trim(),
       supplierProductCode,
@@ -148,6 +151,21 @@ function parseInventoryFilename(filename, products) {
   const rawStem = path.basename(filename, extension);
   const cleanStem = normalizeCopySuffix(rawStem);
   const normalizedStem = normalizeName(cleanStem);
+  const kielder = kielderFilenameMatch(normalizedStem);
+  if (kielder) {
+    const winner = exactKielderProduct(products, kielder.supplierColourCode);
+    if (!winner) return { status: 'unknown_mapping_product', rawStem, cleanStem, normalizedStem };
+    return {
+      status: 'parsed', rawStem, cleanStem, normalizedStem,
+      supplierProductCode: KIELDER_SUPPLIER_PRODUCT_CODE,
+      supplierColourCode: kielder.supplierColourCode,
+      fabricColourCode: `${KIELDER_SUPPLIER_PRODUCT_CODE}${kielder.supplierColourCode}`,
+      fabricName: winner.fabricName, productName: winner.productName,
+      fabricDocumentId: winner.fabricDocumentId || null,
+      strapiCollection: winner.strapiCollection || null,
+      strapiDescription: winner.strapiDescription || null,
+    };
+  }
   const candidates = [];
   for (const product of products) {
     const prefixes = new Set([product.supplierProductCode, product.productName, product.fabricName].map(normalizeName).filter(Boolean));
@@ -570,11 +588,14 @@ function matchInventory(inventory, official, approvedRegistry, comparisons = new
     }
     const source = { supplierProductCode: row.supplierProductCode, supplierColourCode: row.supplierColourCode };
     if (!registry.codes[allocation.code].sources.some((entry) => entry.supplierProductCode === source.supplierProductCode && entry.supplierColourCode === source.supplierColourCode)) registry.codes[allocation.code].sources.push(source);
-    if (!candidateProducts[row.supplierProductCode]) candidateProducts[row.supplierProductCode] = {
+    const productKey = isKielderProduct(row.supplierProductCode)
+      ? `${row.supplierProductCode}|${row.fabricDocumentId || normalizeName(row.fabricName)}`
+      : row.supplierProductCode;
+    if (!candidateProducts[productKey]) candidateProducts[productKey] = {
       supplierProductCode: row.supplierProductCode, fabricName: row.fabricName, fabricDocumentId: row.fabricDocumentId,
       productName: product.productName, filenamePrefixes: [row.supplierProductCode], colours: {},
     };
-    candidateProducts[row.supplierProductCode].colours[row.supplierColourCode] = {
+    candidateProducts[productKey].colours[row.supplierColourCode] = {
       resolved: true, supplierColourCode: row.supplierColourCode, supplierColourName: colour.colourName,
       internalColourCode: allocation.code, sourceImage: row.relativePath,
       evidence: { productUrl: product.productUrl, colourwayUrl: colour.colourwayUrl, imageUrl: colour.imageUrl, confidence: 1, reason },

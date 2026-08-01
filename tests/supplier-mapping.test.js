@@ -69,6 +69,38 @@ test('supplier colour codes stay product-scoped across fabrics, including MI →
   assert.equal(preview.validationSummary.productScopedSupplierCodeReuse.length, 1);
 });
 
+test('JSON mapping resolves the two Kielder catalogue records by exact Fabric name', async () => {
+  const naturalFabric = { ...fabric('kielder-natural', 'Kielder Natural', 'KIELDER'), supplierProductCode: 'KIELDER' };
+  const otherFabric = { ...fabric('kielder-other', 'Kielder Other cols', 'KIELDER'), supplierProductCode: 'KIELDER' };
+  const { strapi } = harness({ fabrics: [naturalFabric, otherFabric] });
+  const preview = await mapping.validateDocument(strapi, document([
+    {
+      fabricName: 'Kielder Natural',
+      supplierProductCode: 'KIELDER',
+      colours: [colour('NA', 'Natural', 'NA', { supplierProductCode: 'KIELDER' })],
+    },
+    {
+      fabricName: 'Kielder Other cols',
+      supplierProductCode: 'KIELDER',
+      colours: [
+        colour('BL', 'Blue', 'BL', { supplierProductCode: 'KIELDER' }),
+        colour('GR', 'Green', 'GR', { supplierProductCode: 'KIELDER' }),
+        colour('XX', 'Example', 'XX', { supplierProductCode: 'KIELDER' }),
+      ],
+    },
+  ]));
+
+  assert.equal(preview.validationSummary.valid, true);
+  assert.deepEqual(preview.rows.map((row) => [row.fabricDocumentId, row.supplierProductCode, row.supplierColourCode, row.fabricColourCode]), [
+    ['kielder-natural', 'KIELDER', 'NA', 'KIELDERNA'],
+    ['kielder-other', 'KIELDER', 'BL', 'KIELDERBL'],
+    ['kielder-other', 'KIELDER', 'GR', 'KIELDERGR'],
+    ['kielder-other', 'KIELDER', 'XX', 'KIELDERXX'],
+  ]);
+  assert.equal(preview.validationSummary.resolvedFabricDetails[0].method, 'kielder_exact_fabric_name');
+  assert.equal(preview.validationSummary.resolvedFabricDetails[1].method, 'kielder_exact_fabric_name');
+});
+
 test('stale approved registry collisions cannot override deterministic Flax, Flint, and Noir codes', async () => {
   const { strapi } = harness({
     fabrics: [

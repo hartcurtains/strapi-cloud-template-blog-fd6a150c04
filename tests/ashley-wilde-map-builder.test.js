@@ -75,6 +75,75 @@ test('longest exact product prefix wins and supplier suffix may be variable leng
   assert.equal(parsed.supplierColourCode, 'DUCKEGG');
 });
 
+test('Kielder filename resolution uses Natural only for NA and Other cols for every other suffix', () => {
+  const products = [
+    { supplierProductCode: 'KIELDER', productName: 'Kielder Natural', fabricName: 'Kielder Natural', fabricDocumentId: 'kielder-natural' },
+    { supplierProductCode: 'KIELDER', productName: 'Kielder Other cols', fabricName: 'Kielder Other cols', fabricDocumentId: 'kielder-other' },
+  ];
+  const expected = [
+    ['KIELDERNA.jpg', 'Kielder Natural', 'kielder-natural', 'NA'],
+    ['KIELDERBL.jpg', 'Kielder Other cols', 'kielder-other', 'BL'],
+    ['KIELDERGR.jpg', 'Kielder Other cols', 'kielder-other', 'GR'],
+    ['KIELDERXX.jpg', 'Kielder Other cols', 'kielder-other', 'XX'],
+  ];
+  for (const [filename, fabricName, fabricDocumentId, supplierColourCode] of expected) {
+    const parsed = parseInventoryFilename(filename, products);
+    assert.equal(parsed.status, 'parsed');
+    assert.equal(parsed.fabricName, fabricName);
+    assert.equal(parsed.fabricDocumentId, fabricDocumentId);
+    assert.equal(parsed.supplierProductCode, 'KIELDER');
+    assert.equal(parsed.supplierColourCode, supplierColourCode);
+    assert.equal(parsed.fabricColourCode, `KIELDER${supplierColourCode}`);
+  }
+});
+
+test('active importer parsing applies the same exact Kielder split without changing generic parsing', () => {
+  const resolvedColour = (supplierColourCode, supplierColourName) => ({
+    resolved: true,
+    supplierColourCode,
+    supplierColourName,
+    internalColourCode: supplierColourCode,
+  });
+  const colourMap = {
+    schemaVersion: 1,
+    supplier: 'Ashley Wilde',
+    generatedAt: null,
+    products: {
+      'KIELDER|natural': {
+        supplierProductCode: 'KIELDER', fabricName: 'Kielder Natural', productName: 'Kielder Natural',
+        fabricDocumentId: 'kielder-natural', filenamePrefixes: ['KIELDER'], colours: { NA: resolvedColour('NA', 'Natural') },
+      },
+      'KIELDER|other': {
+        supplierProductCode: 'KIELDER', fabricName: 'Kielder Other cols', productName: 'Kielder Other cols',
+        fabricDocumentId: 'kielder-other', filenamePrefixes: ['KIELDER'],
+        colours: { BL: resolvedColour('BL', 'Blue'), GR: resolvedColour('GR', 'Green'), XX: resolvedColour('XX', 'Example') },
+      },
+      ashton: {
+        supplierProductCode: 'ASHTON', fabricName: 'Ashton', productName: 'Ashton',
+        fabricDocumentId: 'ashton', filenamePrefixes: ['ASHTON'], colours: { DE: resolvedColour('DE', 'Denim') },
+      },
+    },
+  };
+
+  const natural = mapping.parseFilename('KIELDERNA.jpg', colourMap);
+  const otherRows = ['BL', 'GR', 'XX'].map((suffix) => mapping.parseFilename(`KIELDER${suffix}.jpg`, colourMap));
+  assert.deepEqual([natural.fabricName, natural.supplierProductCode, natural.supplierColourCode, natural.fabricColourCode], ['Kielder Natural', 'KIELDER', 'NA', 'KIELDERNA']);
+  for (const row of otherRows) {
+    assert.equal(row.fabricName, 'Kielder Other cols');
+    assert.equal(row.supplierProductCode, 'KIELDER');
+    assert.equal(row.fabricColourCode, `KIELDER${row.supplierColourCode}`);
+  }
+  assert.deepEqual(
+    mapping.parseFilename('ASHTONDE.jpg', colourMap),
+    {
+      status: 'matched', assetType: 'ordinary_colour', filename: 'ASHTONDE.jpg', productKey: 'ashton',
+      productName: 'Ashton', fabricName: 'Ashton', approvedAliases: [], supplierProductCode: 'ASHTON',
+      fabricDocumentId: 'ashton', mappingVersion: undefined, supplierColourCode: 'DE',
+      supplierColourName: 'Denim', internalColourCode: 'DE', mappingSource: 'approved Ashley Wilde mapping', evidence: null,
+    },
+  );
+});
+
 test('Jett and Malibu filename corrections keep the final two-character supplier code', () => {
   const products = [
     { supplierProductCode: 'JETT', productName: 'Jett', fabricName: 'Jett' },
