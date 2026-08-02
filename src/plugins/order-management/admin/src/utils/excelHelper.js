@@ -1993,7 +1993,7 @@ export const excelHelper = {
   },
 
   // Server-side bulk import using custom endpoint
-  bulkImportMultiSheet: async (transformedDataset, getAuthHeaders) => {
+  bulkImportMultiSheet: async (transformedDataset, postRequest) => {
     console.log('📤 Starting multi-sheet bulk import via server endpoint...');
     
     const BATCH_SIZE = 50;
@@ -2028,25 +2028,8 @@ export const excelHelper = {
       console.log(`📤 Batch ${batchIdx + 1}/${totalBatches}: ${batchFabrics.length} fabrics...`);
       
       try {
-        const response = await fetch(adminCatalogRoutes.import, {
-          method: 'POST',
-          headers: getAuthHeaders(),
-          body: JSON.stringify({ data: payload })
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Server import failed: ${response.status} - ${errorText}`);
-        }
-
-        let batchResults;
-        try {
-          batchResults = await response.json();
-        } catch (parseError) {
-          const responseText = await response.text();
-          console.error('❌ Failed to parse import response:', responseText);
-          throw new Error('Server returned invalid JSON response.');
-        }
+        const response = await postRequest(adminCatalogRoutes.import, { data: payload });
+        const batchResults = response?.data ?? response;
         
         allResults.created += batchResults.created || 0;
         allResults.updated += batchResults.updated || 0;
@@ -2061,7 +2044,19 @@ export const excelHelper = {
       } catch (error) {
         console.error(`❌ Batch ${batchIdx + 1}/${totalBatches} failed:`, error);
         allResults.failed += batchFabrics.length;
-        allResults.errors.push({ type: 'batch_error', message: error.message });
+        const status = error?.status || error?.response?.status || error?.response?.data?.error?.status;
+        const responseData = error?.response?.data ?? error?.data;
+        const responseError = responseData?.error;
+        const serverMessage = typeof responseError === 'string'
+          ? responseError
+          : responseError?.message || responseData?.message;
+        allResults.errors.push({
+          type: 'batch_error',
+          status: Number(status) || undefined,
+          message: Number(status) === 401
+            ? 'Import request could not authenticate.'
+            : serverMessage || error.message || 'Import request failed.'
+        });
       }
     }
     

@@ -1496,7 +1496,7 @@ export default function ProductManagementPage() {
         
         // Transform with real data
         const transformedData = excelHelper.transformImportDataMulti(importPreview, relationData);
-        results = await excelHelper.bulkImportMultiSheet(transformedData, getAuthHeaders);
+        results = await excelHelper.bulkImportMultiSheet(transformedData, adminPost);
       } else {
         // Single-sheet import (legacy)
         const transformedData = excelHelper.transformImportData(importPreview);
@@ -1508,9 +1508,16 @@ export default function ProductManagementPage() {
         console.log('Import errors:', results.errors);
         // Show first 5 errors in the alert
         const firstErrors = results.errors.slice(0, 5);
-        errorDetails = '\n\nFirst errors:\n' + firstErrors.map(e => 
-          `${e.sheet ? `${e.sheet} ` : ''}Row ${e.row}: ${e.error}`
-        ).join('\n');
+        errorDetails = '\n\nFirst errors:\n' + firstErrors.map(e => {
+          const status = e?.status || e?.response?.status || e?.response?.data?.error?.status;
+          if (Number(status) === 401) return 'Import request could not authenticate.';
+
+          const message = e?.error || e?.message || 'Import request failed.';
+          const location = e?.row !== undefined && e?.row !== null
+            ? `${e.sheet ? `${e.sheet} ` : ''}Row ${e.row}: `
+            : '';
+          return `${location}${message}`;
+        }).join('\n');
         if (results.errors.length > 5) {
           errorDetails += `\n... and ${results.errors.length - 5} more errors (see console for details)`;
         }

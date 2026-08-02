@@ -21,6 +21,14 @@ function rejectAshleyWildeUnauthorized(ctx) {
   };
 }
 
+function rejectCatalogImportUnauthorized(ctx) {
+  ctx.status = 401;
+  ctx.body = {
+    success: false,
+    error: { status: 401, name: 'UnauthorizedError', message: 'Unauthorized' },
+  };
+}
+
 function hasAshleyWildePromotionPermission(ctx) {
   const ability = ctx?.state?.catalogWriteAuth?.ability;
   if (!ability || typeof ability.can !== 'function') return true;
@@ -77,6 +85,8 @@ module.exports = {
 
   // Bulk import products using Strapi's internal services
   async bulkImport(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectCatalogImportUnauthorized(ctx);
+
     try {
       const { data: transformedDataset } = ctx.request.body;
       
