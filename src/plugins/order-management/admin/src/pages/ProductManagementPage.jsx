@@ -46,6 +46,34 @@ const productManagementResponsiveStyle = `
   .pm-promotion-actions { margin-top: 18px; }
   .pm-promotion-actions button, .pm-cleanup-actions button { min-height: 40px; white-space: normal; }
   .pm-promotion-preview, .pm-cleanup-preview { min-width: 0; overflow-wrap: anywhere; }
+  .pm-promotion-status { display: grid; gap: 16px; margin-top: 18px; padding: 16px; border: 1px solid #bfdbfe; border-radius: 10px; background: #f8fbff; }
+  .pm-promotion-status--success { border-color: #a7f3d0; background: #f0fdf4; }
+  .pm-promotion-status--error { border-color: #fecaca; background: #fff7f7; }
+  .pm-promotion-status-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+  .pm-promotion-status-header > div { min-width: 0; }
+  .pm-promotion-status-kicker { display: block; margin-bottom: 4px; color: #2563eb; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+  .pm-promotion-status--success .pm-promotion-status-kicker { color: #047857; }
+  .pm-promotion-status--error .pm-promotion-status-kicker { color: #b91c1c; }
+  .pm-promotion-status-title { margin: 0; color: #1e3a8a; font-size: 15px; }
+  .pm-promotion-status--success .pm-promotion-status-title { color: #065f46; }
+  .pm-promotion-status--error .pm-promotion-status-title { color: #991b1b; }
+  .pm-promotion-status-message { margin: 5px 0 0; color: #475569; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+  .pm-promotion-status-count { flex: 0 0 auto; color: #1d4ed8; font-size: 13px; font-weight: 800; white-space: nowrap; }
+  .pm-promotion-status--success .pm-promotion-status-count { color: #047857; }
+  .pm-promotion-status--error .pm-promotion-status-count { color: #b91c1c; }
+  .pm-promotion-stepper { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .pm-promotion-step { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 7px; align-items: center; min-width: 0; color: #94a3b8; font-size: 11px; line-height: 1.25; }
+  .pm-promotion-step-dot { display: grid; place-items: center; width: 22px; height: 22px; border: 1px solid #cbd5e1; border-radius: 50%; background: #fff; font-size: 11px; font-weight: 800; }
+  .pm-promotion-step--complete { color: #047857; }
+  .pm-promotion-step--complete .pm-promotion-step-dot { border-color: #6ee7b7; background: #ecfdf5; }
+  .pm-promotion-step--active { color: #1d4ed8; font-weight: 800; }
+  .pm-promotion-step--active .pm-promotion-step-dot { border-color: #60a5fa; background: #eff6ff; }
+  .pm-promotion-step--error { color: #b91c1c; font-weight: 800; }
+  .pm-promotion-step--error .pm-promotion-step-dot { border-color: #fca5a5; background: #fef2f2; }
+  .pm-promotion-status-details { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #64748b; font-size: 12px; }
+  .pm-promotion-status-details strong { color: #334155; }
+  .pm-promotion-status--success .pm-promotion-status-details strong { color: #065f46; }
+  .pm-promotion-status--error .pm-promotion-status-details strong { color: #991b1b; }
   .pm-bulk-panel { max-width: 1440px; margin: 24px auto 0; overflow: hidden; }
   @media (max-width: 1100px) {
     .pm-overview-grid { grid-template-columns: minmax(0, 1fr); }
@@ -61,6 +89,9 @@ const productManagementResponsiveStyle = `
     .pm-promotion-fields { grid-template-columns: minmax(0, 1fr); }
     .pm-promotion-header > div:last-child { width: 100%; }
     .pm-bulk-panel { margin-top: 16px; }
+    .pm-promotion-status-header { display: grid; gap: 8px; }
+    .pm-promotion-stepper { grid-template-columns: minmax(0, 1fr); gap: 9px; }
+    .pm-promotion-step { grid-template-columns: 24px minmax(0, 1fr); }
   }
 `;
 
@@ -91,6 +122,7 @@ export default function ProductManagementPage() {
   const [promotionBusy, setPromotionBusy] = useState(false);
   const [promotionError, setPromotionError] = useState('');
   const [promotionConfirmOpen, setPromotionConfirmOpen] = useState(false);
+  const [promotionStatus, setPromotionStatus] = useState(null);
   const [legacyCleanupPreview, setLegacyCleanupPreview] = useState(null);
   const [legacyCleanupBusy, setLegacyCleanupBusy] = useState(false);
   const [legacyCleanupError, setLegacyCleanupError] = useState('');
@@ -1617,34 +1649,70 @@ export default function ProductManagementPage() {
     setPromotionBusy(true);
     setPromotionError('');
     setPromotionPreview(null);
+    setPromotionStatus({ phase: 'previewing', message: 'Reviewing verified staged identities for the selected scope.', currentItem: promotionScope.fabricName || 'All Fabrics' });
     try {
       const response = await adminPost(adminCatalogRoutes.ashleyWildePromotionPreview, promotionScope);
-      setPromotionPreview(response.data?.data || response.data);
+      const preview = response.data?.data || response.data;
+      const eligible = preview.summary?.eligible ?? 0;
+      setPromotionPreview(preview);
+      setPromotionStatus({
+        phase: 'verified',
+        current: eligible,
+        total: preview.summary?.identitiesFound ?? eligible,
+        currentItem: promotionScope.fabricName || 'All Fabrics',
+        message: `Promotion verified: ${eligible} staged Colour identity(s) are eligible for confirmation.`,
+        summary: preview.summary,
+      });
     } catch (error) {
-      setPromotionError(promotionErrorMessage(error));
+      const message = promotionErrorMessage(error);
+      setPromotionStatus({ phase: 'error', currentItem: promotionScope.fabricName || 'All Fabrics', message });
+      setPromotionError(message);
     } finally {
       setPromotionBusy(false);
     }
   };
 
   const applyAshleyWildePromotion = async () => {
-    if (!promotionPreview) return;
+    const reviewedPlan = promotionPreview;
+    if (!reviewedPlan) return;
+    const plannedTotal = reviewedPlan.summary?.eligible ?? reviewedPlan.identityDocumentIds?.length ?? 0;
+    setPromotionConfirmOpen(false);
+    setPromotionPreview(null);
     setPromotionBusy(true);
     setPromotionError('');
+    setPromotionStatus({ phase: 'confirming', current: 0, total: plannedTotal, currentItem: promotionScope.fabricName || 'All Fabrics', message: `Confirming the reviewed promotion plan for ${plannedTotal} staged Colour identity(s).` });
     try {
-      await adminPost(adminCatalogRoutes.ashleyWildePromotionApply, {
+      const response = await adminPost(adminCatalogRoutes.ashleyWildePromotionApply, {
         ...promotionScope,
         confirm: true,
-        planFingerprint: promotionPreview.planFingerprint,
-        planExpiresAt: promotionPreview.planExpiresAt,
-        identityDocumentIds: promotionPreview.identityDocumentIds,
+        planFingerprint: reviewedPlan.planFingerprint,
+        planExpiresAt: reviewedPlan.planExpiresAt,
+        identityDocumentIds: reviewedPlan.identityDocumentIds,
       });
-      setPromotionConfirmOpen(false);
-      setPromotionPreview(null);
+      const result = response.data?.data || response.data || {};
+      const resultSummary = result.summary || {};
+      const completedTotal = resultSummary.eligible ?? result.total ?? plannedTotal;
+      setPromotionStatus({
+        phase: 'promoting',
+        current: completedTotal,
+        total: result.total ?? plannedTotal,
+        currentItem: promotionScope.fabricName || 'All Fabrics',
+        message: 'Verified promotion committed. Refreshing the catalogue view.',
+        summary: resultSummary,
+      });
       await fetchProducts();
-      await previewAshleyWildePromotion();
+      setPromotionStatus({
+        phase: 'complete',
+        current: completedTotal,
+        total: result.total ?? plannedTotal,
+        currentItem: promotionScope.fabricName || 'All Fabrics',
+        message: `Promotion complete: ${resultSummary.newColours ?? 0} new Colour(s) created and ${resultSummary.existingColoursToReuse ?? 0} existing Colour(s) reused.`,
+        summary: resultSummary,
+      });
     } catch (error) {
-      setPromotionError(promotionErrorMessage(error));
+      const message = promotionErrorMessage(error);
+      setPromotionStatus({ phase: 'error', currentItem: promotionScope.fabricName || 'All Fabrics', message });
+      setPromotionError(message);
     } finally {
       setPromotionBusy(false);
     }
@@ -1655,6 +1723,7 @@ export default function ProductManagementPage() {
     setLegacyCleanupError('');
     setLegacyCleanupSuccess('');
     setLegacyCleanupPreview(null);
+    setPromotionStatus(null);
     try {
       const response = await adminPost(adminCatalogRoutes.ashleyWildeLegacyColourCleanupPreview, {
         supplier: promotionScope.supplier,
@@ -1686,6 +1755,7 @@ export default function ProductManagementPage() {
       setLegacyCleanupConfirmOpen(false);
       setLegacyCleanupPreview(null);
       setPromotionPreview(null);
+      setPromotionStatus(null);
       setLegacyCleanupSuccess(`Cleanup complete: ${result.summary?.unlinkedAssociationsToRemove || 0} unlinked Colour association(s) removed; ${result.summary?.identityLinkedAssociationsPreserved || 0} identity-linked association(s) preserved.`);
       await fetchProducts();
     } catch (error) {
@@ -1694,6 +1764,54 @@ export default function ProductManagementPage() {
       setLegacyCleanupBusy(false);
     }
   };
+
+  const promotionStages = [
+    { key: 'preview', label: 'Preview' },
+    { key: 'verified', label: 'Verified' },
+    { key: 'confirmed', label: 'Confirmed' },
+    { key: 'promoting', label: 'Promoting' },
+    { key: 'complete', label: 'Complete' },
+  ];
+  const promotionStageIndex = { previewing: 0, verified: 1, confirming: 2, promoting: 3, complete: 4, error: 2 };
+  const promotionStatusIndex = promotionStatus ? promotionStageIndex[promotionStatus.phase] ?? 0 : 0;
+  const promotionStatusTitle = {
+    previewing: 'Reviewing staged Colours', verified: 'Promotion verified', confirming: 'Confirming reviewed plan',
+    promoting: 'Promoting verified Colours', complete: 'Promotion complete', error: 'Promotion needs attention',
+  }[promotionStatus?.phase] || 'Promotion status';
+  const promotionStatusCount = promotionStatus?.total > 0
+    ? `${Math.min(promotionStatus.current || 0, promotionStatus.total)} / ${promotionStatus.total}`
+    : promotionStatus?.phase === 'complete' ? 'Complete' : promotionStatus?.phase === 'error' ? 'Stopped' : 'In progress';
+  const promotionStatusPanel = promotionStatus && (
+    <section className={`pm-promotion-status ${promotionStatus.phase === 'complete' ? 'pm-promotion-status--success' : ''} ${promotionStatus.phase === 'error' ? 'pm-promotion-status--error' : ''}`} aria-live="polite" aria-labelledby="pm-promotion-status-heading">
+      <div className="pm-promotion-status-header">
+        <div>
+          <span className="pm-promotion-status-kicker">PROMOTION STATUS</span>
+          <h3 id="pm-promotion-status-heading" className="pm-promotion-status-title">{promotionStatusTitle}</h3>
+          <p className="pm-promotion-status-message">{promotionStatus.message}</p>
+        </div>
+        <strong className="pm-promotion-status-count">{promotionStatusCount}</strong>
+      </div>
+      <div className="pm-promotion-stepper">
+        {promotionStages.map((stage, index) => {
+          const complete = promotionStatus.phase === 'complete' || index < promotionStatusIndex;
+          const active = !complete && index === promotionStatusIndex && promotionStatus.phase !== 'error';
+          const failed = promotionStatus.phase === 'error' && index === promotionStatusIndex;
+          return <div className={`pm-promotion-step ${complete ? 'pm-promotion-step--complete' : ''} ${active ? 'pm-promotion-step--active' : ''} ${failed ? 'pm-promotion-step--error' : ''}`} key={stage.key}>
+            <span className="pm-promotion-step-dot">{complete ? <CheckCircle size={13} /> : failed ? <AlertCircle size={13} /> : active ? <Loader2 size={13} className="pm-promotion-status-spin" /> : index + 1}</span>
+            <span>{stage.label}</span>
+          </div>;
+        })}
+      </div>
+      <div className="pm-promotion-status-details">
+        <span>Current operation: <strong>{promotionStatus.currentItem || 'Selected scope'}</strong></span>
+        {promotionStatus.summary && <>
+          <span>Created: <strong>{promotionStatus.summary.newColours ?? 0}</strong></span>
+          <span>Reused: <strong>{promotionStatus.summary.existingColoursToReuse ?? 0}</strong></span>
+          <span>Skipped: <strong>{promotionStatus.summary.blocked ?? 0}</strong></span>
+        </>}
+      </div>
+    </section>
+  );
 
   return (
     <div>
@@ -1738,18 +1856,18 @@ export default function ProductManagementPage() {
         </div>
         <div className="pm-promotion-fields">
           <label className="pm-field-label">Supplier
-            <select className="pm-field-control" value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
+            <select className="pm-field-control" value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); setPromotionStatus(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
               <option value="Ashley Wilde">Ashley Wilde</option>
             </select>
           </label>
           <label className="pm-field-label">Fabric
-            <select className="pm-field-control" value={promotionScope.fabricName} onChange={(event) => { setPromotionScope({ ...promotionScope, fabricName: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
+            <select className="pm-field-control" value={promotionScope.fabricName} onChange={(event) => { setPromotionScope({ ...promotionScope, fabricName: event.target.value }); setPromotionPreview(null); setPromotionStatus(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
               <option value="">All Fabrics</option>
               {(products.fabrics || []).map((fabric) => <option key={fabric.documentId || fabric.id} value={fabric.name}>{fabric.name}</option>)}
             </select>
           </label>
           <label className="pm-field-label">Supplier product code
-            <input className="pm-field-control" value={promotionScope.supplierProductCode} onChange={(event) => { setPromotionScope({ ...promotionScope, supplierProductCode: event.target.value }); setPromotionPreview(null); }} placeholder="Optional" />
+            <input className="pm-field-control" value={promotionScope.supplierProductCode} onChange={(event) => { setPromotionScope({ ...promotionScope, supplierProductCode: event.target.value }); setPromotionPreview(null); setPromotionStatus(null); }} placeholder="Optional" />
           </label>
         </div>
         <div className="pm-promotion-actions">
@@ -1757,6 +1875,7 @@ export default function ProductManagementPage() {
           <button type="button" onClick={() => setPromotionConfirmOpen(true)} disabled={promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible} style={{ background: '#047857', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionPreview ? 'pointer' : 'not-allowed', opacity: promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible ? 0.55 : 1 }}>Promote verified</button>
           {promotionError && <span style={{ color: '#b91c1c', fontSize: '13px' }}>{promotionError}</span>}
         </div>
+        {promotionStatusPanel}
         {promotionPreview && <div className="pm-promotion-preview" style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '13px', color: '#334155' }}>
             <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Safely skipped: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Existing Colours skipped: <strong>{promotionPreview.summary?.skippedExistingColours ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
