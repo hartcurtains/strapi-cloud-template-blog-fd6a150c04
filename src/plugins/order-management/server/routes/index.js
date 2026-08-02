@@ -16,7 +16,7 @@ module.exports = [
       method: 'POST',
       path: relativePath(adminCatalogRoutes.import),
       handler: 'import-export.bulkImport',
-      config: { auth: false, policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
+      config: { ...customMutationPolicyConfig(), middlewares: [] },
     },
     {
       method: 'POST',
