@@ -2927,7 +2927,5 @@ export default function ProductManagementPage() {
         </div>
       )}
     </div>
-  </div>
-  </div>
   );
 }
