@@ -70,6 +70,12 @@ const productManagementResponsiveStyle = `
   .pm-promotion-step--active .pm-promotion-step-dot { border-color: #60a5fa; background: #eff6ff; }
   .pm-promotion-step--error { color: #b91c1c; font-weight: 800; }
   .pm-promotion-step--error .pm-promotion-step-dot { border-color: #fca5a5; background: #fef2f2; }
+  .pm-promotion-error-detail { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border: 1px solid #fecaca; border-radius: 8px; background: #fef2f2; color: #991b1b; }
+  .pm-promotion-error-detail > svg { flex: 0 0 auto; margin-top: 1px; }
+  .pm-promotion-error-detail strong { display: block; font-size: 12px; }
+  .pm-promotion-error-detail p { margin: 3px 0 0; color: #7f1d1d; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+  .pm-promotion-error-detail span { display: block; margin-top: 5px; color: #991b1b; font-size: 11px; line-height: 1.4; }
+  .pm-promotion-status-spin { animation: spin 1s linear infinite; }
   .pm-promotion-status-details { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #64748b; font-size: 12px; }
   .pm-promotion-status-details strong { color: #334155; }
   .pm-promotion-status--success .pm-promotion-status-details strong { color: #065f46; }
@@ -1643,7 +1649,21 @@ export default function ProductManagementPage() {
     setJsonError(null);
   };
 
-  const promotionErrorMessage = (error) => error?.response?.data?.error?.message || error?.response?.data?.error || error?.message || 'Promotion request failed.';
+  const promotionErrorMessage = (error) => {
+    const payload = error?.response?.data || error?.data;
+    const responseError = payload?.error;
+    if (typeof responseError === 'string') return responseError;
+    if (typeof responseError?.message === 'string') return responseError.message;
+    if (typeof payload?.message === 'string') return payload.message;
+    if (typeof error?.message === 'string') return error.message;
+    return 'Promotion request failed.';
+  };
+
+  const promotionRecoveryMessage = (phase, message) => {
+    if (phase === 'preview') return 'Check the selected scope, then run Preview promotion again.';
+    if (/stale|expired|scope no longer matches/i.test(message)) return 'This reviewed plan is no longer current. Run Preview promotion again before confirming.';
+    return 'Review the exact error above, then run Preview promotion again before retrying.';
+  };
 
   const previewAshleyWildePromotion = async () => {
     setPromotionBusy(true);
@@ -1665,7 +1685,7 @@ export default function ProductManagementPage() {
       });
     } catch (error) {
       const message = promotionErrorMessage(error);
-      setPromotionStatus({ phase: 'error', currentItem: promotionScope.fabricName || 'All Fabrics', message });
+      setPromotionStatus({ phase: 'error', errorTitle: 'Preview promotion failed', errorPhase: 'preview', currentItem: promotionScope.fabricName || 'All Fabrics', message, recovery: promotionRecoveryMessage('preview', message) });
       setPromotionError(message);
     } finally {
       setPromotionBusy(false);
@@ -1711,7 +1731,7 @@ export default function ProductManagementPage() {
       });
     } catch (error) {
       const message = promotionErrorMessage(error);
-      setPromotionStatus({ phase: 'error', currentItem: promotionScope.fabricName || 'All Fabrics', message });
+      setPromotionStatus({ phase: 'error', errorTitle: 'Promote verified failed', errorPhase: 'apply', currentItem: promotionScope.fabricName || 'All Fabrics', message, recovery: promotionRecoveryMessage('apply', message) });
       setPromotionError(message);
     } finally {
       setPromotionBusy(false);
@@ -1777,7 +1797,7 @@ export default function ProductManagementPage() {
   const promotionStatusTitle = {
     previewing: 'Reviewing staged Colours', verified: 'Promotion verified', confirming: 'Confirming reviewed plan',
     promoting: 'Promoting verified Colours', complete: 'Promotion complete', error: 'Promotion needs attention',
-  }[promotionStatus?.phase] || 'Promotion status';
+  }[promotionStatus?.phase] || promotionStatus?.errorTitle || 'Promotion status';
   const promotionStatusCount = promotionStatus?.total > 0
     ? `${Math.min(promotionStatus.current || 0, promotionStatus.total)} / ${promotionStatus.total}`
     : promotionStatus?.phase === 'complete' ? 'Complete' : promotionStatus?.phase === 'error' ? 'Stopped' : 'In progress';
@@ -1787,10 +1807,18 @@ export default function ProductManagementPage() {
         <div>
           <span className="pm-promotion-status-kicker">PROMOTION STATUS</span>
           <h3 id="pm-promotion-status-heading" className="pm-promotion-status-title">{promotionStatusTitle}</h3>
-          <p className="pm-promotion-status-message">{promotionStatus.message}</p>
+          <p className="pm-promotion-status-message">{promotionStatus.phase === 'error' ? 'The request did not complete. See the exact error and next step below.' : promotionStatus.message}</p>
         </div>
         <strong className="pm-promotion-status-count">{promotionStatusCount}</strong>
       </div>
+      {promotionStatus.phase === 'error' && <div className="pm-promotion-error-detail" role="alert">
+        <AlertCircle size={18} />
+        <div>
+          <strong>{promotionStatus.errorTitle || 'Promotion request failed'}</strong>
+          <p>{promotionStatus.message}</p>
+          <span>{promotionStatus.recovery}</span>
+        </div>
+      </div>}
       <div className="pm-promotion-stepper">
         {promotionStages.map((stage, index) => {
           const complete = promotionStatus.phase === 'complete' || index < promotionStatusIndex;
@@ -1873,7 +1901,7 @@ export default function ProductManagementPage() {
         <div className="pm-promotion-actions">
           <button type="button" onClick={previewAshleyWildePromotion} disabled={promotionBusy} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionBusy ? 'wait' : 'pointer', opacity: promotionBusy ? 0.55 : 1 }}>Preview promotion</button>
           <button type="button" onClick={() => setPromotionConfirmOpen(true)} disabled={promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible} style={{ background: '#047857', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionPreview ? 'pointer' : 'not-allowed', opacity: promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible ? 0.55 : 1 }}>Promote verified</button>
-          {promotionError && <span style={{ color: '#b91c1c', fontSize: '13px' }}>{promotionError}</span>}
+          {promotionError && (!promotionStatus || promotionStatus.phase !== 'error') && <span style={{ color: '#b91c1c', fontSize: '13px' }}>{promotionError}</span>}
         </div>
         {promotionStatusPanel}
         {promotionPreview && <div className="pm-promotion-preview" style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
