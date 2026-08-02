@@ -288,12 +288,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
   };
 
   return (
-    <div style={{
-      padding: '24px',
-      paddingBottom: uploading ? '120px' : '24px', // Extra padding when progress bar is visible
-      maxWidth: '1200px',
-      margin: '0 auto'
-    }}>
+    <div className={`bulk-image-upload-shell${uploading ? ' bulk-image-upload-shell--uploading' : ''}`}>
       <div style={{ marginBottom: '32px' }}>
         <h2 style={{ fontSize: '24px', fontWeight: '700', color: '#111827', marginBottom: '8px' }}>
           📸 Bulk Image Upload
@@ -306,7 +301,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
       {productType === 'fabrics' && <AshleyWildeFolderImporter onStagingStart={cancelCatalogueRequests} />}
 
       {/* Match By Selection */}
-      <div style={{ marginBottom: '24px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
+      <div className="bulk-match-methods" style={{ marginBottom: '24px', padding: '16px', background: '#f9fafb', borderRadius: '8px' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
           Match Images By:
         </label>
@@ -376,6 +371,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
 
       {/* Upload Area */}
       <div
+        className="bulk-upload-dropzone"
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
@@ -432,7 +428,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
             </button>
           </div>
 
-          <div style={{
+          <div className="bulk-selected-files-grid" style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
             gap: '16px'
@@ -553,7 +549,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
                   </div>
 
                   {/* Match Info */}
-                  <div style={{ flex: 1 }}>
+                  <div className="bulk-image-match-content" style={{ flex: 1 }}>
                     <div style={{ fontSize: '14px', fontWeight: '600', color: '#374151', marginBottom: '8px' }}>
                       {match.file.name}
                     </div>
@@ -632,7 +628,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
             Define what each color ID means (e.g., "01" = "Navy Blue")
           </p>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
+          <div className="bulk-color-mappings-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: '12px' }}>
             {Object.keys(colorMappings).map(colorId => (
               <div key={colorId}>
                 <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#374151', marginBottom: '4px' }}>
@@ -662,6 +658,7 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
       {selectedFiles.length > 0 && !uploading && (
         <div style={{ marginBottom: '24px' }}>
           <button
+            className="bulk-upload-submit"
             onClick={handleUpload}
             style={{
               padding: '12px 24px',
@@ -890,6 +887,27 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
       )}
 
       <style>{`
+        .bulk-image-upload-shell { width: 100%; min-width: 0; padding: 24px; padding-bottom: 24px; }
+        .bulk-image-upload-shell--uploading { padding-bottom: 120px; }
+        .bulk-image-upload-shell h2, .bulk-image-upload-shell h3 { overflow-wrap: normal; word-break: normal; }
+        .bulk-match-methods { min-width: 0; }
+        .bulk-match-methods label { min-width: 0; }
+        .bulk-match-methods label span { overflow-wrap: anywhere; }
+        .bulk-image-match-content { min-width: 0; }
+        .bulk-upload-dropzone { min-width: 0; padding: 48px; }
+        .bulk-selected-files-grid { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)) !important; }
+        @media (max-width: 640px) {
+          .bulk-image-upload-shell { padding: 16px; }
+          .bulk-image-upload-shell--uploading { padding-bottom: 148px; }
+          .bulk-upload-dropzone { padding: 28px 16px !important; }
+          .bulk-color-mappings-grid { grid-template-columns: minmax(0, 1fr) !important; }
+          .bulk-upload-submit { max-width: 100%; justify-content: center; flex-wrap: wrap; }
+          .bulk-selected-files-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)) !important; gap: 10px !important; }
+          .bulk-match-methods { padding: 14px !important; }
+          .bulk-match-methods > div { display: grid !important; gap: 12px !important; }
+          .bulk-match-methods label { align-items: flex-start !important; }
+        }
+
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
@@ -898,9 +916,5 @@ export default function BulkImageUploader({ productType = 'fabrics' }) {
     </div>
   );
 }
-
-
-
-
 
 

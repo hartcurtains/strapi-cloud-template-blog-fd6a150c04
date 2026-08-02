@@ -120,6 +120,12 @@ const statusLabel = (status) => ({
   logical_duplicate: 'logical duplicate', conflicting_image: 'conflicting image', identity_conflict: 'mapping conflict',
   staged: 'staged', failed: 'failed', already_staged: 'already staged',
 }[status] || String(status || 'unknown').replaceAll('_', ' '));
+const diagnosticStatuses = new Set([
+  'unknown_mapping_product', 'fabric_not_found_in_current_catalog', 'ambiguous_catalog_fabric',
+  'ambiguous_filename', 'identity_conflict', 'conflicting_image', 'unsupported_file',
+  'classified_asset', 'duplicate_in_folder', 'exact_duplicate', 'failed',
+  'retryable_upload_failure', 'retryable_finalisation_failure',
+]);
 
 export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const { get, put, del } = useFetchClient();
@@ -138,6 +144,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const [queuedFolder, setQueuedFolder] = useState(null);
   const [analysisState, setAnalysisState] = useState('idle');
   const [analysisBatches, setAnalysisBatches] = useState([]);
+  const [stagingFailures, setStagingFailures] = useState([]);
   const fileQueueRef = useRef([]);
   const stagingRunRef = useRef(false);
   const traceAttemptsRef = useRef(new Map());
@@ -173,6 +180,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     folderFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
     setFolderFiles([]);
     setError('');
+    setStagingFailures([]);
     setAcknowledgeSkips(false);
     setQueuedFolder({ folderName: selectedFolderName, totalFiles: files.length, preflight: preflightStats(selectedRows) });
     setAnalysis(null);
@@ -183,6 +191,33 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
 
   const unresolvedCount = useMemo(() => analysis?.rows.filter((row) => !READY_STATUSES.has(row.status) && row.status !== 'already_complete').length || 0, [analysis]);
   const selectedRows = useMemo(() => analysis?.rows.filter((row) => selected.has(row.relativePath)) || [], [analysis, selected]);
+  const diagnosticRows = useMemo(() => {
+    const rows = new Map();
+    folderFiles.forEach((row) => {
+      if (!diagnosticStatuses.has(row.status) && !row.warning) return;
+      rows.set(row.relativePath, {
+        id: row.relativePath,
+        fabricName: row.fabricName || row.productName || row.supplierProductCode || 'Fabric not resolved',
+        filename: row.filename || row.relativePath,
+        relativePath: row.relativePath,
+        status: row.status,
+        reason: row.warning || statusLabel(row.status),
+      });
+    });
+    stagingFailures.forEach((failure) => {
+      const key = failure.relativePath || failure.filename;
+      const failedRow = folderFiles.find((row) => row.relativePath === key);
+      rows.set(key, {
+        id: key,
+        fabricName: failure.fabricName || failedRow?.fabricName || failedRow?.productName || failedRow?.supplierProductCode || 'Fabric not resolved',
+        filename: failure.filename,
+        relativePath: failure.relativePath || failure.filename,
+        status: 'failed',
+        reason: safeErrorMessage(failure.error),
+      });
+    });
+    return [...rows.values()];
+  }, [folderFiles, stagingFailures]);
   const priorSameName = history.filter((item) => item.folderName === analysis?.folderName && item.folderFingerprint !== analysis?.folderFingerprint);
   const identicalHistory = history.find((item) => item.folderFingerprint === analysis?.folderFingerprint);
 
@@ -297,6 +332,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     if (!analysis || analysis.analysisComplete !== true || !selectedRows.length || (unresolvedCount > 0 && !acknowledgeSkips)) return;
     setBusy(true);
     setError('');
+    setStagingFailures([]);
     try {
       const failures = [];
       for (let index = 0; index < selectedRows.length; index += 1) {
@@ -310,9 +346,11 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       }
       await refreshHistory();
       if (failures.length) {
+        setStagingFailures(failures);
         setProgress(`Folder import partial: ${selectedRows.length - failures.length} of ${selectedRows.length} staged`);
         setError(partialStageMessage(selectedRows.length, failures));
       } else {
+        setStagingFailures([]);
         setProgress('Folder import complete');
         setSelected(new Set());
       }
@@ -397,6 +435,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     stagingRunRef.current = true;
     setBusy(true);
     setError('');
+    setStagingFailures([]);
     try {
       onStagingStart?.();
       const folderFingerprint = analysis?.folderFingerprint;
@@ -422,6 +461,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       }
       await refreshHistory();
       if (failures.length) {
+        setStagingFailures(failures);
         setAnalysisBatches((current) => current.map((batch) => ({
           ...batch,
           rows: batch.rows.map((row) => successfulPaths.has(row.relativePath) ? { ...row, status: 'already_complete' } : row),
@@ -431,6 +471,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         return;
       }
       fileQueueRef.current = [];
+      setStagingFailures([]);
       setQueuedFolder(null);
       setAnalysisBatches([]);
       setProgress('Folder import complete');
@@ -448,7 +489,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     <section style={{ borderBottom: `1px solid ${colours.line}`, paddingBottom: '32px', marginBottom: '32px' }}>
       <div className="aw-folder-layout">
         <div style={{ minWidth: 0 }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 600, color: colours.text, margin: '0 0 6px' }}>Ashley Wilde folder import</h3>
+          <h3 className="aw-folder-title" style={{ fontSize: '18px', fontWeight: 600, color: colours.text, margin: '0 0 6px' }}>Ashley Wilde folder import</h3>
           {mappingMode === 'pilot' && <div role="status" style={{ display: 'inline-block', marginBottom: '8px', padding: '4px 8px', borderRadius: '4px', background: '#fffbeb', color: colours.amber, fontSize: '12px', fontWeight: 600 }}>Pilot mapping — local testing only</div>}
           <p style={{ fontSize: '14px', color: colours.muted, margin: '0 0 16px' }}>Select one complete folder. Files are analysed and shown before staging; the live Colour table is not changed.</p>
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '6px', border: `1px solid ${colours.line}`, background: '#fff', color: colours.text, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
@@ -482,6 +523,28 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
                 <span><strong style={{ color: colours.red }}>{analysis.summary.conflictFiles}</strong> conflicts</span>
               </div>
               {(identicalHistory || priorSameName.length > 0) && <p style={{ fontSize: '13px', color: identicalHistory ? colours.green : colours.amber, margin: '0 0 12px' }}>{identicalHistory ? 'This exact folder fingerprint has been processed before.' : 'A folder with this name was processed before, but its contents have changed.'}</p>}
+              {diagnosticRows.length > 0 && <section className="aw-conflict-panel" aria-labelledby="aw-conflict-heading">
+                <div className="aw-conflict-header">
+                  <div>
+                    <h4 id="aw-conflict-heading">Conflicts and file errors</h4>
+                    <p>Review the exact Fabric and file affected before retrying or correcting the source data.</p>
+                  </div>
+                  <strong>{diagnosticRows.length} issue{diagnosticRows.length === 1 ? '' : 's'}</strong>
+                </div>
+                <div className="aw-conflict-list">
+                  {diagnosticRows.map((item) => <div className="aw-conflict-item" key={item.id}>
+                    <div className="aw-conflict-file">
+                      <strong>{item.fabricName}</strong>
+                      <span>{item.filename}</span>
+                      <small>{item.relativePath}</small>
+                    </div>
+                    <div className="aw-conflict-reason">
+                      <span className="aw-status-label">{statusLabel(item.status)}</span>
+                      <span>{item.reason}</span>
+                    </div>
+                  </div>)}
+                </div>
+              </section>}
               <div style={{ overflowX: 'auto', border: `1px solid ${colours.line}`, borderRadius: '6px' }}>
                 <table style={{ width: '100%', minWidth: '880px', borderCollapse: 'collapse', fontSize: '12px' }}>
                   <thead><tr style={{ background: colours.surface, textAlign: 'left' }}>{['', 'Image', 'Filename', 'Product', 'Colour', 'Supplier code', 'Internal code', 'Action / status'].map((label) => <th key={label} style={{ padding: '9px', borderBottom: `1px solid ${colours.line}`, color: colours.muted }}>{label}</th>)}</tr></thead>
@@ -502,11 +565,11 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
               </div>
               {queuedFolder ? <>
                 <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '14px', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to {MAX_BATCH_FILES} files and {MAX_BATCH_BYTES / 1024 / 1024} MB, then stage confirmed files and leave unresolved, oversized, or conflicting files skipped.</label>
-                <button onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips || analysisState === 'complete'} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips || analysisState === 'complete' ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
-                <button onClick={stageQueuedFolder} disabled={busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES))} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES)) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
+                <button className="aw-action-button" onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips || analysisState === 'complete'} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips || analysisState === 'complete' ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
+                <button className="aw-action-button" onClick={stageQueuedFolder} disabled={busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES))} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES)) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
               </> : <>
                 {unresolvedCount > 0 && <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '14px', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Upload confirmed files and explicitly leave {unresolvedCount} unresolved or conflicting file(s) skipped.</label>}
-                <button onClick={uploadFolder} disabled={busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips)} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {selectedRows.length} confirmed file(s)</button>
+                <button className="aw-action-button" onClick={uploadFolder} disabled={busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips)} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {selectedRows.length} confirmed file(s)</button>
               </>}
             </>
           )}
@@ -514,8 +577,8 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
             <div style={{ marginTop: '14px' }}>
               {analysisState === 'failed' && <p role="status" style={{ color: colours.red, fontSize: '13px' }}>Filename analysis failed; staging is disabled until the folder is analysed successfully.</p>}
               <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to {MAX_BATCH_FILES} files and {MAX_BATCH_BYTES / 1024 / 1024} MB, then stage confirmed files and leave unresolved, oversized, or conflicting files skipped.</label>
-              <button onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
-              <button onClick={stageQueuedFolder} disabled style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: 0.45, cursor: 'not-allowed' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
+              <button className="aw-action-button" onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
+              <button className="aw-action-button" onClick={stageQueuedFolder} disabled style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: 0.45, cursor: 'not-allowed' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
             </div>
           )}
         </div>
@@ -524,7 +587,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}><h3 style={{ fontSize: '15px', color: colours.text, margin: 0 }}>Folder history</h3><button onClick={refreshHistory} disabled={historyLoading} aria-label="Refresh folder history" style={{ border: 0, background: 'transparent', color: colours.muted, cursor: 'pointer' }}><RefreshCw size={16} className={historyLoading ? 'aw-spin' : ''} /></button></div>
           {historyLoading && <p style={{ color: colours.muted, fontSize: '13px' }}>Loading history…</p>}
           {!historyLoading && history.length === 0 && <p style={{ color: colours.muted, fontSize: '13px' }}>No folder imports yet.</p>}
-          <div style={{ display: 'grid', gap: '2px' }}>{history.map((item) => <button key={item.documentId || item.id} onClick={() => setSelectedHistory(item)} style={{ textAlign: 'left', padding: '10px 0', border: 0, borderBottom: `1px solid ${colours.line}`, background: selectedHistory?.id === item.id ? colours.surface : 'transparent', cursor: 'pointer' }}>
+          <div style={{ display: 'grid', gap: '2px' }}>{history.map((item) => <button className="aw-history-item" key={item.documentId || item.id} onClick={() => setSelectedHistory(item)} style={{ textAlign: 'left', padding: '10px 0', border: 0, borderBottom: `1px solid ${colours.line}`, background: selectedHistory?.id === item.id ? colours.surface : 'transparent', cursor: 'pointer' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: '8px' }}><strong style={{ color: colours.text, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.folderName}</strong>{['completed', 'completed_with_skips'].includes(item.status) ? <CheckCircle size={15} color={statusTone(item.status)} /> : <AlertCircle size={15} color={statusTone(item.status)} />}</div>
             <div style={{ color: colours.muted, fontSize: '12px', marginTop: '4px' }}>{item.supplier} · {item.uploadedFiles}/{item.totalFiles} uploaded</div>
             <div style={{ color: statusTone(item.status), fontSize: '12px' }}>{item.status.replaceAll('_', ' ')} · {item.conflictFiles} conflicts · {item.skippedFiles} skipped</div>
@@ -534,7 +597,38 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         {selectedHistory && <div style={{ paddingTop: '12px', fontSize: '12px', color: colours.muted }}><div>Current file: {selectedHistory.manifestSummary?.currentFilename || 'None'}</div><div>Phase: {selectedHistory.manifestSummary?.currentPhase || 'analysed'}</div><div>Ready: {selectedHistory.manifestSummary?.readyFiles ?? 0}</div><div>Attempts: {selectedHistory.manifestSummary?.attemptCount || 1}</div></div>}
         </aside>
       </div>
-      <style>{`.aw-folder-layout{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:24px}.aw-spin{animation:aw-spin 1s linear infinite}@keyframes aw-spin{to{transform:rotate(360deg)}}@media(max-width:900px){.aw-folder-layout{grid-template-columns:minmax(0,1fr)}.aw-folder-layout aside{border-left:0!important;border-top:1px solid #e5e7eb;padding-left:0!important;padding-top:20px}}`}</style>
+      <style>{`
+        .aw-folder-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 280px); gap: 28px; align-items: start; }
+        .aw-folder-title { overflow-wrap: normal; word-break: normal; }
+        .aw-history-item { width: 100%; min-width: 0; overflow-wrap: anywhere; }
+        .aw-conflict-panel { margin: 16px 0; border: 1px solid #fecaca; border-radius: 8px; background: #fff7f7; color: #7f1d1d; }
+        .aw-conflict-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; padding: 14px 16px; border-bottom: 1px solid #fecaca; }
+        .aw-conflict-header h4 { margin: 0; font-size: 14px; color: #991b1b; }
+        .aw-conflict-header p { margin: 4px 0 0; font-size: 12px; color: #7f1d1d; }
+        .aw-conflict-header > strong { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; background: #fee2e2; color: #991b1b; font-size: 12px; }
+        .aw-conflict-list { display: grid; }
+        .aw-conflict-item { display: grid; grid-template-columns: minmax(180px, .75fr) minmax(0, 1.25fr); gap: 16px; padding: 12px 16px; border-bottom: 1px solid #fee2e2; }
+        .aw-conflict-item:last-child { border-bottom: 0; }
+        .aw-conflict-file, .aw-conflict-reason { min-width: 0; display: grid; gap: 3px; align-content: start; }
+        .aw-conflict-file strong { color: #450a0a; overflow-wrap: anywhere; }
+        .aw-conflict-file span, .aw-conflict-file small, .aw-conflict-reason span { overflow-wrap: anywhere; }
+        .aw-conflict-file span, .aw-conflict-file small { color: #7f1d1d; font-size: 12px; }
+        .aw-conflict-file small { font-size: 11px; }
+        .aw-conflict-reason { color: #991b1b; font-size: 12px; }
+        .aw-status-label { font-weight: 700; text-transform: capitalize; }
+        .aw-spin { animation: aw-spin 1s linear infinite; }
+        @keyframes aw-spin { to { transform: rotate(360deg); } }
+        @media (max-width: 1080px) {
+          .aw-folder-layout { grid-template-columns: minmax(0, 1fr); }
+          .aw-folder-layout aside { border-left: 0 !important; border-top: 1px solid #e5e7eb; padding-left: 0 !important; padding-top: 20px; }
+        }
+        @media (max-width: 640px) {
+          .aw-conflict-header, .aw-conflict-item { display: block; }
+          .aw-conflict-header > strong { display: inline-block; margin-top: 10px; }
+          .aw-conflict-reason { margin-top: 10px; }
+          .aw-action-button { width: 100%; justify-content: center; margin-left: 0 !important; }
+        }
+      `}</style>
     </section>
   );
 }

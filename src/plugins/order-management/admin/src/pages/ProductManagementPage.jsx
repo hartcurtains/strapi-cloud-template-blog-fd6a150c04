@@ -21,6 +21,49 @@ const spinnerStyle = `
   }
 `;
 
+const productManagementResponsiveStyle = `
+  .pm-page-shell, .pm-page-shell * { box-sizing: border-box; }
+  .pm-page-shell { min-height: 100vh; padding: 24px; background: #fff; color: #1f2937; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .pm-overview-grid { display: grid; grid-template-columns: minmax(260px, .78fr) minmax(0, 1.22fr); gap: 24px; align-items: start; max-width: 1440px; margin: 0 auto; }
+  .pm-intro-panel, .pm-promotion-panel, .pm-bulk-panel { min-width: 0; background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; }
+  .pm-intro-panel { padding: 28px; }
+  .pm-page-header { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+  .pm-page-heading { min-width: 0; }
+  .pm-page-heading h1 { display: flex; align-items: center; gap: 12px; margin: 0 0 8px; color: #047857; font-size: 32px; font-weight: 800; line-height: 1.15; letter-spacing: -.5px; }
+  .pm-page-heading p { margin: 0; color: #64748b; font-size: 16px; font-weight: 500; }
+  .pm-primary-actions { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; padding: 8px; background: #f8faf9; border-radius: 10px; }
+  .pm-primary-action { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: normal; }
+  .pm-primary-action--images { color: #0f172a; background: #fff; border: 1px solid #dbe4e8; }
+  .pm-primary-action--images[aria-pressed="true"] { color: #fff; background: #0ea5e9; border-color: #0ea5e9; }
+  .pm-primary-action--import { color: #fff; background: #059669; border: 1px solid #059669; }
+  .pm-promotion-panel { padding: 24px; border-color: #bfdbfe; }
+  .pm-promotion-header, .pm-cleanup-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+  .pm-promotion-header > div, .pm-cleanup-header > div { min-width: 0; }
+  .pm-promotion-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 18px; }
+  .pm-field-label { min-width: 0; color: #475569; font-size: 12px; font-weight: 700; }
+  .pm-field-control { display: block; width: 100%; min-width: 0; margin-top: 6px; padding: 9px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: #1f2937; font: inherit; }
+  .pm-promotion-actions, .pm-cleanup-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .pm-promotion-actions { margin-top: 18px; }
+  .pm-promotion-actions button, .pm-cleanup-actions button { min-height: 40px; white-space: normal; }
+  .pm-promotion-preview, .pm-cleanup-preview { min-width: 0; overflow-wrap: anywhere; }
+  .pm-bulk-panel { max-width: 1440px; margin: 24px auto 0; overflow: hidden; }
+  @media (max-width: 1100px) {
+    .pm-overview-grid { grid-template-columns: minmax(0, 1fr); }
+    .pm-promotion-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .pm-page-shell { padding: 16px; }
+    .pm-intro-panel, .pm-promotion-panel { padding: 16px; }
+    .pm-page-heading h1 { font-size: 26px; }
+    .pm-page-heading p { font-size: 14px; line-height: 1.45; }
+    .pm-primary-actions, .pm-promotion-actions, .pm-cleanup-actions { display: grid; grid-template-columns: minmax(0, 1fr); width: 100%; }
+    .pm-primary-action, .pm-promotion-actions button, .pm-cleanup-actions button { width: 100%; }
+    .pm-promotion-fields { grid-template-columns: minmax(0, 1fr); }
+    .pm-promotion-header > div:last-child { width: 100%; }
+    .pm-bulk-panel { margin-top: 16px; }
+  }
+`;
+
 export default function ProductManagementPage() {
   const { post: adminPost } = useFetchClient();
   const [activeTab, setActiveTab] = useState('fabrics');
@@ -1655,108 +1698,66 @@ export default function ProductManagementPage() {
   return (
     <div>
       <style>{spinnerStyle}</style>
-      <div style={{
-      padding: '32px',
-      background: '#ffffff',
-      minHeight: '100vh',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    }}>
+      <style>{productManagementResponsiveStyle}</style>
+      <div className="pm-page-shell">
       {/* Header */}
-      <div style={{
-        background: '#ffffff',
-        borderRadius: '16px',
-        padding: '32px',
-        marginBottom: '32px',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-        border: '1px solid #f1f5f9'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '24px'
-        }}>
-          <div>
-            <h1 style={{
-              fontSize: '32px',
-              fontWeight: '800',
-              color: '#059669',
-              margin: '0 0 8px 0',
-              letterSpacing: '-0.5px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
-            }}>
+      <div className="pm-overview-grid">
+        <section className="pm-intro-panel">
+          <div className="pm-page-header">
+            <div className="pm-page-heading">
+            <h1>
               <PackageSearch size={32} />
               Product Management
             </h1>
-            <p style={{
-              fontSize: '16px',
-              color: '#6b7280',
-              margin: '0',
-              fontWeight: '500'
-            }}>
+            <p>
               Manage all your products, fabrics, and accessories
             </p>
           </div>
           
           {/* Quick Workflow Guide removed per request */}
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', background: '#f8faf9', padding: '8px', borderRadius: '12px' }}>
-            <button onClick={() => setShowBulkImageUpload(!showBulkImageUpload)} style={{ background: showBulkImageUpload ? '#0ea5e9' : 'white', color: showBulkImageUpload ? 'white' : '#0f172a', border: '1px solid #e6eef0', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div className="pm-primary-actions">
+            <button className="pm-primary-action pm-primary-action--images" aria-pressed={showBulkImageUpload} onClick={() => setShowBulkImageUpload(!showBulkImageUpload)}>
               <Upload size={14} /> Images
             </button>
 
-            <button onClick={() => setIsImportModalOpen(true)} style={{ marginLeft: 'auto', background: '#059669', color: 'white', border: 'none', borderRadius: '999px', padding: '8px 12px', fontSize: '13px', fontWeight: '700', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <button className="pm-primary-action pm-primary-action--import" onClick={() => setIsImportModalOpen(true)}>
               <Upload size={14} /> Import
             </button>
           </div>
-
-      {/* Bulk Image Upload Section */}
-      {showBulkImageUpload && (
-        <div style={{
-          background: '#ffffff',
-          borderRadius: '16px',
-          padding: '0',
-          marginBottom: '32px',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-          border: '1px solid #f1f5f9',
-          overflow: 'hidden'
-        }}>
-          <BulkImageUploader productType={activeTab} />
-        </div>
-      )}
+          </div>
+        </section>
 
       {/* Staged fabric-colour promotion workflow */}
-      <div style={{ background: '#ffffff', borderRadius: '16px', padding: '24px', marginBottom: '32px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', border: '1px solid #dbeafe' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <section className="pm-promotion-panel">
+        <div className="pm-promotion-header">
           <div>
             <h2 style={{ margin: '0 0 6px', color: '#1e3a8a', fontSize: '20px' }}>Staged fabric colours</h2>
             <p style={{ margin: 0, color: '#64748b', fontSize: '13px' }}>Review one Fabric or safely promote every missing verified staged Colour, skipping only Colours that already exist for their Fabric.</p>
           </div>
           <div style={{ color: '#475569', fontSize: '12px' }}>Preview expires after 10 minutes or any staging/mapping change.</div>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginTop: '18px' }}>
-          <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Supplier
-            <select value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
+        <div className="pm-promotion-fields">
+          <label className="pm-field-label">Supplier
+            <select className="pm-field-control" value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
               <option value="Ashley Wilde">Ashley Wilde</option>
             </select>
           </label>
-          <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Fabric
-            <select value={promotionScope.fabricName} onChange={(event) => { setPromotionScope({ ...promotionScope, fabricName: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }} style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>
+          <label className="pm-field-label">Fabric
+            <select className="pm-field-control" value={promotionScope.fabricName} onChange={(event) => { setPromotionScope({ ...promotionScope, fabricName: event.target.value }); setPromotionPreview(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
               <option value="">All Fabrics</option>
               {(products.fabrics || []).map((fabric) => <option key={fabric.documentId || fabric.id} value={fabric.name}>{fabric.name}</option>)}
             </select>
           </label>
-          <label style={{ fontSize: '12px', color: '#475569', fontWeight: 700 }}>Supplier product code
-            <input value={promotionScope.supplierProductCode} onChange={(event) => { setPromotionScope({ ...promotionScope, supplierProductCode: event.target.value }); setPromotionPreview(null); }} placeholder="Optional" style={{ display: 'block', width: '100%', marginTop: '6px', padding: '9px', border: '1px solid #cbd5e1', borderRadius: '8px' }} />
+          <label className="pm-field-label">Supplier product code
+            <input className="pm-field-control" value={promotionScope.supplierProductCode} onChange={(event) => { setPromotionScope({ ...promotionScope, supplierProductCode: event.target.value }); setPromotionPreview(null); }} placeholder="Optional" />
           </label>
         </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap', marginTop: '18px' }}>
+        <div className="pm-promotion-actions">
           <button type="button" onClick={previewAshleyWildePromotion} disabled={promotionBusy} style={{ background: '#2563eb', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionBusy ? 'wait' : 'pointer', opacity: promotionBusy ? 0.55 : 1 }}>Preview promotion</button>
           <button type="button" onClick={() => setPromotionConfirmOpen(true)} disabled={promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible} style={{ background: '#047857', color: '#fff', border: 0, borderRadius: '8px', padding: '10px 14px', fontWeight: 700, cursor: promotionPreview ? 'pointer' : 'not-allowed', opacity: promotionBusy || !promotionPreview || !promotionPreview.summary?.eligible ? 0.55 : 1 }}>Promote verified</button>
           {promotionError && <span style={{ color: '#b91c1c', fontSize: '13px' }}>{promotionError}</span>}
         </div>
-        {promotionPreview && <div style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+        {promotionPreview && <div className="pm-promotion-preview" style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '13px', color: '#334155' }}>
             <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Safely skipped: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Existing Colours skipped: <strong>{promotionPreview.summary?.skippedExistingColours ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
           </div>
@@ -1764,19 +1765,19 @@ export default function ProductManagementPage() {
           {promotionPreview.results?.length > 0 && <div style={{ marginTop: '12px', maxHeight: '220px', overflow: 'auto', fontSize: '12px' }}>{promotionPreview.results.map((item) => <div key={item.identityDocumentId} style={{ padding: '6px 0', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', gap: '8px' }}><span>{item.fabricColourCode} — {item.officialColourName}</span><span style={{ color: item.eligible ? '#047857' : '#b91c1c', fontWeight: 700 }}>{item.eligible ? item.colourDecision : `Blocked: ${(item.skippedReasons || []).join(', ')}`}</span></div>)}</div>}
         </div>}
         <div style={{ marginTop: '22px', paddingTop: '18px', borderTop: '1px solid #fecaca' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '14px', flexWrap: 'wrap' }}>
+          <div className="pm-cleanup-header">
             <div>
               <h3 style={{ margin: '0 0 5px', color: '#991b1b', fontSize: '16px' }}>Remove unlinked legacy Colours</h3>
               <p style={{ margin: 0, color: '#64748b', fontSize: '12px', maxWidth: '680px' }}>Targets only Colour–Fabric associations with no Fabric colour identity promotion link. Promoted Colours and upload-media records are always preserved; shared Colours are disconnected instead of deleted.</p>
             </div>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <div className="pm-cleanup-actions">
               <button type="button" onClick={previewAshleyWildeLegacyCleanup} disabled={legacyCleanupBusy} style={{ background: '#fff', color: '#b91c1c', border: '1px solid #ef4444', borderRadius: '8px', padding: '9px 13px', fontWeight: 700, cursor: legacyCleanupBusy ? 'wait' : 'pointer', opacity: legacyCleanupBusy ? 0.55 : 1 }}>Preview legacy cleanup</button>
               <button type="button" onClick={() => setLegacyCleanupConfirmOpen(true)} disabled={legacyCleanupBusy || !legacyCleanupPreview?.summary?.unlinkedAssociationsToRemove} style={{ background: '#b91c1c', color: '#fff', border: 0, borderRadius: '8px', padding: '9px 13px', fontWeight: 700, cursor: legacyCleanupPreview?.summary?.unlinkedAssociationsToRemove ? 'pointer' : 'not-allowed', opacity: legacyCleanupBusy || !legacyCleanupPreview?.summary?.unlinkedAssociationsToRemove ? 0.55 : 1 }}>Remove reviewed legacy Colours</button>
             </div>
           </div>
           {legacyCleanupError && <div style={{ marginTop: '10px', color: '#b91c1c', fontSize: '13px' }}>{legacyCleanupError}</div>}
           {legacyCleanupSuccess && <div style={{ marginTop: '10px', color: '#047857', fontSize: '13px', fontWeight: 700 }}>{legacyCleanupSuccess}</div>}
-          {legacyCleanupPreview && <div style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: '#fff7ed', border: '1px solid #fed7aa' }}>
+          {legacyCleanupPreview && <div className="pm-cleanup-preview" style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: '#fff7ed', border: '1px solid #fed7aa' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', fontSize: '13px', color: '#7c2d12' }}>
               <span>Fabrics scanned: <strong>{legacyCleanupPreview.summary?.fabricsScanned ?? 0}</strong></span>
               <span>Unlinked associations: <strong>{legacyCleanupPreview.summary?.unlinkedAssociationsToRemove ?? 0}</strong></span>
@@ -1787,9 +1788,17 @@ export default function ProductManagementPage() {
             </div>
             <div style={{ marginTop: '10px', fontSize: '11px', color: '#9a3412' }}>Cleanup fingerprint: {legacyCleanupPreview.planFingerprint}</div>
             {legacyCleanupPreview.results?.length > 0 && <div style={{ marginTop: '12px', maxHeight: '180px', overflow: 'auto', fontSize: '12px' }}>{legacyCleanupPreview.results.map((item) => <div key={item.operationKey} style={{ padding: '6px 0', borderTop: '1px solid #fed7aa', display: 'flex', justifyContent: 'space-between', gap: '8px' }}><span>{item.colourName || item.colourDocumentId} — {item.targetFabrics?.map((fabric) => fabric.name).join(', ')}</span><span style={{ color: '#b91c1c', fontWeight: 700 }}>{item.action === 'delete_colour' ? 'delete Colour row' : 'disconnect Fabric only'}</span></div>)}</div>}
-          </div>}
+         </div>}
         </div>
+      </section>
       </div>
+
+      {/* Bulk Image Upload Section */}
+      {showBulkImageUpload && (
+        <div className="pm-bulk-panel">
+          <BulkImageUploader productType={activeTab} />
+        </div>
+      )}
 
       {promotionConfirmOpen && promotionPreview && <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.65)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
         <div style={{ background: '#fff', borderRadius: '14px', padding: '24px', maxWidth: '520px', width: '100%' }}>
