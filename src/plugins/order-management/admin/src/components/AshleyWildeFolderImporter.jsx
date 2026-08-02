@@ -126,6 +126,13 @@ const diagnosticStatuses = new Set([
   'classified_asset', 'duplicate_in_folder', 'exact_duplicate', 'failed',
   'retryable_upload_failure', 'retryable_finalisation_failure',
 ]);
+const activityPhaseLabels = {
+  queued: 'Ready to analyse', hashing: 'Hashing files', analysing: 'Analysing batches',
+  staging: 'Preparing staging', uploading: 'Uploading media', finalising: 'Finalising staging',
+  analysis_complete: 'Analysis complete', complete: 'Import complete', partial: 'Partial import',
+  error: 'Needs attention', idle: 'Waiting',
+};
+const emptyActivity = { phase: 'idle', current: 0, total: 0, filename: '', message: '' };
 
 export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const { get, put, del } = useFetchClient();
@@ -145,6 +152,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const [analysisState, setAnalysisState] = useState('idle');
   const [analysisBatches, setAnalysisBatches] = useState([]);
   const [stagingFailures, setStagingFailures] = useState([]);
+  const [activity, setActivity] = useState(emptyActivity);
   const fileQueueRef = useRef([]);
   const stagingRunRef = useRef(false);
   const traceAttemptsRef = useRef(new Map());
@@ -186,7 +194,13 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setAnalysis(null);
     setAnalysisBatches([]);
     setAnalysisState('pending');
+    setActivity({ phase: 'queued', current: 0, total: files.length, filename: '', message: 'Folder selected. Ready to analyse.' });
     event.target.value = '';
+  };
+
+  const reportActivity = (phase, current, total, filename, message) => {
+    setActivity({ phase, current: Math.max(0, Number(current) || 0), total: Math.max(0, Number(total) || 0), filename: filename || '', message: message || '' });
+    if (message) setProgress(message);
   };
 
   const unresolvedCount = useMemo(() => analysis?.rows.filter((row) => !READY_STATUSES.has(row.status) && row.status !== 'already_complete').length || 0, [analysis]);
@@ -284,7 +298,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     }
 
     if (!media) {
-      setProgress(`Uploading image ${index + 1} of ${total}: ${row.filename}`);
+      reportActivity('uploading', index + 1, total, row.filename, `Uploading image ${index + 1} of ${total}: ${row.filename}`);
       updateFolderRow(row.relativePath, { phase: 'uploading_media' });
       try {
         media = await uploadAshleyWildeMedia(row.file, { analysisToken, folderFingerprint, relativePath: row.relativePath, fileFingerprint: row.sha256, mediaBinding: row.mediaBinding, traceId, attempt, adminPost: post });
@@ -306,7 +320,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       updateFolderRow(row.relativePath, { phase: 'media_uploaded', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null });
     }
 
-    setProgress(`Finalising image ${index + 1} of ${total}: ${row.filename}`);
+    reportActivity('finalising', index + 1, total, row.filename, `Finalising image ${index + 1} of ${total}: ${row.filename}`);
     updateFolderRow(row.relativePath, { phase: 'finalising_staging', mediaRecord: media, mediaId: media.id, mediaDocumentId: media.documentId || null });
     const finaliseSpan = startAshleyDiagnosticSpan('finalisation', { ...diagnostic, mediaId: media.id || null, mediaDocumentId: media.documentId || null });
     try {
@@ -333,6 +347,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setBusy(true);
     setError('');
     setStagingFailures([]);
+    reportActivity('staging', 0, selectedRows.length, '', `Starting staging for ${selectedRows.length} confirmed file(s).`);
     try {
       const failures = [];
       for (let index = 0; index < selectedRows.length; index += 1) {
@@ -347,16 +362,19 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       await refreshHistory();
       if (failures.length) {
         setStagingFailures(failures);
-        setProgress(`Folder import partial: ${selectedRows.length - failures.length} of ${selectedRows.length} staged`);
+        const partialMessage = `Folder import partial: ${selectedRows.length - failures.length} of ${selectedRows.length} staged`;
+        reportActivity('partial', selectedRows.length - failures.length, selectedRows.length, '', partialMessage);
         setError(partialStageMessage(selectedRows.length, failures));
       } else {
         setStagingFailures([]);
-        setProgress('Folder import complete');
+        reportActivity('complete', selectedRows.length, selectedRows.length, '', 'Folder import complete');
         setSelected(new Set());
       }
     } catch (uploadError) {
       await refreshHistory();
-      setError(safeErrorMessage(uploadError));
+      const message = safeErrorMessage(uploadError);
+      reportActivity('error', 0, selectedRows.length, '', message);
+      setError(message);
     } finally {
       setBusy(false);
       window.setTimeout(() => setProgress(''), 1500);
@@ -367,12 +385,13 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     if (!queuedFolder || !fileQueueRef.current.length || !acknowledgeSkips || analysisState === 'complete') return;
     setBusy(true);
     setError('');
+    reportActivity('hashing', 0, fileQueueRef.current.length, '', `Preparing ${fileQueueRef.current.length} file(s) for analysis.`);
     try {
       await refreshMappingMode();
       const hashed = [];
       for (let index = 0; index < fileQueueRef.current.length; index += 1) {
         const item = fileQueueRef.current[index];
-        setProgress(`Hashing ${index + 1} / ${fileQueueRef.current.length}: ${item.filename}`);
+        reportActivity('hashing', index + 1, fileQueueRef.current.length, item.filename, `Hashing ${index + 1} / ${fileQueueRef.current.length}: ${item.filename}`);
         hashed.push({ ...item, sha256: await sha256File(item.file) });
       }
       fileQueueRef.current = hashed;
@@ -387,7 +406,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       for (let index = 0; index < batches.length; index += 1) {
         const batch = batches[index];
         const processedCount = batches.slice(0, index + 1).reduce((total, currentBatch) => total + currentBatch.length, 0);
-        setProgress(`Processing ${processedCount} / ${hashed.length} — batch ${index + 1} of ${batches.length}`);
+        reportActivity('analysing', processedCount, hashed.length, batch[0]?.filename || '', `Processing ${processedCount} / ${hashed.length} — batch ${index + 1} of ${batches.length}`);
         const batchManifest = batch.map(({ relativePath, sha256, size, mimeType }) => ({ relativePath, sha256, size, mimeType }));
         const response = await adminResponse(post, adminCatalogRoutes.ashleyWildeAnalyse, {
           folderName: queuedFolder.folderName, folderFingerprint, manifest: batchManifest,
@@ -417,13 +436,15 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       setAnalysis({ ...lastServerAnalysis, folderName: queuedFolder.folderName, folderFingerprint, rows: analysedRows, summary: { ...summary }, analysisComplete: true });
       setAnalysisBatches(analysedBatches);
       setAnalysisState('complete');
-      setProgress('Folder analysis complete. Review the results, then stage confirmed files.');
+      reportActivity('analysis_complete', hashed.length, hashed.length, '', 'Folder analysis complete. Review the results, then stage confirmed files.');
     } catch (queueError) {
       setAnalysis(null);
       setAnalysisBatches([]);
       setAnalysisState('failed');
       setFolderFiles([]);
-      setError(safeErrorMessage(queueError));
+      const message = safeErrorMessage(queueError);
+      reportActivity('error', 0, fileQueueRef.current.length, '', message);
+      setError(message);
     } finally {
       setBusy(false);
       window.setTimeout(() => setProgress(''), 1500);
@@ -436,6 +457,8 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setBusy(true);
     setError('');
     setStagingFailures([]);
+    let stagingTotal = 0;
+    let stagingProgress = 0;
     try {
       onStagingStart?.();
       const folderFingerprint = analysis?.folderFingerprint;
@@ -447,10 +470,13 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         });
       });
       if (!stagingRows.length) throw new Error('There are no confirmed files ready to stage.');
+      stagingTotal = stagingRows.length;
+      reportActivity('staging', 0, stagingRows.length, '', `Starting staging for ${stagingRows.length} confirmed file(s).`);
       const failures = [];
       const successfulPaths = new Set();
       for (let index = 0; index < stagingRows.length; index += 1) {
         const { row, analysisToken } = stagingRows[index];
+        stagingProgress = index + 1;
         try {
           await stageAshleyRow({ row, analysisToken, folderName: queuedFolder.folderName, folderFingerprint, manifestFileCount: fileQueueRef.current.length, index, total: stagingRows.length });
           successfulPaths.add(row.relativePath);
@@ -466,7 +492,8 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
           ...batch,
           rows: batch.rows.map((row) => successfulPaths.has(row.relativePath) ? { ...row, status: 'already_complete' } : row),
         })));
-        setProgress(`Folder import partial: ${stagingRows.length - failures.length} of ${stagingRows.length} staged`);
+        const partialMessage = `Folder import partial: ${stagingRows.length - failures.length} of ${stagingRows.length} staged`;
+        reportActivity('partial', stagingRows.length - failures.length, stagingRows.length, '', partialMessage);
         setError(partialStageMessage(stagingRows.length, failures));
         return;
       }
@@ -474,16 +501,43 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       setStagingFailures([]);
       setQueuedFolder(null);
       setAnalysisBatches([]);
-      setProgress('Folder import complete');
+      reportActivity('complete', stagingRows.length, stagingRows.length, '', 'Folder import complete');
     } catch (stageError) {
       await refreshHistory();
-      setError(safeErrorMessage(stageError));
+      const message = safeErrorMessage(stageError);
+      reportActivity('error', stagingProgress, stagingTotal || queuedFolder.totalFiles, '', message);
+      setError(message);
     } finally {
       stagingRunRef.current = false;
       setBusy(false);
       window.setTimeout(() => setProgress(''), 1500);
     }
   };
+
+  const activityPercent = activity.total > 0
+    ? Math.min(100, Math.round((activity.current / activity.total) * 100))
+    : ['analysis_complete', 'complete'].includes(activity.phase) ? 100 : 0;
+  const activityCount = activity.total > 0 ? `${Math.min(activity.current, activity.total)} / ${activity.total}` : 'Waiting';
+  const activityCurrent = activity.filename || (activity.phase === 'analysing' ? 'Current analysis batch' : 'Waiting for the next file');
+  const activityMessage = activity.message || progress || 'Waiting for the next importer action.';
+  const activityStatus = (
+    <section className="aw-status-panel" aria-live="polite" aria-labelledby="aw-status-heading">
+      <div className="aw-status-header">
+        <div>
+          <span className="aw-status-kicker">STATUS</span>
+          <h4 id="aw-status-heading">{activityPhaseLabels[activity.phase] || activityPhaseLabels.idle}</h4>
+        </div>
+        <strong>{activityCount}</strong>
+      </div>
+      <div className="aw-status-track" aria-hidden="true"><span style={{ width: `${activityPercent}%` }} /></div>
+      <div className="aw-status-grid">
+        <div><span>Progress</span><strong>{activityPercent}%</strong></div>
+        <div><span>Current file</span><strong title={activityCurrent}>{activityCurrent}</strong></div>
+        <div><span>Phase</span><strong>{activityPhaseLabels[activity.phase] || activity.phase}</strong></div>
+      </div>
+      <p className="aw-status-message">{activityMessage}</p>
+    </section>
+  );
 
   return (
     <section style={{ borderBottom: `1px solid ${colours.line}`, paddingBottom: '32px', marginBottom: '32px' }}>
@@ -545,6 +599,21 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
                   </div>)}
                 </div>
               </section>}
+              <div className="aw-import-actions">
+                {queuedFolder ? <>
+                  <label className="aw-action-note"><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to {MAX_BATCH_FILES} files and {MAX_BATCH_BYTES / 1024 / 1024} MB, then stage confirmed files and leave unresolved, oversized, or conflicting files skipped.</label>
+                  <div className="aw-action-row">
+                    <button className="aw-action-button" onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips || analysisState === 'complete'} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips || analysisState === 'complete' ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
+                    <button className="aw-action-button" onClick={stageQueuedFolder} disabled={busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES))} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES)) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
+                  </div>
+                </> : <>
+                  {unresolvedCount > 0 && <label className="aw-action-note"><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Upload confirmed files and explicitly leave {unresolvedCount} unresolved or conflicting file(s) skipped.</label>}
+                  <div className="aw-action-row">
+                    <button className="aw-action-button" onClick={uploadFolder} disabled={busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips)} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {selectedRows.length} confirmed file(s)</button>
+                  </div>
+                </>}
+              </div>
+              {activityStatus}
               <div style={{ overflowX: 'auto', border: `1px solid ${colours.line}`, borderRadius: '6px' }}>
                 <table style={{ width: '100%', minWidth: '880px', borderCollapse: 'collapse', fontSize: '12px' }}>
                   <thead><tr style={{ background: colours.surface, textAlign: 'left' }}>{['', 'Image', 'Filename', 'Product', 'Colour', 'Supplier code', 'Internal code', 'Action / status'].map((label) => <th key={label} style={{ padding: '9px', borderBottom: `1px solid ${colours.line}`, color: colours.muted }}>{label}</th>)}</tr></thead>
@@ -563,22 +632,17 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
                   })}</tbody>
                 </table>
               </div>
-              {queuedFolder ? <>
-                <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '14px', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to {MAX_BATCH_FILES} files and {MAX_BATCH_BYTES / 1024 / 1024} MB, then stage confirmed files and leave unresolved, oversized, or conflicting files skipped.</label>
-                <button className="aw-action-button" onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips || analysisState === 'complete'} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips || analysisState === 'complete' ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
-                <button className="aw-action-button" onClick={stageQueuedFolder} disabled={busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES))} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: busy || analysisState !== 'complete' || !analysisBatches.some((batch) => batch.rows.some((row) => READY_STATUSES.has(row.status) && row.size <= MAX_FILE_BYTES)) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
-              </> : <>
-                {unresolvedCount > 0 && <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', marginTop: '14px', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Upload confirmed files and explicitly leave {unresolvedCount} unresolved or conflicting file(s) skipped.</label>}
-                <button className="aw-action-button" onClick={uploadFolder} disabled={busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips)} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || selectedRows.length === 0 || (unresolvedCount > 0 && !acknowledgeSkips) ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Stage {selectedRows.length} confirmed file(s)</button>
-              </>}
             </>
           )}
           {queuedFolder && analysis?.analysisComplete !== true && (
-            <div style={{ marginTop: '14px' }}>
+            <div className="aw-import-actions">
               {analysisState === 'failed' && <p role="status" style={{ color: colours.red, fontSize: '13px' }}>Filename analysis failed; staging is disabled until the folder is analysed successfully.</p>}
-              <label style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', color: colours.text }}><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to {MAX_BATCH_FILES} files and {MAX_BATCH_BYTES / 1024 / 1024} MB, then stage confirmed files and leave unresolved, oversized, or conflicting files skipped.</label>
-              <button className="aw-action-button" onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
-              <button className="aw-action-button" onClick={stageQueuedFolder} disabled style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', marginTop: '14px', marginLeft: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: 0.45, cursor: 'not-allowed' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
+              <label className="aw-action-note"><input type="checkbox" checked={acknowledgeSkips} onChange={(event) => setAcknowledgeSkips(event.target.checked)} />Analyse in batches of up to {MAX_BATCH_FILES} files and {MAX_BATCH_BYTES / 1024 / 1024} MB, then stage confirmed files and leave unresolved, oversized, or conflicting files skipped.</label>
+              <div className="aw-action-row">
+                <button className="aw-action-button" onClick={processQueuedFolder} disabled={busy || !acknowledgeSkips} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.blue, opacity: busy || !acknowledgeSkips ? 0.45 : 1, cursor: 'pointer' }}><Upload size={18} />Analyse {queuedFolder.totalFiles} file(s)</button>
+                <button className="aw-action-button" onClick={stageQueuedFolder} disabled style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', border: 0, borderRadius: '6px', fontWeight: 600, color: '#fff', background: colours.green, opacity: 0.45, cursor: 'not-allowed' }}><Upload size={18} />Stage {queuedFolder.totalFiles} file(s)</button>
+              </div>
+              {activityStatus}
             </div>
           )}
         </div>
@@ -616,6 +680,22 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         .aw-conflict-file small { font-size: 11px; }
         .aw-conflict-reason { color: #991b1b; font-size: 12px; }
         .aw-status-label { font-weight: 700; text-transform: capitalize; }
+        .aw-import-actions { display: grid; gap: 12px; margin: 14px 0 18px; }
+        .aw-action-note { display: flex; gap: 8px; align-items: flex-start; color: ${colours.text}; font-size: 13px; line-height: 1.45; }
+        .aw-action-note input { flex: 0 0 auto; margin-top: 2px; }
+        .aw-action-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+        .aw-status-panel { display: grid; gap: 12px; margin: 0 0 18px; padding: 16px; border: 1px solid #bfdbfe; border-radius: 8px; background: #f8fbff; color: ${colours.text}; }
+        .aw-status-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+        .aw-status-kicker { display: block; margin-bottom: 3px; color: #2563eb; font-size: 11px; font-weight: 700; letter-spacing: .08em; }
+        .aw-status-header h4 { margin: 0; color: ${colours.text}; font-size: 14px; }
+        .aw-status-header > strong { color: #1d4ed8; font-size: 14px; white-space: nowrap; }
+        .aw-status-track { height: 7px; overflow: hidden; border-radius: 999px; background: #dbeafe; }
+        .aw-status-track span { display: block; height: 100%; border-radius: inherit; background: #3b82f6; transition: width .2s ease; }
+        .aw-status-grid { display: grid; grid-template-columns: minmax(90px, .4fr) minmax(0, 1.4fr) minmax(120px, .7fr); gap: 12px; }
+        .aw-status-grid div { min-width: 0; display: grid; gap: 3px; }
+        .aw-status-grid span { color: ${colours.muted}; font-size: 11px; }
+        .aw-status-grid strong { overflow: hidden; color: ${colours.text}; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+        .aw-status-message { margin: 0; color: ${colours.muted}; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
         .aw-spin { animation: aw-spin 1s linear infinite; }
         @keyframes aw-spin { to { transform: rotate(360deg); } }
         @media (max-width: 1080px) {
@@ -626,7 +706,10 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
           .aw-conflict-header, .aw-conflict-item { display: block; }
           .aw-conflict-header > strong { display: inline-block; margin-top: 10px; }
           .aw-conflict-reason { margin-top: 10px; }
+          .aw-action-row { display: grid; grid-template-columns: minmax(0, 1fr); }
           .aw-action-button { width: 100%; justify-content: center; margin-left: 0 !important; }
+          .aw-status-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+          .aw-status-grid div:nth-child(2) { grid-column: 1 / -1; grid-row: 1; }
         }
       `}</style>
     </section>
