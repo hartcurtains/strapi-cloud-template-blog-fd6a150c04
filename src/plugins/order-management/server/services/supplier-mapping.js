@@ -31,7 +31,8 @@ function requireNumericId(value, field = 'rowId') {
   return value;
 }
 function nameKey(value) { return clean(value).replace(/\s+/g, ' ').toLocaleLowerCase(); }
-function compactNameKey(value) { return clean(value).toLocaleLowerCase().replace(/[^a-z0-9]/g, ''); }
+function normalizedNameKey(value) { return clean(value).toLocaleLowerCase().replace(/[^\p{L}\p{N}]/gu, ''); }
+function compactNameKey(value) { return normalizedNameKey(value); }
 function codeKey(value) { return normalizeToken(value); }
 function relationId(value) { return value?.documentId || value?.id || value; }
 function unique(values) { return [...new Set(values.filter(Boolean))]; }
@@ -133,7 +134,7 @@ function logicalRows(rows) {
 
 function belongsToSupplier(fabric, supplier) {
   const brands = Array.isArray(fabric?.brand) ? fabric.brand : [fabric?.brand];
-  return brands.some((brand) => nameKey(brand?.name) === nameKey(supplier));
+  return brands.some((brand) => normalizedNameKey(brand?.name) === normalizedNameKey(supplier));
 }
 
 function productIdDerivedCodes(fabric) {
@@ -170,13 +171,43 @@ function approvedFabricAliases(supplier) {
 }
 
 async function fabricCatalogue(strapi, supplier) {
-  const rows = await strapi.entityService.findMany(FABRIC_UID, {
+  const schema = typeof strapi.contentType === 'function' ? strapi.contentType(FABRIC_UID) : null;
+  const supportsSupplierProductCode = Boolean(schema?.attributes?.supplierProductCode);
+  const query = {
     filters: {},
-    populate: ['brand'],
-    publicationState: 'preview',
+    populate: { brand: true },
     limit: 10000,
-  });
-  return logicalRows(rows).filter((fabric) => belongsToSupplier(fabric, supplier));
+  };
+
+  let rows = null;
+  if (typeof strapi.documents === 'function') {
+    try {
+      const documents = strapi.documents(FABRIC_UID);
+      const [draftRows, publishedRows] = await Promise.all([
+        documents.findMany({ ...query, status: 'draft' }),
+        documents.findMany({ ...query, status: 'published' }),
+      ]);
+      rows = logicalRows([...(draftRows || []), ...(publishedRows || [])]);
+    } catch {
+      // Keep a compatibility fallback for older Strapi runtimes and focused test harnesses.
+      rows = null;
+    }
+  }
+
+  if (!rows) {
+    rows = await strapi.entityService.findMany(FABRIC_UID, {
+      filters: {},
+      populate: ['brand'],
+      publicationState: 'preview',
+      limit: 10000,
+    });
+    rows = logicalRows(rows);
+  }
+
+  return {
+    fabrics: rows.filter((fabric) => belongsToSupplier(fabric, supplier)),
+    supportsSupplierProductCode,
+  };
 }
 
 function exactOne(candidates, method) {
@@ -185,44 +216,68 @@ function exactOne(candidates, method) {
   return null;
 }
 
-function resolveFabricFromCatalogue(catalogue, row, aliases = new Map()) {
+function resolveFabricFromCatalogue(catalogue, row, aliases = new Map(), options = {}) {
+  const supplierCatalogue = catalogue.filter((fabric) => belongsToSupplier(fabric, row.supplier));
   const supplierCode = codeKey(row.supplierProductCode);
+
+  // Generic suppliers are resolved by their exact Brand and exact normalized
+  // Fabric name. A Fabric-level supplierProductCode is not part of the schema,
+  // so supplier codes can never be a prerequisite for this branch.
+  if (nameKey(row.supplier) !== nameKey(SUPPLIER)) {
+    const byBrandAndName = exactOne(
+      supplierCatalogue.filter((fabric) => normalizedNameKey(fabric.name) === normalizedNameKey(row.fabricName)),
+      'supplier_brand_and_normalized_fabric_name',
+    );
+    if (!byBrandAndName) return { status: 'missing', candidates: [] };
+    if (options.supportsSupplierProductCode && supplierCode && byBrandAndName.fabric) {
+      return {
+        ...byBrandAndName,
+        supplierProductCodeEvidence: {
+          provided: row.supplierProductCode,
+          matched: codeKey(byBrandAndName.fabric.supplierProductCode) === supplierCode
+            || productIdDerivedCodes(byBrandAndName.fabric).includes(supplierCode),
+        },
+      };
+    }
+    return byBrandAndName;
+  }
+
   if (supplierCode === KIELDER_SUPPLIER_PRODUCT_CODE
     && [KIELDER_NATURAL_FABRIC_NAME, KIELDER_OTHER_COLOURS_FABRIC_NAME].some((name) => nameKey(row.fabricName) === nameKey(name))) {
     const byKielderFabricName = exactOne(
-      catalogue.filter((fabric) => nameKey(fabric.name) === nameKey(row.fabricName)),
+      supplierCatalogue.filter((fabric) => nameKey(fabric.name) === nameKey(row.fabricName)),
       'kielder_exact_fabric_name',
     );
     if (byKielderFabricName) return byKielderFabricName;
   }
 
   const byDocumentId = exactOne(
-    row.fabricDocumentId ? catalogue.filter((fabric) => String(fabric.documentId) === String(row.fabricDocumentId)) : [],
+    row.fabricDocumentId ? supplierCatalogue.filter((fabric) => String(fabric.documentId) === String(row.fabricDocumentId)) : [],
     'existing_fabric_document_id',
   );
   if (byDocumentId) return byDocumentId;
 
   const bySchemaSupplierCode = exactOne(
-    supplierCode ? catalogue.filter((fabric) => codeKey(fabric.supplierProductCode) === supplierCode) : [],
+    supplierCode ? supplierCatalogue.filter((fabric) => codeKey(fabric.supplierProductCode) === supplierCode) : [],
     'fabric_supplier_product_code',
   );
   if (bySchemaSupplierCode) return bySchemaSupplierCode;
 
   const byProductId = exactOne(
-    supplierCode ? catalogue.filter((fabric) => productIdDerivedCodes(fabric).includes(supplierCode)) : [],
+    supplierCode ? supplierCatalogue.filter((fabric) => productIdDerivedCodes(fabric).includes(supplierCode)) : [],
     'fabric_product_id_derived_supplier_code',
   );
   if (byProductId) return byProductId;
 
-  const byName = exactOne(catalogue.filter((fabric) => nameKey(fabric.name) === nameKey(row.fabricName)), 'normalized_fabric_name');
+  const byName = exactOne(supplierCatalogue.filter((fabric) => nameKey(fabric.name) === nameKey(row.fabricName)), 'normalized_fabric_name');
   if (byName) return byName;
 
-  const byCompactName = exactOne(catalogue.filter((fabric) => compactNameKey(fabric.name) === compactNameKey(row.fabricName)), 'compact_fabric_name');
+  const byCompactName = exactOne(supplierCatalogue.filter((fabric) => compactNameKey(fabric.name) === compactNameKey(row.fabricName)), 'compact_fabric_name');
   if (byCompactName) return byCompactName;
 
   const aliasOwners = aliases.get(compactNameKey(row.fabricName));
   const byAlias = exactOne(
-    aliasOwners?.size ? catalogue.filter((fabric) => productIdDerivedCodes(fabric).some((code) => aliasOwners.has(code)) || aliasOwners.has(codeKey(fabric.supplierProductCode))) : [],
+    aliasOwners?.size ? supplierCatalogue.filter((fabric) => productIdDerivedCodes(fabric).some((code) => aliasOwners.has(code)) || aliasOwners.has(codeKey(fabric.supplierProductCode))) : [],
     'approved_fabric_alias',
   );
   if (byAlias) return { ...byAlias, alias: row.fabricName };
@@ -474,7 +529,8 @@ async function validateDocument(strapi, input) {
   if (!document.mappingVersion) addIssue(issues, 'mapping_version_missing', 'mappingVersion is required');
   if (!document.fabrics.length) addIssue(issues, 'fabrics_missing', 'fabrics must contain at least one Fabric');
   const registry = await loadRegistry(strapi, document.supplier);
-  const catalogue = await fabricCatalogue(strapi, document.supplier);
+  const catalogueResult = await fabricCatalogue(strapi, document.supplier);
+  const catalogue = catalogueResult.fabrics;
   const aliases = approvedFabricAliases(document.supplier);
   const rows = [];
   const resolvedFabrics = new Map();
@@ -484,7 +540,7 @@ async function validateDocument(strapi, input) {
     if (!fabricInput.fabricName) addIssue(issues, 'fabric_name_missing', `Fabric ${fabricIndex + 1} has no fabricName`, fabricIndex);
     if (!fabricInput.supplierProductCode) addIssue(issues, 'product_code_missing', `Fabric ${fabricInput.fabricName || fabricIndex + 1} has no supplierProductCode`, fabricIndex);
     const resolution = fabricInput.fabricName && fabricInput.supplierProductCode
-      ? resolveFabricFromCatalogue(catalogue, { ...fabricInput, supplier: document.supplier }, aliases)
+      ? resolveFabricFromCatalogue(catalogue, { ...fabricInput, supplier: document.supplier }, aliases, catalogueResult)
       : { status: 'missing', candidates: [] };
     const fabric = resolution.fabric;
     const fabricResolution = {
@@ -496,6 +552,7 @@ async function validateDocument(strapi, input) {
       fabricDocumentId: fabric?.documentId || null,
       fabricName: fabric?.name || fabricInput.fabricName,
       supplierProductCode: fabric?.supplierProductCode || fabricInput.supplierProductCode,
+      supplierProductCodeEvidence: resolution.supplierProductCodeEvidence || null,
       catalogueEvidence: fabric ? { name: fabric.name || null, productId: fabric.productId || null, collection: fabric.collection || null, documentId: fabric.documentId || null } : null,
       candidates: (resolution.candidates || []).map((item) => ({ documentId: item.documentId || null, name: item.name || null, productId: item.productId || null })),
     };
