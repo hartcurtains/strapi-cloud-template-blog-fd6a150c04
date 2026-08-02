@@ -707,8 +707,6 @@ module.exports = {
                 populate: {
                   brand: true,
                   care_instructions: true,
-                  curtains: true,
-                  blinds: true,
                   cushions: true
                 }
               });
