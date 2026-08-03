@@ -10,7 +10,7 @@ import { fetchAllFabrics } from '../../../shared/fetch-all-fabrics';
 import { 
   Scissors, Blinds, Sofa, Tag, Layers, Palette, Settings, PackageSearch, 
   Plus, Download, Upload, FileText, Edit, Trash2, CheckSquare, Loader2, 
-  PackageX, X, FileSpreadsheet, CheckCircle, Lightbulb, Heart, File 
+  PackageX, X, FileSpreadsheet, CheckCircle, AlertCircle, Lightbulb, Heart, File
 } from 'lucide-react';
 
 // Add spinner animation style
