@@ -1680,7 +1680,7 @@ export default function ProductManagementPage() {
         current: eligible,
         total: preview.summary?.identitiesFound ?? eligible,
         currentItem: promotionScope.fabricName || 'All Fabrics',
-        message: `Promotion verified: ${eligible} staged Colour identity(s) are eligible for confirmation.`,
+        message: `Preview complete: ${eligible} staged Colour identity(s) are eligible for confirmation.`,
         summary: preview.summary,
       });
     } catch (error) {
@@ -1798,9 +1798,11 @@ export default function ProductManagementPage() {
     previewing: 'Reviewing staged Colours', verified: 'Promotion verified', confirming: 'Confirming reviewed plan',
     promoting: 'Promoting verified Colours', complete: 'Promotion complete', error: 'Promotion needs attention',
   }[promotionStatus?.phase] || promotionStatus?.errorTitle || 'Promotion status';
-  const promotionStatusCount = promotionStatus?.total > 0
-    ? `${Math.min(promotionStatus.current || 0, promotionStatus.total)} / ${promotionStatus.total}`
-    : promotionStatus?.phase === 'complete' ? 'Complete' : promotionStatus?.phase === 'error' ? 'Stopped' : 'In progress';
+  const promotionStatusCount = promotionStatus?.phase === 'verified'
+    ? `${promotionStatus.summary?.eligible ?? promotionStatus.current ?? 0} eligible`
+    : promotionStatus?.total > 0
+      ? `${Math.min(promotionStatus.current || 0, promotionStatus.total)} / ${promotionStatus.total}`
+      : promotionStatus?.phase === 'complete' ? 'Complete' : promotionStatus?.phase === 'error' ? 'Stopped' : 'In progress';
   const promotionStatusPanel = promotionStatus && (
     <section className={`pm-promotion-status ${promotionStatus.phase === 'complete' ? 'pm-promotion-status--success' : ''} ${promotionStatus.phase === 'error' ? 'pm-promotion-status--error' : ''}`} aria-live="polite" aria-labelledby="pm-promotion-status-heading">
       <div className="pm-promotion-status-header">
@@ -1821,8 +1823,9 @@ export default function ProductManagementPage() {
       </div>}
       <div className="pm-promotion-stepper">
         {promotionStages.map((stage, index) => {
-          const complete = promotionStatus.phase === 'complete' || index < promotionStatusIndex;
-          const active = !complete && index === promotionStatusIndex && promotionStatus.phase !== 'error';
+          const previewVerified = promotionStatus.phase === 'verified';
+          const complete = promotionStatus.phase === 'complete' || index < promotionStatusIndex || (previewVerified && index === promotionStatusIndex);
+          const active = !complete && index === promotionStatusIndex && ['previewing', 'confirming', 'promoting'].includes(promotionStatus.phase);
           const failed = promotionStatus.phase === 'error' && index === promotionStatusIndex;
           return <div className={`pm-promotion-step ${complete ? 'pm-promotion-step--complete' : ''} ${active ? 'pm-promotion-step--active' : ''} ${failed ? 'pm-promotion-step--error' : ''}`} key={stage.key}>
             <span className="pm-promotion-step-dot">{complete ? <CheckCircle size={13} /> : failed ? <AlertCircle size={13} /> : active ? <Loader2 size={13} className="pm-promotion-status-spin" /> : index + 1}</span>
