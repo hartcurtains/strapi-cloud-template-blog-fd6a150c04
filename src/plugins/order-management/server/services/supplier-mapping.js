@@ -61,6 +61,20 @@ function normalizeActiveSupplier(value, file = 'active Ashley Wilde mapping') {
   return SUPPLIER;
 }
 
+function normalizeImporterSupplier(value, file = 'active supplier mapping') {
+  const normalized = clean(value).replace(/\s+/g, ' ');
+  if (!normalized) throw new AshleyWildeMappingError('supplier must be a non-empty string', file);
+  return normalized;
+}
+
+function requireMatchingImporterSupplier(value, expectedSupplier, file) {
+  const normalized = normalizeImporterSupplier(value, file);
+  if (nameKey(normalized) !== nameKey(expectedSupplier)) {
+    throw new AshleyWildeMappingError(`supplier must be "${expectedSupplier}"`, file);
+  }
+  return normalized;
+}
+
 function assertJsonSize(value) {
   const bytes = Buffer.byteLength(value, 'utf8');
   if (bytes > MAX_JSON_BYTES) throw new Error(`Mapping JSON exceeds the ${MAX_JSON_BYTES} byte limit.`);
@@ -898,7 +912,7 @@ async function mappingsForVersion(strapi, version) {
   return strapi.documents(MAPPING_UID).findMany({ filters: { mappingImport: { documentId: importDocumentId }, isActive: true }, populate: ['fabric'], limit: 10000 });
 }
 
-function importerColourMap(version, rows) {
+function importerColourMap(version, rows, supplier = version?.supplier) {
   const products = {};
   for (const fabric of version.sourcePayload?.fabrics || []) {
     const productKey = `${codeKey(fabric.supplierProductCode)}|${fabric.fabricDocumentId || fabric.fabricName}`;
@@ -937,27 +951,50 @@ function importerColourMap(version, rows) {
       evidence: { source: `${row.source || 'Strapi supplier mapping'} (mapping version ${version.version})` },
     };
   }
-  return { schemaVersion: version.schemaVersion || 1, supplier: SUPPLIER, mappingVersion: version.version, generatedAt: version.importedAt, products };
+  return { schemaVersion: version.schemaVersion || 1, supplier, mappingVersion: version.version, generatedAt: version.importedAt, products };
 }
 
-function normalizeActiveImporterMapping(payload) {
+function normalizeActiveImporterMapping(payload, requestedSupplier = payload?.version?.supplier) {
   const version = payload?.version;
-  const file = 'active Ashley Wilde mapping';
-  const versionSupplier = normalizeActiveSupplier(version?.supplier, file);
-  const sourceSupplier = normalizeActiveSupplier(version?.sourcePayload?.supplier || versionSupplier, file);
-  const rawColourMap = payload?.colourMap || importerColourMap(version, payload?.rows || []);
-  normalizeActiveSupplier(rawColourMap?.supplier || versionSupplier, file);
-  const colourMap = { ...rawColourMap, supplier: SUPPLIER };
-  validateColourMap(colourMap, file);
+  const expectedSupplier = normalizeImporterSupplier(requestedSupplier, 'supplier folder importer request');
+  const file = `active ${expectedSupplier} mapping`;
+  const versionSupplier = requireMatchingImporterSupplier(version?.supplier, expectedSupplier, file);
+  const sourceSupplier = requireMatchingImporterSupplier(version?.sourcePayload?.supplier || versionSupplier, expectedSupplier, file);
+  const canonicalSupplier = sourceSupplier;
+  const rawColourMap = payload?.colourMap || importerColourMap(version, payload?.rows || [], canonicalSupplier);
+  requireMatchingImporterSupplier(rawColourMap?.supplier || versionSupplier, expectedSupplier, file);
+  const colourMap = { ...rawColourMap, supplier: canonicalSupplier };
+  validateColourMap(colourMap, file, canonicalSupplier);
   return { version, rows: payload?.rows || [], colourMap, source: 'strapi-active-version' };
 }
 
 async function getActiveImporterMappings(strapi, supplier) {
-  const canonicalSupplier = normalizeActiveSupplier(supplier, 'Ashley Wilde importer request');
-  const version = await getActiveVersion(strapi, canonicalSupplier);
+  const requestedSupplier = normalizeImporterSupplier(supplier, 'supplier folder importer request');
+  const version = await getActiveVersion(strapi, requestedSupplier);
   if (!version) return null;
   const rows = await mappingsForVersion(strapi, version);
-  return normalizeActiveImporterMapping({ version, rows });
+  return normalizeActiveImporterMapping({ version, rows }, requestedSupplier);
+}
+
+async function listActiveMappingSuppliers(strapi) {
+  const versions = await strapi.entityService.findMany(IMPORT_UID, {
+    filters: { status: 'active', isActive: true },
+    sort: ['supplier:asc', 'updatedAt:desc'],
+    limit: 1000,
+  });
+  const suppliers = new Map();
+  for (const version of versions || []) {
+    const supplier = normalizeImporterSupplier(version?.supplier, 'active supplier mapping version');
+    const key = nameKey(supplier);
+    if (suppliers.has(key)) continue;
+    suppliers.set(key, {
+      supplier,
+      mappingVersion: version.version || null,
+      mappingImportDocumentId: version.documentId || null,
+      mappingCount: Number(version.mappingCount || 0),
+    });
+  }
+  return [...suppliers.values()].sort((left, right) => left.supplier.localeCompare(right.supplier));
 }
 
 function compareRows(rows, activeRows) {
@@ -1186,4 +1223,4 @@ async function reenrichSupplierMappings(strapi, ctx) {
   return { version: safeImportRecord(version), summary, results, applied: 0 };
 }
 
-module.exports = { MAX_JSON_BYTES, applyMapping, buildPreview, exportMapping, exportRepositoryFallback, getActiveImporterMappings, getActiveMappings, getActiveVersion, loadRegistry, mappingsForVersion, normalizeActiveImporterMapping, normalizeDocument, reenrichSupplierMappings, uploadMapping, validateDocument };
+module.exports = { MAX_JSON_BYTES, applyMapping, buildPreview, exportMapping, exportRepositoryFallback, getActiveImporterMappings, getActiveMappings, getActiveVersion, listActiveMappingSuppliers, loadRegistry, mappingsForVersion, normalizeActiveImporterMapping, normalizeDocument, reenrichSupplierMappings, uploadMapping, validateDocument };

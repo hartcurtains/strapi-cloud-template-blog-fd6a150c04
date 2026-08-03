@@ -32,11 +32,14 @@ export async function sha256File(file) {
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-export async function fingerprintManifest(manifest) {
-  const canonical = manifest
+export async function fingerprintManifest(manifest, supplier = 'Ashley Wilde') {
+  const normalizedSupplier = String(supplier || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  if (!normalizedSupplier) throw new Error('Supplier is required to fingerprint a folder manifest.');
+  const canonicalManifest = manifest
     .map((item) => `${item.relativePath}\0${item.sha256.toLowerCase()}`)
     .sort((left, right) => left.localeCompare(right))
     .join('\n');
+  const canonical = `${normalizedSupplier}\0${canonicalManifest}`;
   const bytes = new TextEncoder().encode(canonical);
   const digest = await window.crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');

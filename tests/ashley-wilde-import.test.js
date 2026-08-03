@@ -490,7 +490,7 @@ test('Ashley folder analysis uses the complete server catalogue without an unpag
   const priorMode = process.env.ASHLEY_WILDE_MAPPING_MODE;
   process.env.ASHLEY_WILDE_MAPPING_MODE = 'pilot';
   try {
-    const result = await importer.analyseFolder(strapi, { folderName: 'Ashley pilot', folderFingerprint, manifest });
+    const result = await importer.analyseFolder(strapi, { supplier: 'Ashley Wilde', folderName: 'Ashley pilot', folderFingerprint, manifest });
     assert.deepEqual(result.summary, {
       totalFiles: 8, matchedFiles: 7, readyFiles: 6, alreadyCompleteFiles: 0,
       skippedFiles: 1, unresolvedFiles: 1, conflictFiles: 0,

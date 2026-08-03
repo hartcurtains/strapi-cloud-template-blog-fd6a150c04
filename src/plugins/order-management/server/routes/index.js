@@ -103,6 +103,12 @@ module.exports = [
       config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
     },
     {
+      method: 'GET',
+      path: relativePath(adminCatalogRoutes.supplierMappingsSuppliers),
+      handler: 'import-export.getActiveMappingSuppliers',
+      config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
+    },
+    {
       method: 'POST',
       path: relativePath(adminCatalogRoutes.ashleyWildePromote),
       handler: 'import-export.promoteAshleyWilde',

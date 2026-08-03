@@ -37,17 +37,21 @@ function requireString(value, label, file) {
   }
 }
 
-function validateHeader(value, file) {
+function validateHeader(value, file, expectedSupplier = SUPPLIER) {
   if (!isObject(value)) throw new AshleyWildeMappingError('root must be an object', file);
   if (value.schemaVersion !== 1) throw new AshleyWildeMappingError('schemaVersion must be 1', file);
-  if (value.supplier !== SUPPLIER) throw new AshleyWildeMappingError(`supplier must be "${SUPPLIER}"`, file);
+  requireString(expectedSupplier, 'expected supplier', file);
+  requireString(value.supplier, 'supplier', file);
+  if (normalizeSupplierName(value.supplier) !== normalizeSupplierName(expectedSupplier)) {
+    throw new AshleyWildeMappingError(`supplier must be "${String(expectedSupplier).trim()}"`, file);
+  }
   if (value.generatedAt !== null && (typeof value.generatedAt !== 'string' || Number.isNaN(Date.parse(value.generatedAt)))) {
     throw new AshleyWildeMappingError('generatedAt must be null or an ISO date string', file);
   }
 }
 
-function validateColourMap(value, file = 'ashley-wilde-colour-map.json') {
-  validateHeader(value, file);
+function validateColourMap(value, file = 'ashley-wilde-colour-map.json', expectedSupplier = SUPPLIER) {
+  validateHeader(value, file, expectedSupplier);
   if (!isObject(value.products)) throw new AshleyWildeMappingError('products must be an object', file);
   const prefixes = new Map();
   for (const [key, product] of Object.entries(value.products)) {
@@ -161,6 +165,10 @@ function normalizeToken(value) {
   return String(value || '').normalize('NFKC').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function normalizeSupplierName(value) {
+  return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
 function normalizeCanonicalColourName(value) {
   return String(value || '').normalize('NFKC').trim().toLocaleLowerCase().replace(/[\s_-]+/g, '');
 }
@@ -240,7 +248,7 @@ function normalizeRelativePath(value) {
 }
 
 function parseFilename(filename, colourMap) {
-  validateColourMap(colourMap);
+  validateColourMap(colourMap, 'active supplier colour map', colourMap?.supplier || SUPPLIER);
   const extension = path.extname(String(filename || '')).toLowerCase();
   if (!SUPPORTED_EXTENSIONS.includes(extension)) return { status: 'unsupported_file', filename };
   if (!safeFilename(filename)) return { status: 'ambiguous_filename', filename, warning: 'Filename is unsafe.' };

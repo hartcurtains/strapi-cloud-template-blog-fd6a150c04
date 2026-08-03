@@ -6,6 +6,32 @@ const { after, before, test } = require('node:test');
 const importer = require('../src/plugins/order-management/server/services/ashley-wilde-import');
 
 const previousSecret = process.env.STRAPI_INTERNAL_SECURITY_SECRET;
+const activeMappingVersion = {
+  documentId: 'ashley-active-import',
+  supplier: 'Ashley Wilde',
+  status: 'active',
+  isActive: true,
+  version: 'ashley-active-v1',
+  schemaVersion: 1,
+  importedAt: '2026-08-03T00:00:00.000Z',
+  sourcePayload: {
+    schemaVersion: 1,
+    supplier: 'Ashley Wilde',
+    mappingVersion: 'ashley-active-v1',
+    fabrics: [{ fabricName: 'Alaska', fabricDocumentId: 'okwshze5maa8f02rmu0v5azq', supplierProductCode: 'ALASKA' }],
+  },
+};
+const activeMappingRows = [{
+  supplier: 'Ashley Wilde',
+  fabricName: 'Alaska',
+  fabricDocumentId: 'okwshze5maa8f02rmu0v5azq',
+  supplierProductCode: 'ALASKA',
+  supplierColourCode: 'AQ',
+  officialColourName: 'Aqua',
+  internalColourCode: 'AQ',
+  evidenceStatus: 'verified_official',
+  source: 'test active mapping',
+}];
 before(() => { process.env.STRAPI_INTERNAL_SECURITY_SECRET = 'two-phase-test-secret'; });
 after(() => {
   if (previousSecret === undefined) delete process.env.STRAPI_INTERNAL_SECURITY_SECRET;
@@ -21,8 +47,8 @@ function renewAnalysisToken(token) {
   return `aw-analysis.${renewedEncoded}.${signature}`;
 }
 
-function stableMediaBinding({ adminId, folderFingerprint, relativePath, fileFingerprint }) {
-  const payload = [adminId, folderFingerprint.toLowerCase(), relativePath, fileFingerprint.toLowerCase()].join('\0');
+function stableMediaBinding({ supplier = 'Ashley Wilde', adminId, folderFingerprint, relativePath, fileFingerprint }) {
+  const payload = [supplier.toLowerCase(), adminId, folderFingerprint.toLowerCase(), relativePath, fileFingerprint.toLowerCase()].join('\0');
   const signature = crypto.createHmac('sha256', process.env.STRAPI_INTERNAL_SECURITY_SECRET).update(payload, 'utf8').digest('base64url');
   return `aw-ashley:v2:${signature}:${folderFingerprint}:${relativePath}:${fileFingerprint}`;
 }
@@ -33,8 +59,9 @@ function twoPhaseFixture({ badCaption = false, emptyMedia = false, failAssetOnce
   const fileSize = 2_981_739;
   const folderFingerprint = importer.manifestFingerprint([{ relativePath, sha256: fileFingerprint, size: fileSize }]);
   const analysisToken = importer.createAnalysisToken({
-    mappingImportDocumentId: null,
-    mappingVersion: null,
+    supplier: 'Ashley Wilde',
+    mappingImportDocumentId: activeMappingVersion.documentId,
+    mappingVersion: activeMappingVersion.version,
     manifestFingerprint: folderFingerprint,
     manifestFileCount: 1,
     analyzedPaths: [relativePath],
@@ -79,7 +106,7 @@ function twoPhaseFixture({ badCaption = false, emptyMedia = false, failAssetOnce
     log: { info() {} },
     entityService: {
       async findMany(uid, query = {}) {
-        if (uid === 'api::supplier-mapping-import.supplier-mapping-import') return [];
+        if (uid === 'api::supplier-mapping-import.supplier-mapping-import') return [activeMappingVersion];
         if (uid === 'api::fabric.fabric') return [{ documentId: 'okwshze5maa8f02rmu0v5azq', name: 'Alaska', brand: { name: 'Ashley Wilde' } }];
         if (uid === 'api::fabric-colour-identity.fabric-colour-identity') return identities.filter((row) => !query.filters?.identityKey || row.identityKey === query.filters.identityKey.$eq);
         if (uid === 'api::fabric-colour-asset.fabric-colour-asset') {
@@ -122,11 +149,12 @@ function twoPhaseFixture({ badCaption = false, emptyMedia = false, failAssetOnce
       },
     },
     documents(uid) {
-      if (uid === 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping') return { async findMany() { return []; } };
+      if (uid === 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping') return { async findMany() { return activeMappingRows; } };
       throw new Error(`Unexpected documents API ${uid}`);
     },
   };
   const body = {
+    supplier: 'Ashley Wilde',
     analysisToken: currentAnalysisToken,
     manifestFileCount: 1,
     folderName: 'Ashley',

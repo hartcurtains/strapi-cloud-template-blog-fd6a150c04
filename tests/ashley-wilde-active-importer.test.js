@@ -109,16 +109,24 @@ test('analysis token is tied to admin, active mapping, complete manifest, and an
     const entry = manifestEntry();
     const fingerprint = importer.manifestFingerprint([entry]);
     const token = importer.createAnalysisToken({
+      supplier: 'Ashley Wilde',
       mappingImportDocumentId: 'active-import-562', mappingVersion: 'active-562',
       manifestFingerprint: fingerprint, manifestFileCount: 1, analyzedPaths: [entry.relativePath], adminId: 'admin-1',
     });
     assert.equal(importer.verifyAnalysisToken(token, {
+      supplier: 'Ashley Wilde',
       mappingImportDocumentId: 'active-import-562', mappingVersion: 'active-562', fingerprint,
       manifestFileCount: 1, uploadedPaths: [entry.relativePath], adminId: 'admin-1',
     }).analyzedFileCount, 1);
     assert.throws(() => importer.verifyAnalysisToken(token, {
+      supplier: 'Ashley Wilde',
       mappingImportDocumentId: 'active-import-562', mappingVersion: 'active-562', fingerprint,
       manifestFileCount: 1, uploadedPaths: [entry.relativePath], adminId: 'admin-2',
+    }), (error) => error.code === 'ASHLEY_WILDE_ANALYSIS_INVALID');
+    assert.throws(() => importer.verifyAnalysisToken(token, {
+      supplier: 'Emily Bond',
+      mappingImportDocumentId: 'active-import-562', mappingVersion: 'active-562', fingerprint,
+      manifestFileCount: 1, uploadedPaths: [entry.relativePath], adminId: 'admin-1',
     }), (error) => error.code === 'ASHLEY_WILDE_ANALYSIS_INVALID');
   } finally {
     if (previous === undefined) delete process.env.STRAPI_INTERNAL_SECURITY_SECRET;
@@ -132,6 +140,7 @@ test('staging rejects a selected manifest when no successful analysis token was 
   const writes = [];
   const strapi = strapiFor(active, writes);
   const body = {
+    supplier: 'Ashley Wilde',
     folderName: 'Ashley', folderFingerprint: importer.manifestFingerprint([entry]),
     folderManifest: JSON.stringify([entry]), fileMetadata: JSON.stringify([entry]), finalBatch: 'true',
   };
@@ -155,6 +164,7 @@ test('queue analysis returns a token without mutating operational staging record
   process.env.STRAPI_INTERNAL_SECURITY_SECRET = 'focused-test-secret';
   try {
     const result = await importer.analyseFolder(strapi, {
+      supplier: 'Ashley Wilde',
       folderName: 'Ashley', folderFingerprint: importer.manifestFingerprint([entry]), manifest: [entry],
       folderManifest: [entry], queueBatch: true,
     }, { adminId: 'admin-1' });

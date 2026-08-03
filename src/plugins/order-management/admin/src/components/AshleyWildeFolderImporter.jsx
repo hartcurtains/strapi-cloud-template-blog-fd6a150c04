@@ -148,6 +148,9 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const [historyLoading, setHistoryLoading] = useState(true);
   const [selectedHistory, setSelectedHistory] = useState(null);
   const [mappingMode, setMappingMode] = useState('production');
+  const [availableSuppliers, setAvailableSuppliers] = useState([]);
+  const [suppliersLoading, setSuppliersLoading] = useState(true);
+  const [selectedSupplier, setSelectedSupplier] = useState('');
   const [queuedFolder, setQueuedFolder] = useState(null);
   const [analysisState, setAnalysisState] = useState('idle');
   const [analysisBatches, setAnalysisBatches] = useState([]);
@@ -157,11 +160,21 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const stagingRunRef = useRef(false);
   const traceAttemptsRef = useRef(new Map());
 
-  const refreshMappingMode = useCallback(async () => {
-    const response = await adminResponse(get, adminCatalogRoutes.ashleyWildeMode);
+  const refreshMappingMode = useCallback(async (supplier) => {
+    if (!supplier) return null;
+    const response = await adminResponse(get, `${adminCatalogRoutes.ashleyWildeMode}?supplier=${encodeURIComponent(supplier)}`);
     const mode = response.data || {};
     setMappingMode(mode.mode || 'production');
     return mode;
+  }, [get]);
+
+  const refreshSuppliers = useCallback(async () => {
+    setSuppliersLoading(true);
+    try {
+      const response = await adminResponse(get, adminCatalogRoutes.supplierMappingsSuppliers);
+      setAvailableSuppliers(Array.isArray(response.data) ? response.data : []);
+    } catch (supplierError) { setError(safeErrorMessage(supplierError)); }
+    finally { setSuppliersLoading(false); }
   }, [get]);
 
   const refreshHistory = useCallback(async () => {
@@ -173,10 +186,15 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     finally { setHistoryLoading(false); }
   }, [get]);
 
-  useEffect(() => { refreshHistory(); refreshMappingMode().catch((modeError) => setError(safeErrorMessage(modeError))); }, [refreshHistory, refreshMappingMode]);
+  useEffect(() => { refreshHistory(); refreshSuppliers(); }, [refreshHistory, refreshSuppliers]);
   useEffect(() => () => folderFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl)), [folderFiles]);
 
   const handleFolder = async (event) => {
+    if (!selectedSupplier) {
+      setError('Select a supplier before choosing a folder.');
+      event.target.value = '';
+      return;
+    }
     const files = [...(event.target.files || [])];
     if (!files.length) return;
     const selectedFolderName = folderNameFromFiles(files);
@@ -190,12 +208,30 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setError('');
     setStagingFailures([]);
     setAcknowledgeSkips(false);
-    setQueuedFolder({ folderName: selectedFolderName, totalFiles: files.length, preflight: preflightStats(selectedRows) });
+    setQueuedFolder({ supplier: selectedSupplier, folderName: selectedFolderName, totalFiles: files.length, preflight: preflightStats(selectedRows) });
     setAnalysis(null);
     setAnalysisBatches([]);
     setAnalysisState('pending');
     setActivity({ phase: 'queued', current: 0, total: files.length, filename: '', message: 'Folder selected. Ready to analyse.' });
     event.target.value = '';
+  };
+
+  const handleSupplierChange = (event) => {
+    const supplier = event.target.value;
+    folderFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
+    fileQueueRef.current = [];
+    setSelectedSupplier(supplier);
+    setFolderFiles([]);
+    setQueuedFolder(null);
+    setAnalysis(null);
+    setAnalysisBatches([]);
+    setAnalysisState('idle');
+    setSelected(new Set());
+    setAcknowledgeSkips(false);
+    setStagingFailures([]);
+    setActivity(emptyActivity);
+    setError('');
+    if (supplier) refreshMappingMode(supplier).catch((modeError) => setError(safeErrorMessage(modeError)));
   };
 
   const reportActivity = (phase, current, total, filename, message) => {
@@ -232,8 +268,8 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     });
     return [...rows.values()];
   }, [folderFiles, stagingFailures]);
-  const priorSameName = history.filter((item) => item.folderName === analysis?.folderName && item.folderFingerprint !== analysis?.folderFingerprint);
-  const identicalHistory = history.find((item) => item.folderFingerprint === analysis?.folderFingerprint);
+  const priorSameName = history.filter((item) => item.supplier === analysis?.supplier && item.folderName === analysis?.folderName && item.folderFingerprint !== analysis?.folderFingerprint);
+  const identicalHistory = history.find((item) => item.supplier === analysis?.supplier && item.folderFingerprint === analysis?.folderFingerprint);
 
   const toggleRow = (row) => {
     if (!READY_STATUSES.has(row.status)) return;
@@ -261,6 +297,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     let media = row.mediaRecord || null;
     const attemptSpan = startAshleyDiagnosticSpan('attempt', { ...diagnostic, queueIndex: index + 1, queueTotal: total, mediaAlreadyKnown: Boolean(media), persistedPhase: persisted?.phase || null });
     const finaliseBody = {
+      supplier: selectedSupplier,
       analysisToken,
       manifestFileCount,
       mappingVersionDocumentId: analysis?.mappingVersionDocumentId || null,
@@ -382,12 +419,12 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   };
 
   const processQueuedFolder = async () => {
-    if (!queuedFolder || !fileQueueRef.current.length || !acknowledgeSkips || analysisState === 'complete') return;
+    if (!selectedSupplier || !queuedFolder || queuedFolder.supplier !== selectedSupplier || !fileQueueRef.current.length || !acknowledgeSkips || analysisState === 'complete') return;
     setBusy(true);
     setError('');
     reportActivity('hashing', 0, fileQueueRef.current.length, '', `Preparing ${fileQueueRef.current.length} file(s) for analysis.`);
     try {
-      await refreshMappingMode();
+      await refreshMappingMode(selectedSupplier);
       const hashed = [];
       for (let index = 0; index < fileQueueRef.current.length; index += 1) {
         const item = fileQueueRef.current[index];
@@ -396,7 +433,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       }
       fileQueueRef.current = hashed;
       const manifest = hashed.map(({ relativePath, sha256, size, mimeType }) => ({ relativePath, sha256, size, mimeType }));
-      const folderFingerprint = await fingerprintManifest(manifest);
+      const folderFingerprint = await fingerprintManifest(manifest, selectedSupplier);
       const { batches, oversized } = partitionUploadRows(hashed, MAX_BATCH_FILES, MAX_BATCH_BYTES);
       const summary = { totalFiles: hashed.length, matchedFiles: 0, readyFiles: 0, alreadyCompleteFiles: 0, unresolvedFiles: 0, conflictFiles: 0 };
       const analysedRows = oversized.map((row) => ({ ...row, warning: row.warning || `${row.filename} is larger than the supported upload limit.` }));
@@ -409,11 +446,13 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         reportActivity('analysing', processedCount, hashed.length, batch[0]?.filename || '', `Processing ${processedCount} / ${hashed.length} — batch ${index + 1} of ${batches.length}`);
         const batchManifest = batch.map(({ relativePath, sha256, size, mimeType }) => ({ relativePath, sha256, size, mimeType }));
         const response = await adminResponse(post, adminCatalogRoutes.ashleyWildeAnalyse, {
+          supplier: selectedSupplier,
           folderName: queuedFolder.folderName, folderFingerprint, manifest: batchManifest,
           folderManifest: manifest, queueBatch: true,
         });
         const analysisResponse = response;
         const serverAnalysis = analysisResponse.data;
+        if (serverAnalysis?.supplier !== selectedSupplier) throw new Error('The server returned analysis for a different supplier.');
         if (!serverAnalysis?.analysisToken) throw new Error('The server did not return a successful filename analysis. Staging is disabled.');
         Object.keys(summary).forEach((key) => { if (key !== 'totalFiles') summary[key] += Number(serverAnalysis.summary?.[key] || 0); });
         const filesByPath = new Map(batch.map((item) => [item.relativePath, item]));
@@ -452,7 +491,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   };
 
   const stageQueuedFolder = async () => {
-    if (!queuedFolder || analysisState !== 'complete' || !analysisBatches.length || !fileQueueRef.current.length || stagingRunRef.current) return;
+    if (!selectedSupplier || analysis?.supplier !== selectedSupplier || !queuedFolder || analysisState !== 'complete' || !analysisBatches.length || !fileQueueRef.current.length || stagingRunRef.current) return;
     stagingRunRef.current = true;
     setBusy(true);
     setError('');
@@ -543,12 +582,20 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     <section style={{ borderBottom: `1px solid ${colours.line}`, paddingBottom: '32px', marginBottom: '32px' }}>
       <div className="aw-folder-layout">
         <div style={{ minWidth: 0 }}>
-          <h3 className="aw-folder-title" style={{ fontSize: '18px', fontWeight: 600, color: colours.text, margin: '0 0 6px' }}>Ashley Wilde folder import</h3>
+          <h3 className="aw-folder-title" style={{ fontSize: '18px', fontWeight: 600, color: colours.text, margin: '0 0 6px' }}>Supplier folder import</h3>
           {mappingMode === 'pilot' && <div role="status" style={{ display: 'inline-block', marginBottom: '8px', padding: '4px 8px', borderRadius: '4px', background: '#fffbeb', color: colours.amber, fontSize: '12px', fontWeight: 600 }}>Pilot mapping — local testing only</div>}
-          <p style={{ fontSize: '14px', color: colours.muted, margin: '0 0 16px' }}>Select one complete folder. Files are analysed and shown before staging; the live Colour table is not changed.</p>
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '6px', border: `1px solid ${colours.line}`, background: '#fff', color: colours.text, fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}>
+          <p style={{ fontSize: '14px', color: colours.muted, margin: '0 0 16px' }}>Choose the mapped supplier, then select one complete folder. Files are analysed and shown before staging; the live Colour table is not changed.</p>
+          <label className="aw-supplier-field">
+            <span>Supplier <strong aria-hidden="true">*</strong></span>
+            <select required aria-required="true" value={selectedSupplier} onChange={handleSupplierChange} disabled={busy || suppliersLoading}>
+              <option value="">{suppliersLoading ? 'Loading active mappings…' : 'Select supplier…'}</option>
+              {availableSuppliers.map((item) => <option key={item.supplier} value={item.supplier}>{item.supplier}</option>)}
+            </select>
+            {!suppliersLoading && availableSuppliers.length === 0 && <small>No suppliers currently have an active colour mapping version.</small>}
+          </label>
+          <label aria-disabled={busy || !selectedSupplier} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '6px', border: `1px solid ${colours.line}`, background: '#fff', color: colours.text, fontWeight: 600, opacity: !selectedSupplier ? 0.5 : 1, cursor: busy ? 'wait' : !selectedSupplier ? 'not-allowed' : 'pointer' }}>
             <FolderOpen size={18} /> Select folder
-            <input type="file" webkitdirectory="" directory="" multiple onChange={handleFolder} disabled={busy} style={{ display: 'none' }} />
+            <input type="file" webkitdirectory="" directory="" multiple onChange={handleFolder} disabled={busy || !selectedSupplier} style={{ display: 'none' }} />
           </label>
 
           {busy && <p style={{ display: 'flex', alignItems: 'center', gap: '8px', color: colours.muted, fontSize: '13px' }}><Loader2 size={16} className="aw-spin" />{progress}</p>}
@@ -665,6 +712,11 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         .aw-folder-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 280px); gap: 28px; align-items: start; }
         .aw-folder-title { overflow-wrap: normal; word-break: normal; }
         .aw-history-item { width: 100%; min-width: 0; overflow-wrap: anywhere; }
+        .aw-supplier-field { display: grid; max-width: 360px; gap: 6px; margin: 0 0 14px; color: ${colours.text}; font-size: 13px; font-weight: 600; }
+        .aw-supplier-field strong { color: ${colours.red}; }
+        .aw-supplier-field select { min-height: 40px; padding: 8px 10px; border: 1px solid ${colours.line}; border-radius: 6px; background: #fff; color: ${colours.text}; font: inherit; }
+        .aw-supplier-field select:focus { outline: 2px solid #93c5fd; outline-offset: 1px; }
+        .aw-supplier-field small { color: ${colours.red}; font-weight: 400; }
         .aw-conflict-panel { margin: 16px 0; border: 1px solid #fecaca; border-radius: 8px; background: #fff7f7; color: #7f1d1d; }
         .aw-conflict-header { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; padding: 14px 16px; border-bottom: 1px solid #fecaca; }
         .aw-conflict-header h4 { margin: 0; font-size: 14px; color: #991b1b; }

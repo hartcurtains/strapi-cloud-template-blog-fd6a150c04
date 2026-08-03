@@ -1398,7 +1398,10 @@ module.exports = {
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
     try {
       const mode = resolveMappingMode();
-      const mappings = await importer.loadAshleyImporterMappings(strapi);
+      const supplier = String(ctx.query?.supplier || '').normalize('NFKC').trim();
+      const mappings = supplier
+        ? await importer.loadSupplierImporterMappings(strapi, supplier)
+        : await importer.loadAshleyImporterMappings(strapi);
       ctx.body = {
         success: true,
         data: {
@@ -1416,6 +1419,17 @@ module.exports = {
     } catch (error) {
       ctx.status = error?.code === 'ASHLEY_WILDE_MAPPING_INVALID' ? 503 : 500;
       ctx.body = { success: false, error: error.message || 'Ashley Wilde mapping mode unavailable' };
+    }
+  },
+
+  async getActiveMappingSuppliers(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const mappings = require('../services/supplier-mapping');
+      ctx.body = { success: true, data: await mappings.listActiveMappingSuppliers(strapi) };
+    } catch (error) {
+      ctx.status = 500;
+      ctx.body = { success: false, error: error.message || 'Active supplier mappings could not be listed' };
     }
   },
 

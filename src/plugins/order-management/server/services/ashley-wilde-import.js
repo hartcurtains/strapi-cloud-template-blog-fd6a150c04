@@ -22,11 +22,22 @@ const ANALYSIS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 function safeMessage(error) {
   if (error?.code === 'ASHLEY_WILDE_MAPPING_INVALID') return error.message;
+  if (error?.code === 'SUPPLIER_REQUIRED' || error?.code === 'SUPPLIER_MAPPING_NOT_FOUND') return error.message;
   if (error?.code === 'ASHLEY_WILDE_ANALYSIS_REQUIRED') return 'A successful Ashley Wilde filename analysis is required before staging files.';
   if (error?.code === 'ASHLEY_WILDE_ANALYSIS_INVALID') return 'The active supplier mapping changed after this folder was analysed. Analyse the folder again before continuing.';
   if (error?.code === 'ASHLEY_WILDE_MEDIA_INVALID') return 'The uploaded Media record could not be securely matched to this analysed image.';
   if (error?.code === 'ASHLEY_WILDE_FINALISATION_RETRYABLE') return 'The image was uploaded, but its staged fabric-colour link still needs to be completed.';
   return 'The folder import could not be processed safely.';
+}
+
+function selectedSupplier(value) {
+  const supplier = String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!supplier) {
+    const error = new Error('Select a supplier before analysing or staging this folder.');
+    error.code = 'SUPPLIER_REQUIRED';
+    throw error;
+  }
+  return supplier;
 }
 
 function adminIdentity(ctx) {
@@ -91,7 +102,7 @@ function signAnalysisPayload(encodedPayload) {
   return crypto.createHmac('sha256', analysisTokenSecret()).update(encodedPayload, 'utf8').digest('base64url');
 }
 
-function createAnalysisToken({ mappingImportDocumentId, mappingVersion, manifestFingerprint: fingerprint, manifestFileCount, analyzedPaths, analyzedFiles, adminId }) {
+function createAnalysisToken({ supplier = SUPPLIER, mappingImportDocumentId, mappingVersion, manifestFingerprint: fingerprint, manifestFileCount, analyzedPaths, analyzedFiles, adminId }) {
   if (!adminId) {
     const error = new Error('Authenticated administrator identity is required for Ashley Wilde analysis');
     error.code = 'ASHLEY_WILDE_ANALYSIS_REQUIRED';
@@ -102,6 +113,7 @@ function createAnalysisToken({ mappingImportDocumentId, mappingVersion, manifest
     version: 1,
     expiresAt: Date.now() + ANALYSIS_TOKEN_TTL_MS,
     adminId: String(adminId),
+    supplier: selectedSupplier(supplier),
     mappingImportDocumentId: mappingImportDocumentId || null,
     mappingVersion: mappingVersion || null,
     manifestFingerprint: fingerprint,
@@ -132,7 +144,7 @@ function invalidAnalysisError() {
   return error;
 }
 
-function verifyAnalysisToken(token, { mappingImportDocumentId, mappingVersion, fingerprint, manifestFileCount, uploadedPaths, adminId }) {
+function verifyAnalysisToken(token, { supplier = SUPPLIER, mappingImportDocumentId, mappingVersion, fingerprint, manifestFileCount, uploadedPaths, adminId }) {
   if (typeof token !== 'string' || !token.startsWith('aw-analysis.')) {
     const error = new Error('A successful Ashley Wilde filename analysis is required before staging files.');
     error.code = 'ASHLEY_WILDE_ANALYSIS_REQUIRED';
@@ -148,7 +160,9 @@ function verifyAnalysisToken(token, { mappingImportDocumentId, mappingVersion, f
   try { payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8')); } catch { throw invalidAnalysisError(); }
   const expectedPaths = new Set(Array.isArray(payload.analyzedPaths) ? payload.analyzedPaths : []);
   const requestedPaths = (uploadedPaths || []).map(normalizeRelativePath);
+  const expectedSupplier = selectedSupplier(supplier);
   if (payload.version !== 1 || payload.expiresAt < Date.now() || payload.adminId !== String(adminId || '')
+    || normalizedFabricName(payload.supplier || SUPPLIER) !== normalizedFabricName(expectedSupplier)
     || payload.mappingImportDocumentId !== (mappingImportDocumentId || null)
     || payload.mappingVersion !== (mappingVersion || null)
     || payload.manifestFingerprint !== fingerprint
@@ -171,8 +185,10 @@ function normalizeManifest(input) {
   });
 }
 
-function manifestFingerprint(manifest) {
-  return crypto.createHash('sha256').update(canonicalManifestLines(manifest).join('\n'), 'utf8').digest('hex');
+function manifestFingerprint(manifest, supplier = SUPPLIER) {
+  return crypto.createHash('sha256')
+    .update(`${normalizedFabricName(selectedSupplier(supplier))}\0${canonicalManifestLines(manifest).join('\n')}`, 'utf8')
+    .digest('hex');
 }
 
 function logicalRows(rows) {
@@ -189,50 +205,91 @@ function normalizedFabricName(value) {
   return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
 }
 
-function brandIsAshleyWilde(fabric) {
+function inferMissingProductCode(filename, colourMap) {
+  const stem = normalizeStem(path.basename(String(filename || ''), path.extname(String(filename || ''))));
+  const colourCodes = new Set();
+  for (const product of Object.values(colourMap?.products || {})) {
+    for (const colourCode of Object.keys(product?.colours || {})) {
+      const normalized = normalizeToken(colourCode);
+      if (normalized) colourCodes.add(normalized);
+    }
+  }
+  const suffix = [...colourCodes]
+    .filter((colourCode) => stem.endsWith(colourCode) && stem.length > colourCode.length)
+    .sort((left, right) => right.length - left.length)[0];
+  return suffix ? stem.slice(0, -suffix.length) : stem;
+}
+
+function parseSupplierFilename(filename, colourMap, supplier) {
+  const parsed = { ...parseFilename(filename, colourMap), supplier };
+  if (parsed.status !== 'unknown_mapping_product') {
+    return {
+      ...parsed,
+      fabricColourCode: parsed.supplierProductCode && parsed.supplierColourCode
+        ? `${parsed.supplierProductCode}${parsed.supplierColourCode}`
+        : null,
+    };
+  }
+  const supplierProductCode = inferMissingProductCode(filename, colourMap);
+  return {
+    ...parsed,
+    supplierProductCode: supplierProductCode || null,
+    warning: supplierProductCode
+      ? `${supplier} mapping does not contain product code ${supplierProductCode}.`
+      : `${supplier} mapping does not contain a product code matching this filename.`,
+  };
+}
+
+function brandMatchesSupplier(fabric, supplier) {
   const brands = Array.isArray(fabric?.brand) ? fabric.brand : [fabric?.brand];
-  return brands.some((brand) => normalizedFabricName(brand?.name) === normalizedFabricName(SUPPLIER));
+  return brands.some((brand) => normalizedFabricName(brand?.name || brand?.attributes?.name) === normalizedFabricName(supplier));
 }
 
-async function fabricCandidatesByName(strapi, name) {
+async function fabricCandidatesByName(strapi, name, supplier) {
   const rows = await strapi.entityService.findMany(FABRIC_UID, { filters: { name: { $eqi: name } }, populate: ['brand'], limit: 100 });
-  return logicalRows(rows.filter((fabric) => normalizedFabricName(fabric.name) === normalizedFabricName(name) && brandIsAshleyWilde(fabric)));
+  return logicalRows(rows.filter((fabric) => normalizedFabricName(fabric.name) === normalizedFabricName(name) && brandMatchesSupplier(fabric, supplier)));
 }
 
-async function resolveAshleyFabric(strapi, parsed) {
+async function resolveSupplierFabric(strapi, parsed, requestedSupplier = parsed?.supplier || SUPPLIER) {
+  const supplier = selectedSupplier(requestedSupplier);
   if (!COLOUR_STATUSES.has(parsed.status)) return { parsed, fabric: null };
   if (parsed.fabricDocumentId) {
     const exact = await strapi.entityService.findMany(FABRIC_UID, { filters: { documentId: parsed.fabricDocumentId }, populate: ['brand'], limit: 2 });
-    const branded = logicalRows((exact || []).filter(brandIsAshleyWilde));
+    const branded = logicalRows((exact || []).filter((fabric) => brandMatchesSupplier(fabric, supplier)));
     if (branded.length === 1) {
       const fabric = branded[0];
       return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
     }
-    if (!branded.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `The mapped Fabric ${parsed.fabricDocumentId} does not exist in the current Ashley Wilde catalog.` }, fabric: null };
+    if (!branded.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `The mapped Fabric ${parsed.fabricDocumentId} does not exist in the current ${supplier} catalog.` }, fabric: null };
     return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `The mapped Fabric ${parsed.fabricDocumentId} resolved to multiple catalogue records.` }, fabric: null };
   }
   const names = [parsed.fabricName, ...(parsed.approvedAliases || [])].filter(Boolean);
   let candidates = [];
   for (const name of names) {
-    candidates = await fabricCandidatesByName(strapi, name);
+    candidates = await fabricCandidatesByName(strapi, name, supplier);
     if (candidates.length) break;
   }
-  if (!candidates.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `No Ashley Wilde fabric named ${parsed.fabricName} exists in the current catalog.` }, fabric: null };
-  if (candidates.length !== 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `Multiple Ashley Wilde fabrics match ${parsed.fabricName}; resolution was refused.` }, fabric: null };
+  if (!candidates.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `No ${supplier} fabric named ${parsed.fabricName} exists in the current catalog.` }, fabric: null };
+  if (candidates.length !== 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `Multiple ${supplier} fabrics match ${parsed.fabricName}; resolution was refused.` }, fabric: null };
   const fabric = candidates[0];
   return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
 }
 
+async function resolveAshleyFabric(strapi, parsed) {
+  return resolveSupplierFabric(strapi, { ...parsed, supplier: parsed?.supplier || SUPPLIER }, parsed?.supplier || SUPPLIER);
+}
+
 function identityKey(parsed) {
-  return [normalizeToken(SUPPLIER), String(parsed.fabricDocumentId || '').normalize('NFKC').trim(), normalizeToken(parsed.supplierProductCode), normalizeToken(parsed.supplierColourCode)].join('|');
+  return [normalizeToken(parsed?.supplier || SUPPLIER), String(parsed.fabricDocumentId || '').normalize('NFKC').trim(), normalizeToken(parsed.supplierProductCode), normalizeToken(parsed.supplierColourCode)].join('|');
 }
 
 function assetKey(parsed, sha256) {
   return `${identityKey(parsed)}|${String(sha256 || '').toLowerCase()}`;
 }
 
-function mediaBindingFor({ adminId, folderFingerprint, relativePath, fileFingerprint }) {
+function mediaBindingFor({ supplier = SUPPLIER, adminId, folderFingerprint, relativePath, fileFingerprint }) {
   const payload = [
+    normalizedFabricName(selectedSupplier(supplier)),
     String(adminId || ''),
     String(folderFingerprint || '').toLowerCase(),
     normalizeRelativePath(relativePath),
@@ -242,8 +299,8 @@ function mediaBindingFor({ adminId, folderFingerprint, relativePath, fileFingerp
   return `aw-ashley:v2:${signature}:${folderFingerprint}:${normalizeRelativePath(relativePath)}:${fileFingerprint}`;
 }
 
-function blockedAssetKey(relativePath, sha256) {
-  return `${normalizeToken(SUPPLIER)}|blocked|${normalizeRelativePath(relativePath)}|${String(sha256).toLowerCase()}`;
+function blockedAssetKey(relativePath, sha256, supplier = SUPPLIER) {
+  return `${normalizeToken(selectedSupplier(supplier))}|blocked|${normalizeRelativePath(relativePath)}|${String(sha256).toLowerCase()}`;
 }
 
 function normalizedAssetFilename(filename) {
@@ -289,7 +346,7 @@ async function findMedia(strapi, filename, sha256, size) {
 
 async function inspectMatch(strapi, parsed, manifestEntry) {
   if (!COLOUR_STATUSES.has(parsed.status)) return parsed;
-  const resolution = await resolveAshleyFabric(strapi, parsed);
+  const resolution = await resolveSupplierFabric(strapi, parsed, parsed.supplier);
   if (!resolution.fabric) return resolution.parsed;
   parsed = resolution.parsed;
   const identity = await findStagedIdentity(strapi, parsed, ['assets']);
@@ -349,11 +406,40 @@ async function loadAshleyImporterMappings(strapi, options = {}) {
   return { ...loadProductionMappings(), source: 'repository-fallback', mappingVersion: null, mappingImportDocumentId: null };
 }
 
+async function loadSupplierImporterMappings(strapi, supplier, options = {}) {
+  const requestedSupplier = selectedSupplier(supplier);
+  if (options.mappings) {
+    const loaded = loadProductionMappings(options.mappings);
+    if (normalizedFabricName(loaded.colourMap.supplier) !== normalizedFabricName(requestedSupplier)) {
+      throw new Error(`The supplied mapping belongs to ${loaded.colourMap.supplier}, not ${requestedSupplier}.`);
+    }
+    return { ...loaded, source: 'repository-fallback', supplier: requestedSupplier };
+  }
+  const active = await supplierMappings.getActiveImporterMappings(strapi, requestedSupplier);
+  if (!active) {
+    const error = new Error(`No active colour mapping version exists for ${requestedSupplier}.`);
+    error.code = 'SUPPLIER_MAPPING_NOT_FOUND';
+    throw error;
+  }
+  return {
+    mode: 'strapi-active',
+    source: active.source,
+    supplier: active.colourMap.supplier,
+    colourMap: active.colourMap,
+    mappingVersion: active.version.version,
+    mappingImportDocumentId: active.version.documentId,
+    mappingRowCount: active.rows.length,
+    codeRegistry: null,
+    imageIndex: null,
+  };
+}
+
 async function analyseFolder(strapi, body, options = {}) {
-  const mappings = await loadAshleyImporterMappings(strapi);
+  const supplier = selectedSupplier(body?.supplier);
+  const mappings = await loadSupplierImporterMappings(strapi, supplier, options);
   const manifest = normalizeManifest(body?.manifest);
   const completeManifest = body?.queueBatch ? normalizeManifest(body?.folderManifest) : manifest;
-  const fingerprint = manifestFingerprint(completeManifest);
+  const fingerprint = manifestFingerprint(completeManifest, supplier);
   if (body?.folderFingerprint && body.folderFingerprint !== fingerprint) throw new Error('Folder fingerprint does not match the manifest');
   const folderName = String(body?.folderName || '').normalize('NFKC').trim().slice(0, 255);
   if (!folderName || /[\\/]/.test(folderName)) throw new Error('Folder name is invalid');
@@ -362,7 +448,7 @@ async function analyseFolder(strapi, body, options = {}) {
   const rows = [];
   for (const entry of manifest) {
     const filename = path.basename(entry.relativePath);
-    let parsed = parseFilename(filename, mappings.colourMap);
+    let parsed = parseSupplierFilename(filename, mappings.colourMap, supplier);
     if (seenHashes.has(entry.sha256) && COLOUR_STATUSES.has(parsed.status)) parsed = { ...parsed, status: 'exact_duplicate', duplicateStatus: 'exact_duplicate', warning: 'Identical content appears more than once in this folder.' };
     else parsed = await inspectMatch(strapi, parsed, entry);
     seenHashes.add(entry.sha256);
@@ -370,6 +456,7 @@ async function analyseFolder(strapi, body, options = {}) {
       ...entry,
       ...parsed,
       mediaBinding: mediaBindingFor({
+        supplier,
         adminId: options.adminId,
         folderFingerprint: fingerprint,
         relativePath: entry.relativePath,
@@ -379,7 +466,7 @@ async function analyseFolder(strapi, body, options = {}) {
   }
   const summary = summaryForRows(rows);
   if (body?.queueBatch) return {
-    supplier: SUPPLIER,
+    supplier,
     folderName,
     folderFingerprint: fingerprint,
     mappingSchemaVersion: mappings.colourMap.schemaVersion,
@@ -390,6 +477,7 @@ async function analyseFolder(strapi, body, options = {}) {
     mappingVersionDocumentId: mappings.mappingImportDocumentId || null,
     mappingRowCount: mappings.mappingRowCount || null,
     analysisToken: createAnalysisToken({
+      supplier,
       mappingImportDocumentId: mappings.mappingImportDocumentId,
       mappingVersion: mappings.mappingVersion,
       manifestFingerprint: fingerprint,
@@ -405,8 +493,8 @@ async function analyseFolder(strapi, body, options = {}) {
   const previous = previousRows?.[0];
   const noRemainingWork = summary.readyFiles === 0;
   const analysisStatus = noRemainingWork ? ((summary.conflictFiles || summary.unresolvedFiles || summary.skippedFiles) ? 'completed_with_skips' : 'completed') : 'ready';
-  const history = await upsertHistory(strapi, { supplier: SUPPLIER, folderName, folderFingerprint: fingerprint, status: analysisStatus, totalFiles: summary.totalFiles, matchedFiles: summary.matchedFiles, uploadedFiles: Number(previous?.uploadedFiles || 0), alreadyCompleteFiles: summary.alreadyCompleteFiles, skippedFiles: summary.skippedFiles + summary.unresolvedFiles, conflictFiles: summary.conflictFiles, failedFiles: Number(previous?.failedFiles || 0), firstUploadedAt: previous?.firstUploadedAt || null, lastUploadedAt: previous?.lastUploadedAt || null, completedAt: noRemainingWork ? (previous?.completedAt || new Date().toISOString()) : null, mappingSchemaVersion: mappings.colourMap.schemaVersion, manifestSummary: { summary, paths: manifest.map((item) => item.relativePath), fingerprint }, incrementAttempt: true });
-  return { supplier: SUPPLIER, mappingMode: mappings.mode, mappingSource: mappings.source, mappingVersion: mappings.mappingVersion || null, mappingSchemaVersion: mappings.colourMap.schemaVersion, mappingGeneratedAt: mappings.colourMap.generatedAt, folderName, folderFingerprint: fingerprint, rows, summary, history };
+  const history = await upsertHistory(strapi, { supplier, folderName, folderFingerprint: fingerprint, status: analysisStatus, totalFiles: summary.totalFiles, matchedFiles: summary.matchedFiles, uploadedFiles: Number(previous?.uploadedFiles || 0), alreadyCompleteFiles: summary.alreadyCompleteFiles, skippedFiles: summary.skippedFiles + summary.unresolvedFiles, conflictFiles: summary.conflictFiles, failedFiles: Number(previous?.failedFiles || 0), firstUploadedAt: previous?.firstUploadedAt || null, lastUploadedAt: previous?.lastUploadedAt || null, completedAt: noRemainingWork ? (previous?.completedAt || new Date().toISOString()) : null, mappingSchemaVersion: mappings.colourMap.schemaVersion, manifestSummary: { supplier, summary, paths: manifest.map((item) => item.relativePath), fingerprint }, incrementAttempt: true });
+  return { supplier, mappingMode: mappings.mode, mappingSource: mappings.source, mappingVersion: mappings.mappingVersion || null, mappingSchemaVersion: mappings.colourMap.schemaVersion, mappingGeneratedAt: mappings.colourMap.generatedAt, folderName, folderFingerprint: fingerprint, rows, summary, history };
 }
 
 async function uploadMedia(strapi, descriptor, sha256) {
@@ -421,7 +509,7 @@ async function uploadMedia(strapi, descriptor, sha256) {
 
 function evidenceFor(parsed) {
   if (!parsed.supplierColourName || !parsed.internalColourCode) return { mappingStatus: 'pending', evidenceStatus: 'pending_manual' };
-  const source = String(parsed.mappingSource || 'approved Ashley Wilde mapping');
+  const source = String(parsed.mappingSource || `approved ${parsed.supplier || 'supplier'} mapping`);
   return { mappingStatus: 'verified', evidenceStatus: /official supplier|official ashley wilde/i.test(source) ? 'verified_official' : 'verified_manual', source };
 }
 
@@ -442,7 +530,7 @@ async function ensureStagedIdentity(strapi, parsed, fabric) {
     }
     return { identity: existing, conflict: false };
   }
-  const data = { displayName: `${fabric.name} — ${parsed.supplierColourName || `Colour ${parsed.supplierColourCode}`}`, identityKey: identityKey(parsed), supplier: SUPPLIER, fabric: fabric.documentId, fabricDocumentId: fabric.documentId, supplierProductCode: parsed.supplierProductCode, supplierColourCode: parsed.supplierColourCode, fabricColourCode: `${parsed.supplierProductCode}${parsed.supplierColourCode}`, officialColourName: parsed.supplierColourName || null, internalColourCode: parsed.internalColourCode || null, mappingStatus: evidence.mappingStatus, evidenceStatus: evidence.evidenceStatus, source: evidence.source || null, mappingVersion: parsed.mappingVersion || null };
+  const data = { displayName: `${fabric.name} — ${parsed.supplierColourName || `Colour ${parsed.supplierColourCode}`}`, identityKey: identityKey(parsed), supplier: parsed.supplier, fabric: fabric.documentId, fabricDocumentId: fabric.documentId, supplierProductCode: parsed.supplierProductCode, supplierColourCode: parsed.supplierColourCode, fabricColourCode: `${parsed.supplierProductCode}${parsed.supplierColourCode}`, officialColourName: parsed.supplierColourName || null, internalColourCode: parsed.internalColourCode || null, mappingStatus: evidence.mappingStatus, evidenceStatus: evidence.evidenceStatus, source: evidence.source || null, mappingVersion: parsed.mappingVersion || null };
   try { return { identity: await strapi.entityService.create(IDENTITY_UID, { data }), conflict: false }; }
   catch (error) {
     const raced = await findStagedIdentity(strapi, parsed, ['assets', 'fabric']);
@@ -452,20 +540,21 @@ async function ensureStagedIdentity(strapi, parsed, fabric) {
 }
 
 async function createBlockedAsset(strapi, descriptor, metadata, parsed, batchContext) {
-  const key = blockedAssetKey(metadata.relativePath || descriptor.name, metadata.sha256);
+  const key = blockedAssetKey(metadata.relativePath || descriptor.name, metadata.sha256, parsed.supplier);
   const existing = await strapi.entityService.findMany(ASSET_UID, { filters: { assetKey: key }, limit: 1 });
   if (existing?.[0]) return { filename: descriptor.name, status: existing[0].duplicateStatus === 'exact_duplicate' ? 'exact_duplicate' : 'blocked', skipped: true, uploaded: false, assetDocumentId: existing[0].documentId };
-  const asset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: key, originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: parsed.assetType || 'unknown', duplicateStatus: 'unique', importStatus: 'blocked', notes: parsed.warning || 'Classified as non-colour or unresolved filename.', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier: SUPPLIER } } });
+  const asset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: key, originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: parsed.assetType || 'unknown', duplicateStatus: 'unique', importStatus: 'blocked', notes: parsed.warning || 'Classified as non-colour or unresolved filename.', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier: parsed.supplier } } });
   return { filename: descriptor.name, status: parsed.status, assetType: parsed.assetType || 'unknown', skipped: true, uploaded: false, assetDocumentId: asset.documentId, warning: parsed.warning };
 }
 
 async function stageMediaAsset(strapi, descriptor, metadata, mappings, batchContext = {}, media, mediaWasReused = false) {
-  const parsed = parseFilename(descriptor.name, mappings.colourMap);
+  const supplier = selectedSupplier(mappings.supplier || mappings.colourMap?.supplier);
+  const parsed = parseSupplierFilename(descriptor.name, mappings.colourMap, supplier);
   if (!COLOUR_STATUSES.has(parsed.status)) return createBlockedAsset(strapi, descriptor, metadata, parsed, batchContext);
   const inspected = await inspectMatch(strapi, parsed, metadata);
   if (['identity_conflict', 'fabric_not_found_in_current_catalog', 'ambiguous_catalog_fabric', 'conflicting_image'].includes(inspected.status)) return { filename: descriptor.name, ...inspected, uploaded: false, failed: true };
   if (inspected.status === 'exact_duplicate' || inspected.status === 'already_staged') return { filename: descriptor.name, ...inspected, uploaded: false, linked: false, skipped: true };
-  const resolution = await resolveAshleyFabric(strapi, parsed);
+  const resolution = await resolveSupplierFabric(strapi, parsed, supplier);
   if (!resolution.fabric) return { filename: descriptor.name, ...resolution.parsed, uploaded: false, failed: true };
   const resolvedParsed = resolution.parsed;
   const staged = await ensureStagedIdentity(strapi, resolvedParsed, resolution.fabric);
@@ -478,10 +567,10 @@ async function stageMediaAsset(strapi, descriptor, metadata, mappings, batchCont
   if (conflicting) {
     const group = conflictGroupFor(resolvedParsed, descriptor.name);
     for (const prior of sameLogical) await strapi.entityService.update(ASSET_UID, prior.id, { data: { duplicateStatus: 'conflicting_image', conflictGroup: group, importStatus: 'blocked' } });
-    const conflictAsset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: assetKey(resolvedParsed, metadata.sha256), originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: resolvedParsed.assetType || 'ordinary_colour', duplicateStatus: 'conflicting_image', conflictGroup: group, importStatus: 'blocked', fabricColourIdentity: identity.documentId, notes: 'Conflicting image hash; media upload and promotion are blocked.', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier: SUPPLIER } } });
+    const conflictAsset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: assetKey(resolvedParsed, metadata.sha256), originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: resolvedParsed.assetType || 'ordinary_colour', duplicateStatus: 'conflicting_image', conflictGroup: group, importStatus: 'blocked', fabricColourIdentity: identity.documentId, notes: 'Conflicting image hash; media upload and promotion are blocked.', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier } } });
     return { filename: descriptor.name, ...resolvedParsed, status: 'conflicting_image', uploaded: false, failed: true, assetDocumentId: conflictAsset.documentId, conflictGroup: group };
   }
-  const asset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: assetKey(resolvedParsed, metadata.sha256), originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: resolvedParsed.assetType || 'ordinary_colour', fabricColourIdentity: identity.documentId, ...(mediaWasReused ? { existingMedia: media.id, duplicateStatus: 'exact_duplicate' } : { media: media.id, duplicateStatus: 'unique' }), importStatus: 'staged', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier: SUPPLIER, supplierProductCode: resolvedParsed.supplierProductCode, supplierColourCode: resolvedParsed.supplierColourCode } } });
+  const asset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: assetKey(resolvedParsed, metadata.sha256), originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: resolvedParsed.assetType || 'ordinary_colour', fabricColourIdentity: identity.documentId, ...(mediaWasReused ? { existingMedia: media.id, duplicateStatus: 'exact_duplicate' } : { media: media.id, duplicateStatus: 'unique' }), importStatus: 'staged', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier, supplierProductCode: resolvedParsed.supplierProductCode, supplierColourCode: resolvedParsed.supplierColourCode } } });
   return { filename: descriptor.name, status: 'staged', uploaded: !mediaWasReused, linked: true, skipped: false, mediaId: media.id, mediaDocumentId: media.documentId || null, identityDocumentId: identity.documentId, assetDocumentId: asset.documentId, ...resolvedParsed };
 }
 
@@ -536,7 +625,7 @@ async function validateAshleyMedia(strapi, body, analysedFile, adminId) {
   if (!ACCEPTED_MEDIA_TYPES.has(mimeType) || (expectedMimeType && mimeType !== expectedMimeType)
     || !Number.isFinite(storedSize) || storedSize < 1 || storedSize > uploadPolicy.maxFileBytes
     || normalizedAssetFilename(mediaFilename) !== normalizedAssetFilename(expectedFilename)
-    || String(media.caption || '') !== mediaBindingFor({ adminId, folderFingerprint: body.folderFingerprint, relativePath: analysedFile.relativePath, fileFingerprint: analysedFile.sha256 })) {
+    || String(media.caption || '') !== mediaBindingFor({ supplier: body.supplier, adminId, folderFingerprint: body.folderFingerprint, relativePath: analysedFile.relativePath, fileFingerprint: analysedFile.sha256 })) {
     throw finalisationError('The uploaded Media record failed Ashley Wilde identity, size, type, or binding validation.', 'ASHLEY_WILDE_MEDIA_INVALID', 400);
   }
   const createdBy = mediaCreatedBy(media);
@@ -548,6 +637,7 @@ async function validateAshleyMedia(strapi, body, analysedFile, adminId) {
 
 async function findUnfinalisedAshleyMedia(strapi, body, analysedFile, adminId) {
   const binding = mediaBindingFor({
+    supplier: body.supplier,
     adminId,
     folderFingerprint: body.folderFingerprint,
     relativePath: analysedFile.relativePath,
@@ -565,6 +655,7 @@ async function findUnfinalisedAshleyMedia(strapi, body, analysedFile, adminId) {
 }
 
 async function persistFilePhase(strapi, mappings, body, phase, details = {}) {
+  const supplier = selectedSupplier(body?.supplier);
   const relativePath = normalizeRelativePath(body.relativePath);
   const historyDiagnostic = diagnosticContext({ traceId: details.traceId, relativePath, filename: details.filename, sizeBytes: body?.fileSize, mimeType: body?.mimeType, attempt: details.attempt });
   const rows = await timedStage(strapi, 'history_phase_read', () => strapi.entityService.findMany(BATCH_UID, { filters: { folderFingerprint: body.folderFingerprint }, limit: 1 }), { ...historyDiagnostic, phase });
@@ -581,7 +672,7 @@ async function persistFilePhase(strapi, mappings, body, phase, details = {}) {
     : failedFiles ? 'partial' : 'uploading';
   logAshleyDiagnostic(strapi, 'history_status_decision', { ...historyDiagnostic, phase, chosenStatus: status, totalFiles, trackedFileCount: persisted.length, completeFiles, failedFiles, initialReadyFiles, readyFiles, previousSkippedFiles: Number(previous.skippedFiles || 0), previousConflictFiles: Number(previous.conflictFiles || 0), completionThresholdMet: completeFiles >= totalFiles, outstandingAgainstManifest: Math.max(0, totalFiles - completeFiles) });
   return timedStage(strapi, 'history_phase_upsert', () => upsertHistory(strapi, {
-    supplier: SUPPLIER,
+    supplier,
     folderName: String(body.folderName || previous.folderName || '').slice(0, 255),
     folderFingerprint: body.folderFingerprint,
     status,
@@ -598,6 +689,7 @@ async function persistFilePhase(strapi, mappings, body, phase, details = {}) {
     mappingSchemaVersion: mappings.colourMap.schemaVersion,
     manifestSummary: {
       ...oldSummary,
+      supplier,
       phase,
       currentFilename: relativePath,
       currentPhase: phase,
@@ -616,10 +708,12 @@ function analysedFileFor(tokenPayload, relativePath) {
 }
 
 function validateAshleyAnalysisRequest(body, mappings, adminId) {
+  const supplier = selectedSupplier(body?.supplier);
   const relativePath = normalizeRelativePath(body?.relativePath);
   const filename = path.basename(relativePath);
   const manifestFileCount = Number(body?.manifestFileCount);
   const tokenPayload = verifyAnalysisToken(body?.analysisToken, {
+    supplier,
     mappingImportDocumentId: mappings.mappingImportDocumentId,
     mappingVersion: mappings.mappingVersion,
     fingerprint: body?.folderFingerprint,
@@ -653,7 +747,7 @@ async function getAshleyWildeMediaStatus(strapi, body, options = {}) {
   const diagnostic = serviceDiagnostic(body, options);
   logAshleyDiagnostic(strapi, 'media_recovery_start', diagnostic);
   try {
-    const mappings = await timedStage(strapi, 'mapping-load-media-status', () => loadAshleyImporterMappings(strapi), diagnostic);
+    const mappings = await timedStage(strapi, 'mapping-load-media-status', () => loadSupplierImporterMappings(strapi, body?.supplier), diagnostic);
     const { relativePath, filename, analysedFile } = validateAshleyAnalysisRequest(body, mappings, options.adminId);
     const media = await findUnfinalisedAshleyMedia(strapi, body, analysedFile, options.adminId);
     if (!media) {
@@ -674,7 +768,7 @@ async function recordAshleyWildeProgress(strapi, body, options = {}) {
   const diagnostic = serviceDiagnostic(body, options);
   logAshleyDiagnostic(strapi, 'progress_start', diagnostic);
   try {
-    const mappings = await timedStage(strapi, 'mapping-load-progress', () => loadAshleyImporterMappings(strapi), diagnostic);
+    const mappings = await timedStage(strapi, 'mapping-load-progress', () => loadSupplierImporterMappings(strapi, body?.supplier), diagnostic);
     const { filename, relativePath } = validateAshleyAnalysisRequest(body, mappings, options.adminId);
     if (body?.phase !== 'retryable_upload_failure') {
       throw finalisationError('Only retryable Ashley Wilde upload failures may be recorded as progress.', 'ASHLEY_WILDE_PROGRESS_INVALID', 400);
@@ -709,11 +803,13 @@ async function finaliseAshleyWildeMedia(strapi, body, options = {}) {
 
 async function finaliseAshleyWildeMediaInternal(strapi, body, options = {}) {
   const diagnostic = options.diagnostic || serviceDiagnostic(body, options);
-  const mappings = await timedStage(strapi, 'mapping-load-finalise', () => loadAshleyImporterMappings(strapi), diagnostic);
+  const supplier = selectedSupplier(body?.supplier);
+  const mappings = await timedStage(strapi, 'mapping-load-finalise', () => loadSupplierImporterMappings(strapi, supplier), diagnostic);
   const relativePath = normalizeRelativePath(body?.relativePath);
   const filename = path.basename(relativePath);
   const manifestFileCount = Number(body?.manifestFileCount);
   const tokenPayload = verifyAnalysisToken(body?.analysisToken, {
+    supplier,
     mappingImportDocumentId: mappings.mappingImportDocumentId,
     mappingVersion: mappings.mappingVersion,
     fingerprint: body?.folderFingerprint,
@@ -741,7 +837,7 @@ async function finaliseAshleyWildeMediaInternal(strapi, body, options = {}) {
   await persistFilePhase(strapi, mappings, body, 'media_uploaded', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, sha256: analysedFile.sha256, size: analysedFile.size, mimeType: analysedFile.mimeType, ...diagnostic });
   await persistFilePhase(strapi, mappings, body, 'finalising_staging', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, ...diagnostic });
   try {
-    const result = await timedStage(strapi, 'staging-finalise', () => stageMediaAsset(strapi, descriptor, metadata, mappings, { folderName: body.folderName, folderFingerprint: body.folderFingerprint }, media), { ...diagnostic, relativePath, mediaId: media.id, bytes: analysedFile.size });
+    const result = await timedStage(strapi, 'staging-finalise', () => stageMediaAsset(strapi, descriptor, metadata, mappings, { supplier, folderName: body.folderName, folderFingerprint: body.folderFingerprint }, media), { ...diagnostic, relativePath, mediaId: media.id, bytes: analysedFile.size });
     const complete = { ...result, phase: 'complete', mediaId: media.id, mediaDocumentId: media.documentId || null, relativePath };
     const history = await persistFilePhase(strapi, mappings, body, 'complete', { ...complete, ...diagnostic });
     return { result: complete, history };
@@ -756,10 +852,11 @@ async function processBatch(strapi, descriptors, body, options = {}) {
   const requestStartedAt = Date.now();
   const requestBytes = descriptors.reduce((sum, item) => sum + Number(item.size || item.buffer?.length || 0), 0);
   safeLog(strapi, 'staging-request-start', { batchFileCount: descriptors.length, requestBytes, targetBytes: uploadPolicy.normalBatchTargetBytes });
-  const mappings = await timedStage(strapi, 'mapping-load', () => loadAshleyImporterMappings(strapi, options), { batchFileCount: descriptors.length });
+  const supplier = selectedSupplier(body?.supplier || options.supplier || (options.mappings ? SUPPLIER : null));
+  const mappings = await timedStage(strapi, 'mapping-load', () => loadSupplierImporterMappings(strapi, supplier, options), { supplier, batchFileCount: descriptors.length });
   const manifestStartedAt = Date.now();
   const manifest = normalizeManifest(JSON.parse(body?.folderManifest || '[]'));
-  const fingerprint = manifestFingerprint(manifest);
+  const fingerprint = manifestFingerprint(manifest, supplier);
   if (fingerprint !== body?.folderFingerprint) throw new Error('Folder fingerprint does not match the manifest');
   const batchMetadata = JSON.parse(body?.fileMetadata || '[]');
   safeLog(strapi, 'manifest-validated', { batchFileCount: descriptors.length, manifestFileCount: manifest.length, durationMs: Date.now() - manifestStartedAt });
@@ -770,6 +867,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
     analysisTokenPresent: Boolean(body?.analysisToken),
   });
   if (!options.mappings) verifyAnalysisToken(body?.analysisToken, {
+    supplier,
     mappingImportDocumentId: mappings.mappingImportDocumentId,
     mappingVersion: mappings.mappingVersion,
     fingerprint,
@@ -789,7 +887,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
   const previousSummary = old.manifestSummary || {};
   const previousResultsByPath = previousSummary.resultsByPath || {};
   await timedStage(strapi, 'history-upsert-uploading', () => upsertHistory(strapi, {
-    supplier: SUPPLIER,
+    supplier,
     folderName: String(body.folderName || '').slice(0, 255),
     folderFingerprint: fingerprint,
     status: 'uploading',
@@ -804,7 +902,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
     lastUploadedAt: old.lastUploadedAt || null,
     completedAt: null,
     mappingSchemaVersion: mappings.colourMap.schemaVersion,
-    manifestSummary: { ...(old.manifestSummary || {}), phase: 'staging', requestStartedAt: new Date(requestStartedAt).toISOString(), requestFileCount: descriptors.length, requestBytes, resultsByPath: previousResultsByPath },
+    manifestSummary: { ...(old.manifestSummary || {}), supplier, phase: 'staging', requestStartedAt: new Date(requestStartedAt).toISOString(), requestFileCount: descriptors.length, requestBytes, resultsByPath: previousResultsByPath },
     incrementAttempt: false,
   }, priorRows), { folderFingerprint: fingerprint });
 
@@ -819,7 +917,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
       continue;
     }
     try {
-      const result = await timedStage(strapi, 'file-processing', () => processFile(strapi, descriptor, metadata, mappings, { folderName: body.folderName, folderFingerprint: fingerprint }), { fileIndex, filename: descriptor.name, bytes: descriptor.size });
+      const result = await timedStage(strapi, 'file-processing', () => processFile(strapi, descriptor, metadata, mappings, { supplier, folderName: body.folderName, folderFingerprint: fingerprint }), { fileIndex, filename: descriptor.name, bytes: descriptor.size });
       results.push({ ...result, relativePath });
     } catch (error) {
       safeLog(strapi, 'file-processing-failed', { fileIndex, filename: descriptor.name, bytes: descriptor.size, errorCode: error?.code || 'unknown' });
@@ -845,7 +943,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
   const status = finalBatch ? (totals.failedFiles ? 'partial' : (totals.skippedFiles ? 'completed_with_skips' : 'completed')) : (failedDelta ? 'partial' : 'uploading');
   const now = new Date().toISOString();
   const history = await timedStage(strapi, 'history-upsert-final', () => upsertHistory(strapi, {
-    supplier: SUPPLIER,
+    supplier,
     folderName: String(body.folderName || '').slice(0, 255),
     folderFingerprint: fingerprint,
     status,
@@ -858,7 +956,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
     lastUploadedAt: uploadedDelta ? now : old.lastUploadedAt,
     completedAt: finalBatch ? now : null,
     mappingSchemaVersion: mappings.colourMap.schemaVersion,
-    manifestSummary: { ...(old.manifestSummary || {}), phase: status, lastBatch: results, resultsByPath },
+    manifestSummary: { ...(old.manifestSummary || {}), supplier, phase: status, lastBatch: results, resultsByPath },
     incrementAttempt: false,
   }), { folderFingerprint: fingerprint, status });
   safeLog(strapi, 'staging-request-complete', { batchFileCount: descriptors.length, durationMs: Date.now() - requestStartedAt, status, uploaded: uploadedDelta, failed: failedDelta, skipped: skippedDelta });
@@ -869,4 +967,4 @@ async function getHistory(strapi) {
   return strapi.entityService.findMany(BATCH_UID, { sort: ['updatedAt:desc'], limit: 50 });
 }
 
-module.exports = { adminIdentity, analyseFolder, createAnalysisToken, finaliseAshleyWildeMedia, getAshleyWildeMediaStatus, getHistory, loadAshleyImporterMappings, logicalRows, manifestFingerprint, normalizeManifest, processBatch, recordAshleyWildeProgress, resolveAshleyFabric, safeMessage, summaryForRows, upsertHistory, verifyAnalysisToken };
+module.exports = { adminIdentity, analyseFolder, createAnalysisToken, finaliseAshleyWildeMedia, getAshleyWildeMediaStatus, getHistory, loadAshleyImporterMappings, loadSupplierImporterMappings, logicalRows, manifestFingerprint, normalizeManifest, parseSupplierFilename, processBatch, recordAshleyWildeProgress, resolveAshleyFabric, resolveSupplierFabric, safeMessage, selectedSupplier, summaryForRows, upsertHistory, verifyAnalysisToken };

@@ -18,6 +18,7 @@
   "supplierMappingsUpload": "/order-management/supplier-colour-mappings/upload",
   "supplierMappingsApply": "/order-management/supplier-colour-mappings/apply",
   "supplierMappingsActive": "/order-management/supplier-colour-mappings/active",
+  "supplierMappingsSuppliers": "/order-management/supplier-colour-mappings/suppliers",
   "supplierMappingsExport": "/order-management/supplier-colour-mappings/export",
   "supplierMappingsFallbackExport": "/order-management/supplier-colour-mappings/export-repository-fallback",
   "supplierMappingsReenrich": "/order-management/supplier-colour-mappings/reenrich"
