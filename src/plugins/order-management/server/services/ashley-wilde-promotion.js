@@ -344,12 +344,27 @@ function scopeFilters(options = {}) {
 }
 
 async function scopedIdentities(strapi, options = {}) {
-  return strapi.entityService.findMany(IDENTITY_UID, {
-    filters: scopeFilters(options),
-    populate: ['fabric', 'fabric.brand', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'],
-    sort: ['documentId:asc'],
-    limit: options.limit || 1000,
-  });
+  const requestedLimit = Number(options.limit);
+  const hasRequestedLimit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0;
+  const maximumRows = hasRequestedLimit ? requestedLimit : Number.POSITIVE_INFINITY;
+  const pageSize = Math.min(1000, maximumRows);
+  const rows = [];
+  let start = 0;
+  while (rows.length < maximumRows) {
+    const limit = Math.min(pageSize, maximumRows - rows.length);
+    const page = await strapi.entityService.findMany(IDENTITY_UID, {
+      filters: scopeFilters(options),
+      populate: ['fabric', 'fabric.brand', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'],
+      sort: ['documentId:asc'],
+      start,
+      limit,
+    });
+    if (!Array.isArray(page) || page.length === 0) break;
+    rows.push(...page);
+    if (page.length < limit) break;
+    start += page.length;
+  }
+  return rows;
 }
 
 async function previewPromotion(strapi, options = {}) {
