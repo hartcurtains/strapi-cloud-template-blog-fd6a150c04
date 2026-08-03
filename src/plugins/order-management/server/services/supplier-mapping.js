@@ -141,6 +141,12 @@ function relationItems(value) {
   return unwrapped ? [unwrapped] : [];
 }
 
+function hasNamedBrandRelation(fabric) {
+  return relationItems(fabric?.brand).some((brand) => (
+    typeof brand === 'object' && clean(brand?.name || brand?.attributes?.name)
+  ));
+}
+
 function belongsToSupplier(fabric, supplier) {
   return relationItems(fabric?.brand).some((brand) => typeof brand === 'object'
     && normalizedNameKey(brand?.name || brand?.attributes?.name) === normalizedNameKey(supplier))
@@ -238,7 +244,7 @@ async function fabricCatalogue(strapi, supplier, requestedFabricNames = []) {
     }
   }
 
-  if (!rows) {
+  if (!rows?.length) {
     rows = await strapi.entityService.findMany(FABRIC_UID, {
       filters: {},
       populate: ['brand'],
@@ -286,9 +292,6 @@ async function fabricCatalogue(strapi, supplier, requestedFabricNames = []) {
             start: 0,
           });
           const matchingRows = Array.isArray(found) ? found : [];
-          const hasNamedBrandRelation = (fabric) => relationItems(fabric.brand).some((brand) => (
-            typeof brand === 'object' && clean(brand?.name || brand?.attributes?.name)
-          ));
           supplierMappingLog('fabric-catalogue.targeted', {
             supplier,
             fabricName,
@@ -312,8 +315,58 @@ async function fabricCatalogue(strapi, supplier, requestedFabricNames = []) {
         }
       }
     }
-    rows = logicalRows([...rows, ...targetedRows]);
-    const targetedSupplierRows = rows.filter((fabric) => belongsToSupplier(fabric, supplier));
+
+    // Some Strapi v5 data sets are readable through Entity Service but return
+    // no rows through Document Service. Fall back per requested Fabric rather
+    // than treating a successful empty Document Service response as proof that
+    // the supplier has no matching catalogue records.
+    const targetedNameKeys = new Set(
+      targetedRows
+        .filter((fabric) => belongsToSupplier(fabric, supplier))
+        .map((fabric) => normalizedNameKey(fabric.name)),
+    );
+    const entityServiceMissingNames = missingRequestedNames.filter(
+      (fabricName) => !targetedNameKeys.has(normalizedNameKey(fabricName)),
+    );
+    for (const fabricName of entityServiceMissingNames) {
+      const filters = {
+        name: { $eqi: fabricName },
+        brand: { name: { $eqi: supplier } },
+      };
+      try {
+        const found = await strapi.entityService.findMany(FABRIC_UID, {
+          filters,
+          populate: ['brand'],
+          publicationState: 'preview',
+          limit: 100,
+        });
+        const matchingRows = Array.isArray(found) ? found : [];
+        supplierMappingLog('fabric-catalogue.targeted-entity-service', {
+          supplier,
+          fabricName,
+          returned: matchingRows.length,
+          populatedBrands: matchingRows.filter(hasNamedBrandRelation).length,
+          documentIds: matchingRows.map((fabric) => fabric.documentId || fabric.id || null),
+        });
+        targetedRows.push(...matchingRows.map((fabric) => (
+          hasNamedBrandRelation(fabric)
+            ? fabric
+            : { ...fabric, __supplierBrandMatch: supplier }
+        )));
+      } catch (error) {
+        supplierMappingLog('fabric-catalogue.targeted-entity-service-failed', {
+          supplier,
+          fabricName,
+          message: error.message,
+        });
+      }
+    }
+
+    // Do not merge targeted rows behind the broad catalogue. A broad result
+    // can contain the same document without its populated Brand relation; if
+    // it wins logical deduplication, the targeted Brand evidence is lost.
+    const targetedSupplierRows = logicalRows([...supplierRows, ...targetedRows])
+      .filter((fabric) => belongsToSupplier(fabric, supplier));
     supplierMappingLog('fabric-catalogue.targeted-loaded', {
       supplier,
       requestedNames: missingRequestedNames.length,

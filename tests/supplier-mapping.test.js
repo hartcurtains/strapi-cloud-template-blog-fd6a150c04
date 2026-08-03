@@ -197,6 +197,70 @@ test('missing and ambiguous Fabrics block activation without blocking preview re
   assert.deepEqual(preview.validationSummary.missingFabricDetails[0], { fabricIndex: 2, fabricName: 'Missing Fabric', supplierProductCode: 'MISSING' });
 });
 
+test('generic supplier validation keeps the Brand relation from a targeted catalogue result', async () => {
+  const emilyBrand = { documentId: 'emily-brand', name: 'Emily Bond' };
+  const emilyFabric = { documentId: 'emily-alice', name: 'Alice', productId: 'FAB-ALICE-1', brand: emilyBrand };
+  const { strapi } = harness();
+  const originalDocuments = strapi.documents.bind(strapi);
+  strapi.documents = (uid) => {
+    if (uid !== 'api::fabric.fabric') return originalDocuments(uid);
+    return {
+      async count() { return 1; },
+      async findMany(options = {}) {
+        if (options.filters?.name) return [emilyFabric];
+        return [{ ...emilyFabric, brand: undefined }];
+      },
+    };
+  };
+
+  const preview = await mapping.validateDocument(strapi, {
+    schemaVersion: 1,
+    supplier: 'Emily Bond',
+    mappingVersion: 'emily-test-1',
+    source: 'focused test',
+    fabrics: [{
+      fabricName: 'Alice',
+      supplierProductCode: 'ALICE',
+      colours: [colour('ST', 'Stone', 'STO', { supplierProductCode: 'ALICE' })],
+    }],
+  });
+
+  assert.equal(preview.validationSummary.valid, true);
+  assert.equal(preview.validationSummary.resolvedFabrics, 1);
+  assert.equal(preview.validationSummary.resolvedFabricDetails[0].fabricDocumentId, 'emily-alice');
+  assert.equal(preview.validationSummary.resolvedFabricDetails[0].method, 'supplier_brand_and_normalized_fabric_name');
+});
+
+test('generic supplier validation falls back when Document Service returns an empty catalogue', async () => {
+  const emilyBrand = { documentId: 'emily-brand', name: 'Emily Bond' };
+  const emilyFabric = { documentId: 'emily-basil', name: 'Basil', productId: 'FAB-BASIL-1', brand: emilyBrand };
+  const { strapi } = harness({ fabrics: [emilyFabric] });
+  const originalDocuments = strapi.documents.bind(strapi);
+  strapi.documents = (uid) => {
+    if (uid !== 'api::fabric.fabric') return originalDocuments(uid);
+    return {
+      async count() { return 0; },
+      async findMany() { return []; },
+    };
+  };
+
+  const preview = await mapping.validateDocument(strapi, {
+    schemaVersion: 1,
+    supplier: 'Emily Bond',
+    mappingVersion: 'emily-test-2',
+    source: 'focused test',
+    fabrics: [{
+      fabricName: 'Basil',
+      supplierProductCode: 'BASIL',
+      colours: [colour('PE', 'Pebble', 'PEB', { supplierProductCode: 'BASIL' })],
+    }],
+  });
+
+  assert.equal(preview.validationSummary.valid, true);
+  assert.equal(preview.validationSummary.resolvedFabrics, 1);
+  assert.equal(preview.validationSummary.resolvedFabricDetails[0].fabricDocumentId, 'emily-basil');
+});
+
 test('only an exact product-scoped contradictory identity blocks validation', async () => {
   const { strapi } = harness({ fabrics: [fabric('fabric-one', 'One Fabric', 'ONE')] });
   const preview = await mapping.validateDocument(strapi, document([{ fabricName: 'One Fabric', supplierProductCode: 'ONE', colours: [
