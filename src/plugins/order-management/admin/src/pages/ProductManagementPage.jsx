@@ -101,6 +101,8 @@ const productManagementResponsiveStyle = `
   }
 `;
 
+const ALL_SUPPLIERS = '__ALL_SUPPLIERS__';
+
 export default function ProductManagementPage() {
   const { post: adminPost, get: adminGet } = useFetchClient();
   const [activeTab, setActiveTab] = useState('fabrics');
@@ -124,7 +126,7 @@ export default function ProductManagementPage() {
   const [jsonError, setJsonError] = useState(null);
   const [showBulkImageUpload, setShowBulkImageUpload] = useState(false);
   const [activeSupplierMappings, setActiveSupplierMappings] = useState([]);
-  const [promotionScope, setPromotionScope] = useState({ supplier: '', fabricName: '', supplierProductCode: '' });
+  const [promotionScope, setPromotionScope] = useState({ supplier: ALL_SUPPLIERS, fabricName: '', supplierProductCode: '' });
   const [promotionPreview, setPromotionPreview] = useState(null);
   const [promotionBusy, setPromotionBusy] = useState(false);
   const [promotionError, setPromotionError] = useState('');
@@ -274,8 +276,8 @@ export default function ProductManagementPage() {
         const suppliers = Array.isArray(response.data?.data) ? response.data.data : Array.isArray(response.data) ? response.data : [];
         setActiveSupplierMappings(suppliers);
         setPromotionScope((current) => {
-          if (suppliers.some((item) => item.supplier === current.supplier)) return current;
-          return { ...current, supplier: suppliers[0]?.supplier || '' };
+          if (current.supplier === ALL_SUPPLIERS || suppliers.some((item) => item.supplier === current.supplier)) return current;
+          return { ...current, supplier: ALL_SUPPLIERS };
         });
       })
       .catch(() => { if (!cancelled) setActiveSupplierMappings([]); });
@@ -1712,7 +1714,7 @@ export default function ProductManagementPage() {
         currentItem: promotionScope.fabricName || 'All Fabrics',
         message: eligible > 0
           ? `Preview complete: ${eligible} staged Colour identity(s) are eligible for confirmation.`
-          : `Preview complete: no eligible staged Colour identities were found. ${identitiesFound} identity record(s) scanned; ${verifiedCandidates} verified candidate(s) found. Re-enrich pending identities before promoting.`,
+          : `Preview complete: no eligible staged Colour identities were found. ${identitiesFound} identity record(s) scanned; ${verifiedCandidates} verified candidate(s) found. Review the per-brand status below and re-enrich pending identities before promoting.`,
         summary: preview.summary,
       });
     } catch (error) {
@@ -1929,7 +1931,8 @@ export default function ProductManagementPage() {
         </div>
         <div className="pm-promotion-fields">
           <label className="pm-field-label">Supplier
-            <select className="pm-field-control" value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); setPromotionStatus(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
+            <select className="pm-field-control" value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value || ALL_SUPPLIERS }); setPromotionPreview(null); setPromotionStatus(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
+              <option value={ALL_SUPPLIERS}>All brands</option>
               <option value="">Select supplier…</option>
               {activeSupplierMappings.map((item) => <option key={item.supplier} value={item.supplier}>{item.supplier}</option>)}
             </select>
@@ -1966,6 +1969,7 @@ export default function ProductManagementPage() {
               <span>Active versions: <strong>{promotionPreview.diagnostics.activeVersionsFound ?? '—'}</strong></span>
               <span>Request ID: <strong>{promotionPreview.diagnostics.diagnosticRequestId || '—'}</strong></span>
             </div>
+            {promotionPreview.diagnostics.statusBreakdown?.length > 0 && <div style={{ marginTop: '8px' }}><strong style={{ color: '#334155' }}>Brand status</strong><div style={{ display: 'grid', gap: '4px', marginTop: '4px' }}>{promotionPreview.diagnostics.statusBreakdown.map((item) => <div key={item.supplier} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}><span>{item.supplier}:</span><span>{item.total} found</span><span>{item.verified} verified</span><span>{item.pending} pending</span><span>{item.mappingMatched} mapping matched</span></div>)}</div></div>}
             {promotionPreview.diagnostics.firstIdentity && <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
               <span>First product: <strong>{promotionPreview.diagnostics.firstIdentity.supplierProductCode || '—'}</strong></span>
               <span>First colour: <strong>{promotionPreview.diagnostics.firstIdentity.supplierColourCode || '—'}</strong></span>

@@ -9,10 +9,12 @@ const IDENTITY_UID = 'api::fabric-colour-identity.fabric-colour-identity';
 const ASSET_UID = 'api::fabric-colour-asset.fabric-colour-asset';
 const COLOUR_UID = 'api::colour.colour';
 const SUPPLIER = 'Ashley Wilde';
+const ALL_SUPPLIERS = '__ALL_SUPPLIERS__';
 const PROMOTABLE_ASSET_TYPES = new Set(['ordinary_colour', 'full_colour_name', 'numbered_alternate']);
 const PLAN_TTL_MS = 10 * 60 * 1000;
 
 function key(value) { return String(value || '').normalize('NFKC').trim().toUpperCase(); }
+function isAllSuppliers(value) { return key(value) === key(ALL_SUPPLIERS); }
 function selectedSupplier(value = SUPPLIER) {
   const supplier = String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
   if (!supplier) {
@@ -25,6 +27,7 @@ function selectedSupplier(value = SUPPLIER) {
 function supplierFromOptions(options = {}) {
   return Object.prototype.hasOwnProperty.call(options, 'supplier') ? selectedSupplier(options.supplier) : SUPPLIER;
 }
+function promotionScopeLabel(supplier) { return isAllSuppliers(supplier) ? 'All brands' : supplier; }
 function relationKey(value) { return value?.documentId || value?.id || value; }
 function entityRelationId(value) { return value?.id || value?.documentId || value; }
 function first(value) { return Array.isArray(value) ? value[0] : value; }
@@ -165,7 +168,7 @@ async function findMatchingColour(strapi, identity) {
 }
 
 async function loadIdentity(strapi, identityId) {
-  const populate = { populate: ['fabric', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'] };
+  const populate = { populate: ['fabric', 'fabric.brand', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'] };
   let identity = await strapi.entityService.findOne(IDENTITY_UID, identityId, populate);
   if (!identity) {
     const matches = await strapi.entityService.findMany(IDENTITY_UID, { filters: { documentId: { $eq: identityId } }, ...populate, limit: 1 });
@@ -199,6 +202,54 @@ async function loadPromotionMappings(strapi, requestedSupplier = SUPPLIER) {
   }
   const fallback = loadProductionMappings({ mode: 'production' });
   return { ...fallback, supplier, mappingVersion: fallback.colourMap.generatedAt || null, mappingSource: 'repository-fallback', mappingDocumentId: null, mappingRowCount: null, activeVersionsFound: 0 };
+}
+
+async function loadPromotionMappingScope(strapi, requestedSupplier = SUPPLIER) {
+  const supplier = selectedSupplier(requestedSupplier);
+  if (!isAllSuppliers(supplier)) {
+    const mappings = await loadPromotionMappings(strapi, supplier);
+    return { allSuppliers: false, supplier, mappings, bySupplier: new Map([[key(supplier), mappings]]) };
+  }
+  const activeSuppliers = await supplierMappings.listActiveMappingSuppliers(strapi);
+  if (!activeSuppliers.length) {
+    const error = new Error('No active colour mapping versions exist for any supplier.');
+    error.code = 'SUPPLIER_MAPPING_NOT_FOUND';
+    throw error;
+  }
+  const loaded = await Promise.all(activeSuppliers.map(async (entry) => ({
+    supplier: entry.supplier,
+    mappings: await loadPromotionMappings(strapi, entry.supplier),
+  })));
+  return {
+    allSuppliers: true,
+    supplier: ALL_SUPPLIERS,
+    mappings: null,
+    bySupplier: new Map(loaded.map((entry) => [key(entry.supplier), entry.mappings])),
+    suppliers: loaded.map((entry) => ({
+      supplier: entry.supplier,
+      mappingVersion: entry.mappings.mappingVersion || null,
+      mappingDocumentId: entry.mappings.mappingDocumentId || null,
+      mappingRowCount: entry.mappings.mappingRowCount || null,
+      activeVersionsFound: entry.mappings.activeVersionsFound ?? null,
+    })),
+  };
+}
+
+function mappingForIdentity(mappingScope, identity) {
+  return mappingScope.bySupplier.get(key(identity?.supplier)) || null;
+}
+
+function mappingScopeMetadata(mappingScope) {
+  if (!mappingScope.allSuppliers) {
+    return [{
+      supplier: mappingScope.supplier,
+      mappingVersion: mappingScope.mappings.mappingVersion || null,
+      mappingDocumentId: mappingScope.mappings.mappingDocumentId || null,
+      mappingRowCount: mappingScope.mappings.mappingRowCount || null,
+      activeVersionsFound: mappingScope.mappings.activeVersionsFound ?? null,
+    }];
+  }
+  return mappingScope.suppliers || [];
 }
 
 function fabricBelongsToSupplier(fabric, supplier) {
@@ -285,7 +336,7 @@ function stableFingerprint(value) { return crypto.createHash('sha256').update(JS
 
 function scopeFilters(options = {}) {
   const supplier = supplierFromOptions(options);
-  const filters = { supplier };
+  const filters = isAllSuppliers(supplier) ? {} : { supplier };
   if (options.supplierProductCode) filters.supplierProductCode = { $eq: options.supplierProductCode };
   if (options.fabricName) filters.fabric = { name: { $eqi: options.fabricName } };
   if (Array.isArray(options.identityDocumentIds) && options.identityDocumentIds.length) filters.documentId = { $in: options.identityDocumentIds };
@@ -295,7 +346,7 @@ function scopeFilters(options = {}) {
 async function scopedIdentities(strapi, options = {}) {
   return strapi.entityService.findMany(IDENTITY_UID, {
     filters: scopeFilters(options),
-    populate: ['fabric', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'],
+    populate: ['fabric', 'fabric.brand', 'fabric.colours', 'assets', 'assets.media', 'assets.existingMedia', 'promotedColour'],
     sort: ['documentId:asc'],
     limit: options.limit || 1000,
   });
@@ -304,37 +355,61 @@ async function scopedIdentities(strapi, options = {}) {
 async function previewPromotion(strapi, options = {}) {
   const diagnosticRequestId = ensureColourDiagnosticId(options.diagnosticRequestId);
   const supplier = supplierFromOptions(options);
+  const mappingScope = options.mappings
+    ? (() => {
+      const mappings = { ...options.mappings, supplier: options.mappings.supplier || supplier };
+      return { allSuppliers: false, supplier, mappings, bySupplier: new Map([[key(supplier), mappings]]) };
+    })()
+    : await loadPromotionMappingScope(strapi, supplier);
+  const mappingMetadata = mappingScopeMetadata(mappingScope);
   logColourDiagnostic(strapi, 'colour-preview-request', {
     diagnosticRequestId,
     route: '/order-management/ashley-wilde/promote/preview',
-    supplier,
+    supplier: promotionScopeLabel(supplier),
     fabricName: options.fabricName || null,
     supplierProductCode: options.supplierProductCode || null,
     identityDocumentIdCount: Array.isArray(options.identityDocumentIds) ? options.identityDocumentIds.length : 0,
   });
-  const mappings = options.mappings ? { ...options.mappings, supplier: options.mappings.supplier || supplier } : await loadPromotionMappings(strapi, supplier);
-  if (key(mappings.supplier) !== key(supplier)) throw new Error(`The selected mapping belongs to ${mappings.supplier || 'an unknown supplier'}, not ${supplier}.`);
+  if (!mappingScope.allSuppliers && key(mappingScope.mappings.supplier) !== key(supplier)) throw new Error(`The selected mapping belongs to ${mappingScope.mappings.supplier || 'an unknown supplier'}, not ${supplier}.`);
   logColourDiagnostic(strapi, 'mapping-selection', {
     diagnosticRequestId,
     requestedSupplier: supplier,
-    selectedMappingSupplier: mappings.supplier || null,
-    mappingSource: mappings.mappingSource || null,
-    mappingVersion: mappings.mappingVersion || null,
-    mappingVersionDocumentId: mappings.mappingDocumentId || null,
-    mappingRowCount: mappings.mappingRowCount || null,
-    activeVersionsFound: mappings.activeVersionsFound ?? null,
-    lookupFilter: { supplier, status: 'active', isActive: true },
+    selectedMappingSuppliers: mappingMetadata,
+    mappingSource: mappingScope.allSuppliers ? 'multiple-strapi-active-versions' : mappingScope.mappings.mappingSource || null,
+    lookupFilter: mappingScope.allSuppliers ? { status: 'active', isActive: true } : { supplier, status: 'active', isActive: true },
   });
   const allIdentities = await scopedIdentities(strapi, { ...options, supplier });
-  const identities = (allIdentities || [])
-    .filter((identity) => identity.mappingStatus === 'verified')
-    .map((identity) => reconcileIdentityInternalCode(identity, mappings));
+  const statusBreakdown = new Map();
+  for (const identity of allIdentities || []) {
+    const identitySupplier = identity.supplier || '(missing supplier)';
+    const entry = statusBreakdown.get(key(identitySupplier)) || { supplier: identitySupplier, total: 0, verified: 0, pending: 0, promoted: 0, other: 0, mappingMatched: 0 };
+    entry.total += 1;
+    if (identity.mappingStatus === 'verified') entry.verified += 1;
+    else if (identity.mappingStatus === 'pending') entry.pending += 1;
+    else if (identity.mappingStatus === 'promoted') entry.promoted += 1;
+    else entry.other += 1;
+    if (mappingForIdentity(mappingScope, identity)) entry.mappingMatched += 1;
+    statusBreakdown.set(key(identitySupplier), entry);
+  }
+  const candidateIdentities = (allIdentities || []).filter((identity) => identity.mappingStatus === 'verified');
+  const mappingsByIdentityId = new Map();
+  const identities = candidateIdentities.map((identity) => {
+    const mappings = mappingForIdentity(mappingScope, identity);
+    mappingsByIdentityId.set(identityDocumentId(identity), mappings);
+    return mappings ? reconcileIdentityInternalCode(identity, mappings) : identity;
+  });
   const reconciledById = new Map(identities.map((identity) => [identityDocumentId(identity), identity]));
   const validation = validateIdentitySet(identities);
   const results = [];
   for (const identity of identities) {
+    const mappings = mappingsByIdentityId.get(identityDocumentId(identity));
+    if (!mappings) {
+      results.push({ identityDocumentId: identityDocumentId(identity), eligible: false, action: 'blocked', colourDecision: null, skippedReasons: ['active_mapping_missing_for_supplier'] });
+      continue;
+    }
     try {
-      const eligible = eligibility(identity, mappings, supplier);
+      const identitySupplier = identity.supplier || supplier;
+      const eligible = eligibility(identity, mappings, identitySupplier);
       const matching = await findMatchingColour(strapi, identity);
       const scopeReasons = [
         ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
@@ -348,7 +423,8 @@ async function previewPromotion(strapi, options = {}) {
   const orderedResults = results.sort((a, b) => String(a.identityDocumentId).localeCompare(String(b.identityDocumentId)));
   const summary = {
     identitiesFound: allIdentities?.length || 0,
-    verifiedCandidates: identities.length,
+    verifiedCandidates: candidateIdentities.length,
+    mappingMatchedCandidates: identities.filter((identity) => mappingsByIdentityId.get(identityDocumentId(identity))).length,
     eligible: orderedResults.filter((item) => item.eligible).length,
     blocked: orderedResults.filter((item) => !item.eligible).length,
     existingColoursToReuse: orderedResults.filter((item) => item.eligible && item.colourDecision === 'reuse_existing_colour').length,
@@ -364,34 +440,39 @@ async function previewPromotion(strapi, options = {}) {
   const expiresAt = new Date(Date.now() + PLAN_TTL_MS).toISOString();
   const snapshot = (allIdentities || []).map((identity) => identitySnapshot(reconciledById.get(identityDocumentId(identity)) || identity)).sort((a, b) => String(a.identityDocumentId).localeCompare(String(b.identityDocumentId)));
   const scope = { supplier, supplierProductCode: options.supplierProductCode || null, fabricName: options.fabricName || null, identityDocumentIds: Array.isArray(options.identityDocumentIds) ? [...options.identityDocumentIds].sort() : null };
-  const planFingerprint = stableFingerprint({ scope, mappingVersion: mappings.mappingVersion || null, snapshot, results: orderedResults });
+  const planFingerprint = stableFingerprint({ scope, mappingVersions: mappingMetadata, snapshot, results: orderedResults });
+  const singleMapping = mappingScope.allSuppliers ? null : mappingScope.mappings;
+  const totalMappingRows = mappingMetadata.reduce((total, item) => total + Number(item.mappingRowCount || 0), 0);
   const diagnostics = {
     diagnosticRequestId,
-    selectedSupplier: supplier,
-    mappingSupplier: mappings.supplier || supplier,
-    mappingVersion: mappings.mappingVersion || null,
-    mappingVersionDocumentId: mappings.mappingDocumentId || null,
-    mappingRowCount: mappings.mappingRowCount || null,
-    activeVersionsFound: mappings.activeVersionsFound ?? null,
-    firstIdentity: identities[0] ? {
-      identityDocumentId: identityDocumentId(identities[0]),
-      supplierProductCode: identities[0].supplierProductCode || null,
-      supplierColourCode: identities[0].supplierColourCode || null,
-      fabricColourCode: identities[0].fabricColourCode || null,
-      fabricDocumentId: identities[0].fabricDocumentId || null,
-      fabricName: first(identities[0].fabric)?.name || null,
-      brandName: first(identities[0].fabric)?.brand?.name || first(identities[0].fabric)?.brand?.[0]?.name || null,
+    selectedSupplier: promotionScopeLabel(supplier),
+    mappingSupplier: mappingScope.allSuppliers ? 'All brands' : singleMapping.supplier || supplier,
+    mappingVersion: singleMapping?.mappingVersion || null,
+    mappingVersionDocumentId: singleMapping?.mappingDocumentId || null,
+    mappingRowCount: mappingScope.allSuppliers ? totalMappingRows : singleMapping?.mappingRowCount || null,
+    activeVersionsFound: mappingScope.allSuppliers ? mappingMetadata.length : singleMapping?.activeVersionsFound ?? null,
+    mappingSuppliers: mappingMetadata,
+    statusBreakdown: [...statusBreakdown.values()].sort((left, right) => left.supplier.localeCompare(right.supplier)),
+    firstIdentity: candidateIdentities[0] ? {
+      identityDocumentId: identityDocumentId(candidateIdentities[0]),
+      supplier: candidateIdentities[0].supplier || null,
+      supplierProductCode: candidateIdentities[0].supplierProductCode || null,
+      supplierColourCode: candidateIdentities[0].supplierColourCode || null,
+      fabricColourCode: candidateIdentities[0].fabricColourCode || null,
+      fabricDocumentId: candidateIdentities[0].fabricDocumentId || null,
+      fabricName: first(candidateIdentities[0].fabric)?.name || null,
+      brandName: first(candidateIdentities[0].fabric)?.brand?.name || first(candidateIdentities[0].fabric)?.brand?.[0]?.name || null,
     } : null,
   };
   logColourDiagnostic(strapi, 'colour-preview-complete', {
     diagnosticRequestId,
-    supplier,
-    identityCount: identities.length,
+    supplier: promotionScopeLabel(supplier),
+    identityCount: candidateIdentities.length,
     eligible: summary.eligible,
     blocked: summary.blocked,
-    mappingVersion: mappings.mappingVersion || null,
+    mappingVersions: mappingMetadata,
   });
-  return { planFingerprint, planExpiresAt: expiresAt, scope, mappingVersion: mappings.mappingVersion || null, mappingSource: mappings.mappingSource || null, identityDocumentIds: identities.map(identityDocumentId), snapshot, summary, results: orderedResults, diagnostics, committed: false };
+  return { planFingerprint, planExpiresAt: expiresAt, scope, mappingVersion: singleMapping?.mappingVersion || null, mappingSource: mappingScope.allSuppliers ? 'multiple-strapi-active-versions' : singleMapping?.mappingSource || null, mappingSuppliers: mappingMetadata, identityDocumentIds: candidateIdentities.map(identityDocumentId), snapshot, summary, results: orderedResults, diagnostics, committed: false };
 }
 
 async function inTransaction(strapi, callback) {
@@ -454,29 +535,44 @@ async function promoteVerified(strapi, options = {}) {
   logColourDiagnostic(strapi, 'colour-promote-request', {
     diagnosticRequestId,
     route: '/order-management/ashley-wilde/promote/apply',
-    supplier,
+    supplier: promotionScopeLabel(supplier),
     hasPlanFingerprint: Boolean(options.planFingerprint),
     identityDocumentIdCount: Array.isArray(options.identityDocumentIds) ? options.identityDocumentIds.length : 0,
   });
-  const mappings = await loadPromotionMappings(strapi, supplier);
+  const mappingScope = await loadPromotionMappingScope(strapi, supplier);
+  const singleMappings = mappingScope.allSuppliers ? null : mappingScope.mappings;
   if (options.commit === true && options.planFingerprint) {
     if (options.planExpiresAt && Date.parse(options.planExpiresAt) <= Date.now()) throw new Error('The promotion preview has expired. Run Preview promotion again.');
-    const current = await previewPromotion(strapi, { ...options, supplier, identityDocumentIds: undefined, commit: false, mappings, diagnosticRequestId });
+    const previewOptions = { ...options, supplier, identityDocumentIds: undefined, commit: false, diagnosticRequestId };
+    if (singleMappings) previewOptions.mappings = singleMappings;
+    else delete previewOptions.mappings;
+    const current = await previewPromotion(strapi, previewOptions);
     if (current.planFingerprint !== options.planFingerprint) throw new Error('The promotion preview is stale because staging, mapping, scope, or eligibility changed. Run Preview promotion again.');
     const expected = [...(options.identityDocumentIds || [])].sort().join('|');
     if (expected !== current.identityDocumentIds.slice().sort().join('|')) throw new Error('The promotion scope no longer matches the approved preview. Run Preview promotion again.');
   }
   const identities = await scopedIdentities(strapi, { ...options, supplier });
-  const verified = (identities || [])
+  const verifiedEntries = (identities || [])
     .filter((identity) => identity.mappingStatus === 'verified')
-    .map((identity) => reconcileIdentityInternalCode(identity, mappings));
+    .map((identity) => {
+      const mappings = mappingForIdentity(mappingScope, identity);
+      return { identity: mappings ? reconcileIdentityInternalCode(identity, mappings) : identity, mappings };
+    });
+  const verified = verifiedEntries.map((entry) => entry.identity);
   const validation = validateIdentitySet(verified);
   const results = [];
-  for (const identity of verified) {
+  for (const entry of verifiedEntries) {
+    const { identity, mappings } = entry;
+    if (!mappings) {
+      results.push({ identityDocumentId: identityDocumentId(identity), committed: false, eligible: false, skippedReasons: ['active_mapping_missing_for_supplier'] });
+      continue;
+    }
     const scopeReasons = [...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || [])];
-    try { results.push(await promoteIdentity(strapi, identity.id, { ...options, supplier, mappings, scopeReasons })); }
+    try { results.push(await promoteIdentity(strapi, identity.id, { ...options, supplier: identity.supplier || mappings.supplier, mappings, scopeReasons })); }
     catch (error) { results.push({ identityDocumentId: identityDocumentId(identity), committed: false, eligible: false, skippedReasons: [error.message] }); }
   }
+  const mappingMetadata = mappingScopeMetadata(mappingScope);
+  const totalMappingRows = mappingMetadata.reduce((total, item) => total + Number(item.mappingRowCount || 0), 0);
   const result = {
     committed: options.commit === true,
     total: results.length,
@@ -494,18 +590,19 @@ async function promoteVerified(strapi, options = {}) {
     results,
     diagnostics: {
       diagnosticRequestId,
-      selectedSupplier: supplier,
-      mappingSupplier: mappings.supplier || supplier,
-      mappingVersion: mappings.mappingVersion || null,
-      mappingVersionDocumentId: mappings.mappingDocumentId || null,
-      mappingRowCount: mappings.mappingRowCount || null,
-      activeVersionsFound: mappings.activeVersionsFound ?? null,
+      selectedSupplier: promotionScopeLabel(supplier),
+      mappingSupplier: mappingScope.allSuppliers ? 'All brands' : singleMappings.supplier || supplier,
+      mappingVersion: singleMappings?.mappingVersion || null,
+      mappingVersionDocumentId: singleMappings?.mappingDocumentId || null,
+      mappingRowCount: mappingScope.allSuppliers ? totalMappingRows : singleMappings?.mappingRowCount || null,
+      activeVersionsFound: mappingScope.allSuppliers ? mappingMetadata.length : singleMappings?.activeVersionsFound ?? null,
+      mappingSuppliers: mappingMetadata,
       committed: options.commit === true,
     },
   };
   logColourDiagnostic(strapi, options.commit === true ? 'colour-promote-complete' : 'colour-promote-preview-complete', {
     diagnosticRequestId,
-    supplier,
+    supplier: promotionScopeLabel(supplier),
     committed: options.commit === true,
     total: result.total,
     eligible: result.summary.eligible,
