@@ -206,18 +206,22 @@ async function fabricCatalogue(strapi, supplier) {
           });
         }
         const found = [];
-        for (let page = 1; page <= 100; page += 1) {
-          const pageRows = await documents.findMany({ ...query, status, pagination: { page, pageSize } });
+        for (let start = 0; start <= 10000; ) {
+          // Document Service pagination uses limit/start. The page/pageSize
+          // shape belongs to the REST API and is rejected by strictParams.
+          const pageRows = await documents.findMany({ ...query, status, limit: pageSize, start });
           supplierMappingLog('fabric-catalogue.page', {
             supplier,
             status,
-            page,
+            start,
+            limit: pageSize,
             returned: Array.isArray(pageRows) ? pageRows.length : null,
             total,
           });
           if (!Array.isArray(pageRows) || !pageRows.length) break;
           found.push(...pageRows);
           if ((total !== null && found.length >= total) || (total === null && pageRows.length < pageSize)) break;
+          start += pageRows.length;
         }
         return found;
       };
