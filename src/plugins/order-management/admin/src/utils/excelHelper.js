@@ -1997,7 +1997,7 @@ export const excelHelper = {
     console.log('📤 Starting multi-sheet bulk import via server endpoint...');
     
     const BATCH_SIZE = 50;
-    const allResults = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [], autoCreationSummary: null };
+    const allResults = { created: 0, updated: 0, skipped: 0, failed: 0, errors: [], fabricBrandLinks: [], autoCreationSummary: null };
     
     const fabricBatches = [];
     const fabrics = transformedDataset.fabrics || [];
@@ -2036,6 +2036,7 @@ export const excelHelper = {
         allResults.skipped += batchResults.skipped || 0;
         allResults.failed += batchResults.failed || 0;
         allResults.errors.push(...(batchResults.errors || []));
+        allResults.fabricBrandLinks.push(...(batchResults.fabricBrandLinks || []));
         if (batchResults.autoCreationSummary) {
           allResults.autoCreationSummary = batchResults.autoCreationSummary;
         }

@@ -1,4 +1,11 @@
 const { attemptFromTraceId, diagnosticContext, traceIdFromRequest } = require('../utils/ashleyWildeDiagnostics');
+const {
+  brandRelationPayload,
+  buildBrandIndex,
+  linkedBrandSummary,
+  normalizeBrandName,
+  sameBrand,
+} = require('../services/catalog-import-brand');
 
 function hasAuthenticatedAdmin(ctx) {
   const catalogWriteAuth = ctx?.state?.catalogWriteAuth;
@@ -138,7 +145,8 @@ module.exports = {
         updated: 0,
         skipped: 0,
         failed: 0,
-        errors: []
+        errors: [],
+        fabricBrandLinks: []
       };
 
       // Define content types for each product type
@@ -161,6 +169,7 @@ module.exports = {
       let careInstructionsFailed = 0;
       let brandNames = null;
       let careInstructionNames = null;
+      let ambiguousBrandNames = new Set();
 
       // Phase 1: Auto-create missing brands
       const autoCreatedBrands = new Map();
@@ -211,17 +220,27 @@ module.exports = {
           existingBrands = await strapi.entityService.findMany('api::brand.brand', {
             populate: '*'
           });
-          existingBrandNames = new Set(existingBrands.map(b => b.name.toLowerCase().trim()));
-          
-          // Add existing brands to the map for quick lookup
-          existingBrands.forEach(brand => {
-            const brandNameLower = brand.name.toLowerCase().trim();
-            autoCreatedBrands.set(brandNameLower, brand.id);
+          const brandIndex = buildBrandIndex(existingBrands);
+          ambiguousBrandNames = brandIndex.ambiguous;
+          existingBrandNames = new Set(brandIndex.byName.keys());
+
+          // Keep the complete Brand object so the v5 relation payload can use
+          // its documentId and the response can verify the linked Brand.
+          brandIndex.byName.forEach((brand, brandNameLower) => {
+            autoCreatedBrands.set(brandNameLower, brand);
           });
+          for (const brandNameLower of ambiguousBrandNames) {
+            results.errors.push({
+              type: 'ambiguous_relation',
+              sheet: 'fabrics',
+              message: `Multiple Brands match "${brandNameLower}" case-insensitively; no Fabric will be linked to it.`,
+              brandName: brandNameLower,
+            });
+          }
           console.log(`📋 [CLOUD] Phase 1: Populated brand map with ${existingBrands.length} existing brands. Map now has ${autoCreatedBrands.size} entries.`);
         } catch (error) {
-          console.warn(`⚠️ [CLOUD] Error fetching existing brands (will continue with auto-creation):`, error.message);
-          console.warn(`⚠️ [CLOUD] This is OK - we'll create all brands as new if they don't exist`);
+          console.error('Unable to resolve existing Brands before import:', error.message);
+          throw new Error(`Unable to resolve existing Brands before import: ${error.message}`);
         }
         console.log(`📋 [CLOUD] Phase 1: About to auto-create ${brandNames.size - existingBrandNames.size} missing brands`);
         
@@ -231,8 +250,8 @@ module.exports = {
         
         // Auto-create missing brands
         for (const brandName of brandNames) {
-          const brandNameLower = brandName.toLowerCase().trim();
-          if (!existingBrandNames.has(brandNameLower)) {
+          const brandNameLower = normalizeBrandName(brandName);
+          if (!existingBrandNames.has(brandNameLower) && !ambiguousBrandNames.has(brandNameLower)) {
             try {
               console.log(`🔧 [CLOUD] Auto-creating brand: ${brandName}`);
               console.log(`🔧 [CLOUD] Using entityService.create for api::brand.brand`);
@@ -254,7 +273,8 @@ module.exports = {
               if (!createdBrand || !createdBrand.id) {
                 throw new Error(`Brand creation returned invalid result: ${JSON.stringify(createdBrand)}`);
               }
-              autoCreatedBrands.set(brandNameLower, createdBrand.id);
+              autoCreatedBrands.set(brandNameLower, createdBrand);
+              existingBrandNames.add(brandNameLower);
               brandsCreated++;
               console.log(`✅ [CLOUD] Auto-created brand: ${brandName} (ID: ${createdBrand.id})`);
             } catch (error) {
@@ -421,7 +441,11 @@ module.exports = {
         
         for (let i = 0; i < transformedDataset[productType].length; i++) {
           try {
-            const item = transformedDataset[productType][i];
+            let item = transformedDataset[productType][i];
+            let requestedBrand = null;
+            let requestedBrandName = null;
+            let existingFabricRecord = null;
+            let fabricAction = null;
             
             // Remove fields that Strapi auto-generates (causes validation errors)
             delete item.createdAt;
@@ -538,10 +562,11 @@ module.exports = {
               }
             }
             
-            // Handle brand_name to brand ID conversion for fabrics (only if not already converted by frontend)
+            // Resolve the import helper field into Strapi v5 relation syntax.
             if (productType === 'fabrics' && item.brand_name && !item.brand) {
-              const brandNameLower = item.brand_name.toLowerCase().trim();
+              const brandNameLower = normalizeBrandName(item.brand_name);
               const originalBrandName = item.brand_name; // Store before deletion
+              requestedBrandName = originalBrandName.toString().trim();
               
               // #region agent log
               debugLog('D','import-export.js:fabricImport:brandLookup','Looking up brand for fabric',{fabricName:item.name,brandName:originalBrandName,brandNameLower,mapSize:autoCreatedBrands.size,mapHasBrand:autoCreatedBrands.has(brandNameLower),mapKeys:Array.from(autoCreatedBrands.keys())});
@@ -551,27 +576,47 @@ module.exports = {
               console.log(`🔍 [CLOUD] Brand map has ${autoCreatedBrands.size} entries. Keys: ${Array.from(autoCreatedBrands.keys()).slice(0, 5).join(', ')}...`);
               
               // First check auto-created brands map (includes all existing + newly created)
-              if (autoCreatedBrands.has(brandNameLower)) {
-                item.brand = autoCreatedBrands.get(brandNameLower);
+              if (ambiguousBrandNames.has(brandNameLower)) {
+                results.errors.push({
+                  type: 'ambiguous_relation',
+                  sheet: 'fabrics',
+                  row: i + 1,
+                  message: `Brand "${originalBrandName}" is ambiguous; Fabric "${item.name}" was not linked.`,
+                  fabricName: item.name,
+                });
+                throw new Error(`Brand "${originalBrandName}" is ambiguous for Fabric "${item.name}"`);
+              } else if (autoCreatedBrands.has(brandNameLower)) {
+                requestedBrand = autoCreatedBrands.get(brandNameLower);
+                item.brand = brandRelationPayload(requestedBrand);
+                if (!item.brand) throw new Error(`Brand "${originalBrandName}" has no usable Strapi identifier`);
                 delete item.brand_name; // Remove the name field
-                console.log(`✅ [CLOUD] Found brand in map for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
+                console.log(`✅ [CLOUD] Found Brand in map for Fabric "${item.name}": "${originalBrandName}" -> ${JSON.stringify(item.brand)}`);
               } else {
                 // Fallback: Check existing brands in database (shouldn't happen if map is populated correctly)
                 console.log(`⚠️ [CLOUD] Brand "${originalBrandName}" not in map, checking database...`);
                 try {
-                  const existingBrands = await strapi.entityService.findMany('api::brand.brand', {
-                    filters: { name: { $containsi: originalBrandName } }
-                  });
-                  if (existingBrands && existingBrands.length > 0) {
-                    item.brand = existingBrands[0].id;
+                  const existingBrands = (await strapi.entityService.findMany('api::brand.brand', {
+                    populate: '*'
+                  })).filter((brand) => normalizeBrandName(brand?.name) === brandNameLower);
+                  if (existingBrands.length > 1) {
+                    results.errors.push({
+                      type: 'ambiguous_relation',
+                      sheet: 'fabrics',
+                      row: i + 1,
+                      message: `Brand "${originalBrandName}" matched multiple Brands; Fabric "${item.name}" was not linked.`,
+                      fabricName: item.name,
+                    });
+                    throw new Error(`Brand "${originalBrandName}" is ambiguous for Fabric "${item.name}"`);
+                  } else if (existingBrands.length === 1) {
+                    requestedBrand = existingBrands[0];
+                    item.brand = brandRelationPayload(requestedBrand);
+                    if (!item.brand) throw new Error(`Brand "${originalBrandName}" has no usable Strapi identifier`);
                     // Add to map for future lookups
-                    autoCreatedBrands.set(brandNameLower, existingBrands[0].id);
+                    autoCreatedBrands.set(brandNameLower, requestedBrand);
                     delete item.brand_name; // Remove the name field
-                    console.log(`✅ [CLOUD] Found brand in database for fabric "${item.name}": "${originalBrandName}" -> ID ${item.brand}`);
+                    console.log(`✅ [CLOUD] Found Brand in database for Fabric "${item.name}": "${originalBrandName}" -> ${JSON.stringify(item.brand)}`);
                   } else {
-                    console.warn(`❌ [CLOUD] Brand "${originalBrandName}" not found for fabric "${item.name}" - fabric will be created without brand`);
-                    console.warn(`❌ [CLOUD] This may indicate the brand auto-creation failed. Check errors array.`);
-                    delete item.brand_name; // Remove the name field to avoid validation errors
+                    console.warn(`Brand "${originalBrandName}" not found for Fabric "${item.name}"; the Fabric import will fail rather than create an unbranded record.`);
                     results.errors.push({
                       type: 'missing_relation',
                       sheet: 'fabrics',
@@ -579,10 +624,10 @@ module.exports = {
                       message: `Brand "${originalBrandName}" not found for fabric "${item.name}"`,
                       fabricName: item.name
                     });
+                    throw new Error(`Brand "${originalBrandName}" not found for Fabric "${item.name}"`);
                   }
                 } catch (error) {
                   console.error(`❌ [CLOUD] Error looking up brand "${originalBrandName}":`, error);
-                  delete item.brand_name;
                   results.errors.push({
                     type: 'relation_lookup_error',
                     sheet: 'fabrics',
@@ -590,6 +635,7 @@ module.exports = {
                     message: `Error looking up brand "${originalBrandName}" for fabric "${item.name}"`,
                     error: error.message
                   });
+                  throw error;
                 }
               }
             } else if (productType === 'fabrics' && item.brand) {
@@ -721,6 +767,7 @@ module.exports = {
               
               if (existingFabric && existingFabric.length > 0) {
                 const existing = existingFabric[0];
+                existingFabricRecord = existing;
                 
                 // Compare relevant fields to see if there are changes
                 // Helper to compare care instruction arrays
@@ -741,7 +788,7 @@ module.exports = {
                 const hasChanges = (
                   (item.name !== undefined && item.name !== existing.name) ||
                   (item.description !== undefined && item.description !== existing.description) ||
-                  (item.brand !== undefined && item.brand !== existing.brand?.id) ||
+                  (item.brand !== undefined && !sameBrand(requestedBrand || item.brand, existing.brand)) ||
                   (item.pattern !== undefined && item.pattern !== existing.pattern) ||
                   (item.composition !== undefined && item.composition !== existing.composition) ||
                   (item.price_per_metre !== undefined && item.price_per_metre !== existing.price_per_metre) ||
@@ -762,12 +809,14 @@ module.exports = {
                   upsertedItem = await strapi.entityService.update('api::fabric.fabric', existing.id, {
                     data: item
                   });
+                  fabricAction = 'updated';
                   console.log(`🔄 Updated existing fabric: ${item.name} (${item.productId})`);
                   results.updated++;
                 } else {
                   // Skip - no changes needed
                   console.log(`⏭️ Skipped fabric (no changes): ${item.name} (${item.productId})`);
                   wasSkipped = true;
+                  fabricAction = 'skipped';
                   results.skipped++;
                 }
               } else {
@@ -787,8 +836,9 @@ module.exports = {
                 }
                 
                 upsertedItem = await strapi.entityService.create('api::fabric.fabric', {
-              data: item
-            });
+                  data: item
+                });
+                fabricAction = 'created';
                 console.log(`➕ Created new fabric: ${item.name} (${item.productId})`);
                 results.created++;
               }
@@ -834,6 +884,28 @@ module.exports = {
                 console.log(`➕ Created new ${productType}: ${item.name}`);
                 results.created++;
               }
+            }
+
+            if (productType === 'fabrics' && (requestedBrandName || requestedBrand || item.brand)) {
+              let linkedBrand = upsertedItem?.brand || existingFabricRecord?.brand || requestedBrand;
+              const fabricId = upsertedItem?.id || existingFabricRecord?.id;
+              if (fabricId && typeof strapi.entityService.findOne === 'function') {
+                try {
+                  const verifiedFabric = await strapi.entityService.findOne('api::fabric.fabric', fabricId, {
+                    populate: { brand: true }
+                  });
+                  linkedBrand = verifiedFabric?.brand || linkedBrand;
+                } catch (verificationError) {
+                  console.warn(`Could not verify Brand relation for Fabric "${item.name}":`, verificationError.message);
+                }
+              }
+              results.fabricBrandLinks.push({
+                productId: item.productId,
+                fabricName: item.name,
+                action: fabricAction || (wasSkipped ? 'skipped' : null),
+                requestedBrandName: requestedBrandName || requestedBrand?.name || null,
+                brand: linkedBrandSummary(linkedBrand),
+              });
             }
 
             if (wasSkipped) {
@@ -966,6 +1038,7 @@ module.exports = {
         skipped: results.skipped || 0,
         failed: results.failed || 0,
         errors: results.errors || [],
+        fabricBrandLinks: results.fabricBrandLinks || [],
         autoCreationSummary: results.autoCreationSummary
       };
       
