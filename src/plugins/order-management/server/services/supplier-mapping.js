@@ -22,6 +22,9 @@ const APPROVED_CATALOGUE_ALIASES = Object.freeze([
 ]);
 
 function clean(value) { return String(value || '').normalize('NFKC').trim(); }
+function supplierMappingLog(event, details = {}) {
+  try { console.info(`[supplier-mapping] ${event}`, details); } catch { /* diagnostics must never affect validation */ }
+}
 function requireDocumentId(value, field = 'documentId') {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} must be a non-empty Strapi documentId.`);
   return value.trim();
@@ -187,15 +190,31 @@ async function fabricCatalogue(strapi, supplier) {
   if (typeof strapi.documents === 'function') {
     try {
       const documents = strapi.documents(FABRIC_UID);
+      supplierMappingLog('fabric-catalogue.documents-start', {
+        supplier,
+        status: ['draft', 'published'],
+        pageSize: 100,
+        supportsSupplierProductCode,
+      });
       const findAll = async (status) => {
         const pageSize = 100;
         let total = null;
         if (typeof documents.count === 'function') {
-          total = await documents.count({ filters: query.filters, status }).catch(() => null);
+          total = await documents.count({ filters: query.filters, status }).catch((error) => {
+            supplierMappingLog('fabric-catalogue.count-failed', { supplier, status, message: error.message });
+            return null;
+          });
         }
         const found = [];
         for (let page = 1; page <= 100; page += 1) {
           const pageRows = await documents.findMany({ ...query, status, pagination: { page, pageSize } });
+          supplierMappingLog('fabric-catalogue.page', {
+            supplier,
+            status,
+            page,
+            returned: Array.isArray(pageRows) ? pageRows.length : null,
+            total,
+          });
           if (!Array.isArray(pageRows) || !pageRows.length) break;
           found.push(...pageRows);
           if ((total !== null && found.length >= total) || (total === null && pageRows.length < pageSize)) break;
@@ -204,8 +223,9 @@ async function fabricCatalogue(strapi, supplier) {
       };
       const [draftRows, publishedRows] = await Promise.all([findAll('draft'), findAll('published')]);
       rows = logicalRows([...(draftRows || []), ...(publishedRows || [])]);
-    } catch {
+    } catch (error) {
       // Keep a compatibility fallback for older Strapi runtimes and focused test harnesses.
+      supplierMappingLog('fabric-catalogue.documents-failed', { supplier, message: error.message });
       rows = null;
     }
   }
@@ -218,10 +238,24 @@ async function fabricCatalogue(strapi, supplier) {
       limit: 10000,
     });
     rows = logicalRows(rows);
+    supplierMappingLog('fabric-catalogue.entity-service-fallback', { supplier, returned: rows.length });
   }
 
+  const supplierRows = rows.filter((fabric) => belongsToSupplier(fabric, supplier));
+  supplierMappingLog('fabric-catalogue.loaded', {
+    supplier,
+    totalRows: rows.length,
+    supplierRows: supplierRows.length,
+    supportsSupplierProductCode,
+    sampleRows: rows.slice(0, 8).map((fabric) => ({
+      documentId: fabric.documentId || null,
+      name: fabric.name || null,
+      brand: relationItems(fabric.brand).map((brand) => brand?.name || brand?.attributes?.name || null),
+    })),
+  });
+
   return {
-    fabrics: rows.filter((fabric) => belongsToSupplier(fabric, supplier)),
+    fabrics: supplierRows,
     supportsSupplierProductCode,
   };
 }
@@ -235,17 +269,44 @@ function exactOne(candidates, method) {
 function resolveFabricFromCatalogue(catalogue, row, aliases = new Map(), options = {}) {
   const supplierCatalogue = catalogue.filter((fabric) => belongsToSupplier(fabric, row.supplier));
   const supplierCode = codeKey(row.supplierProductCode);
+  supplierMappingLog('fabric-resolve.start', {
+    supplier: row.supplier,
+    fabricName: row.fabricName,
+    catalogueRows: catalogue.length,
+    supplierRows: supplierCatalogue.length,
+    supplierProductCodePresent: Boolean(supplierCode),
+    supportsSupplierProductCode: Boolean(options.supportsSupplierProductCode),
+  });
 
   // Generic suppliers are resolved by their exact Brand and exact normalized
   // Fabric name. A Fabric-level supplierProductCode is not part of the schema,
   // so supplier codes can never be a prerequisite for this branch.
   if (nameKey(row.supplier) !== nameKey(SUPPLIER)) {
+    const exactNameCandidates = supplierCatalogue.filter((fabric) => normalizedNameKey(fabric.name) === normalizedNameKey(row.fabricName));
+    supplierMappingLog('fabric-resolve.generic-candidates', {
+      supplier: row.supplier,
+      fabricName: row.fabricName,
+      exactNameCandidates: exactNameCandidates.length,
+      candidates: exactNameCandidates.map((fabric) => ({ documentId: fabric.documentId || null, name: fabric.name || null })),
+    });
     const byBrandAndName = exactOne(
-      supplierCatalogue.filter((fabric) => normalizedNameKey(fabric.name) === normalizedNameKey(row.fabricName)),
+      exactNameCandidates,
       'supplier_brand_and_normalized_fabric_name',
     );
-    if (!byBrandAndName) return { status: 'missing', candidates: [] };
+    if (!byBrandAndName) {
+      supplierMappingLog('fabric-resolve.result', { supplier: row.supplier, fabricName: row.fabricName, status: 'missing', method: null });
+      return { status: 'missing', candidates: [] };
+    }
     if (options.supportsSupplierProductCode && supplierCode && byBrandAndName.fabric) {
+      supplierMappingLog('fabric-resolve.result', {
+        supplier: row.supplier,
+        fabricName: row.fabricName,
+        status: byBrandAndName.status,
+        method: byBrandAndName.method,
+        documentId: byBrandAndName.fabric.documentId || null,
+        supplierProductCodeEvidence: codeKey(byBrandAndName.fabric.supplierProductCode) === supplierCode
+          || productIdDerivedCodes(byBrandAndName.fabric).includes(supplierCode),
+      });
       return {
         ...byBrandAndName,
         supplierProductCodeEvidence: {
@@ -255,6 +316,13 @@ function resolveFabricFromCatalogue(catalogue, row, aliases = new Map(), options
         },
       };
     }
+    supplierMappingLog('fabric-resolve.result', {
+      supplier: row.supplier,
+      fabricName: row.fabricName,
+      status: byBrandAndName.status,
+      method: byBrandAndName.method,
+      documentId: byBrandAndName.fabric?.documentId || null,
+    });
     return byBrandAndName;
   }
 
@@ -682,6 +750,16 @@ async function validateDocument(strapi, input) {
     issueCount: issues.length,
     valid: issues.length === 0,
   };
+  supplierMappingLog('validation.summary', {
+    supplier: document.supplier,
+    totalFabrics: validationSummary.totalFabrics,
+    inputRows: validationSummary.inputRows,
+    resolvedFabrics: validationSummary.resolvedFabrics,
+    missingFabrics: validationSummary.missingFabrics,
+    ambiguousFabrics: validationSummary.ambiguousFabrics,
+    issueCount: validationSummary.issueCount,
+    valid: validationSummary.valid,
+  });
   return { document, rows: effectiveRows, issues, validationSummary };
 }
 
