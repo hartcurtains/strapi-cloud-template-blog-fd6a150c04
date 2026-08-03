@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { loadProductionMappings, normalizeCanonicalColourName, normalizeToken } = require('../../shared/ashley-wilde-mapping');
 const supplierMappings = require('./supplier-mapping');
+const { ensureColourDiagnosticId, logColourDiagnostic } = require('../utils/ashleyWildeDiagnostics');
 
 const IDENTITY_UID = 'api::fabric-colour-identity.fabric-colour-identity';
 const ASSET_UID = 'api::fabric-colour-asset.fabric-colour-asset';
@@ -12,6 +13,18 @@ const PROMOTABLE_ASSET_TYPES = new Set(['ordinary_colour', 'full_colour_name', '
 const PLAN_TTL_MS = 10 * 60 * 1000;
 
 function key(value) { return String(value || '').normalize('NFKC').trim().toUpperCase(); }
+function selectedSupplier(value = SUPPLIER) {
+  const supplier = String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (!supplier) {
+    const error = new Error('Select a supplier before previewing or promoting staged colours.');
+    error.code = 'SUPPLIER_REQUIRED';
+    throw error;
+  }
+  return supplier;
+}
+function supplierFromOptions(options = {}) {
+  return Object.prototype.hasOwnProperty.call(options, 'supplier') ? selectedSupplier(options.supplier) : SUPPLIER;
+}
 function relationKey(value) { return value?.documentId || value?.id || value; }
 function entityRelationId(value) { return value?.id || value?.documentId || value; }
 function first(value) { return Array.isArray(value) ? value[0] : value; }
@@ -162,24 +175,44 @@ async function loadIdentity(strapi, identityId) {
   return identity;
 }
 
-async function loadPromotionMappings(strapi) {
-  const active = await supplierMappings.getActiveImporterMappings(strapi, SUPPLIER);
+async function loadPromotionMappings(strapi, requestedSupplier = SUPPLIER) {
+  const supplier = selectedSupplier(requestedSupplier);
+  const active = await supplierMappings.getActiveImporterMappings(strapi, supplier);
   if (active) {
-    const registry = await supplierMappings.loadRegistry(strapi, SUPPLIER);
+    const registry = await supplierMappings.loadRegistry(strapi, supplier);
     const codes = {};
     for (const [code, entry] of registry.byCode.entries()) codes[code] = { colourName: entry.canonicalColourName || entry.normalizedColourName || entry.colourName };
-    return { codeRegistry: { codes }, mappingVersion: active.version.documentId || active.version.version, mappingSource: 'strapi-active-version' };
+    return {
+      codeRegistry: { codes },
+      supplier,
+      mappingVersion: active.version.version || active.version.documentId,
+      mappingSource: 'strapi-active-version',
+      mappingDocumentId: active.version.documentId || null,
+      mappingRowCount: Array.isArray(active.rows) ? active.rows.length : null,
+      activeVersionsFound: active.activeVersionsFound || 1,
+    };
+  }
+  if (key(supplier) !== key(SUPPLIER)) {
+    const error = new Error(`No active colour mapping version exists for ${supplier}.`);
+    error.code = 'SUPPLIER_MAPPING_NOT_FOUND';
+    throw error;
   }
   const fallback = loadProductionMappings({ mode: 'production' });
-  return { ...fallback, mappingVersion: fallback.colourMap.generatedAt || null, mappingSource: 'repository-fallback' };
+  return { ...fallback, supplier, mappingVersion: fallback.colourMap.generatedAt || null, mappingSource: 'repository-fallback', mappingDocumentId: null, mappingRowCount: null, activeVersionsFound: 0 };
 }
 
-function eligibility(identity, mappings) {
+function fabricBelongsToSupplier(fabric, supplier) {
+  const brands = Array.isArray(fabric?.brand) ? fabric.brand : [fabric?.brand];
+  return brands.some((brand) => key(brand?.name || brand?.attributes?.name) === key(supplier));
+}
+
+function eligibility(identity, mappings, requestedSupplier = mappings?.supplier || SUPPLIER) {
+  const supplier = selectedSupplier(requestedSupplier);
   const reasons = [];
   if (identity.mappingStatus !== 'verified') reasons.push('mapping_status_not_verified');
   if (!['verified_manual', 'verified_official'].includes(identity.evidenceStatus)) reasons.push('evidence_not_acceptable');
   if (!identity.supplier) reasons.push('supplier_missing');
-  if (key(identity.supplier) !== key(SUPPLIER)) reasons.push('supplier_mismatch');
+  if (key(identity.supplier) !== key(supplier)) reasons.push('supplier_mismatch');
   if (!identity.supplierProductCode) reasons.push('supplier_product_code_missing');
   if (!identity.supplierColourCode) reasons.push('supplier_colour_code_missing');
   if (!identity.fabricColourCode || normalizeToken(identity.fabricColourCode) !== normalizeToken(`${identity.supplierProductCode}${identity.supplierColourCode}`)) reasons.push('fabric_colour_code_invalid');
@@ -188,6 +221,7 @@ function eligibility(identity, mappings) {
   if (!identity.internalColourCode || !registryEntry || normalizeCanonicalColourName(registryEntry.colourName) !== normalizeCanonicalColourName(identity.officialColourName)) reasons.push('internal_code_invalid_or_semantic_collision');
   const fabric = first(identity.fabric);
   if (!fabric || !fabric.documentId || String(fabric.documentId) !== String(identity.fabricDocumentId)) reasons.push('fabric_relation_not_unique_or_scalar_disagrees');
+  if (key(supplier) !== key(SUPPLIER) && (!fabricBelongsToSupplier(fabric, supplier))) reasons.push('fabric_brand_supplier_mismatch');
   const assets = Array.isArray(identity.assets) ? identity.assets : [];
   if (assets.some((asset) => asset.duplicateStatus === 'conflicting_image' || asset.conflictGroup)) reasons.push('unresolved_asset_conflict');
   const approvedAssets = stableEntities(assets.filter((asset) => asset.importStatus === 'staged' && PROMOTABLE_ASSET_TYPES.has(asset.assetType) && (asset.media || asset.existingMedia)));
@@ -250,8 +284,8 @@ function identitySnapshot(identity) {
 function stableFingerprint(value) { return crypto.createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex'); }
 
 function scopeFilters(options = {}) {
-  if (options.supplier && key(options.supplier) !== key(SUPPLIER)) throw new Error(`Promotion is restricted to supplier ${SUPPLIER}.`);
-  const filters = { supplier: SUPPLIER };
+  const supplier = supplierFromOptions(options);
+  const filters = { supplier };
   if (options.supplierProductCode) filters.supplierProductCode = { $eq: options.supplierProductCode };
   if (options.fabricName) filters.fabric = { name: { $eqi: options.fabricName } };
   if (Array.isArray(options.identityDocumentIds) && options.identityDocumentIds.length) filters.documentId = { $in: options.identityDocumentIds };
@@ -268,8 +302,30 @@ async function scopedIdentities(strapi, options = {}) {
 }
 
 async function previewPromotion(strapi, options = {}) {
-  const allIdentities = await scopedIdentities(strapi, options);
-  const mappings = options.mappings || await loadPromotionMappings(strapi);
+  const diagnosticRequestId = ensureColourDiagnosticId(options.diagnosticRequestId);
+  const supplier = supplierFromOptions(options);
+  logColourDiagnostic(strapi, 'colour-preview-request', {
+    diagnosticRequestId,
+    route: '/order-management/ashley-wilde/promote/preview',
+    supplier,
+    fabricName: options.fabricName || null,
+    supplierProductCode: options.supplierProductCode || null,
+    identityDocumentIdCount: Array.isArray(options.identityDocumentIds) ? options.identityDocumentIds.length : 0,
+  });
+  const mappings = options.mappings ? { ...options.mappings, supplier: options.mappings.supplier || supplier } : await loadPromotionMappings(strapi, supplier);
+  if (key(mappings.supplier) !== key(supplier)) throw new Error(`The selected mapping belongs to ${mappings.supplier || 'an unknown supplier'}, not ${supplier}.`);
+  logColourDiagnostic(strapi, 'mapping-selection', {
+    diagnosticRequestId,
+    requestedSupplier: supplier,
+    selectedMappingSupplier: mappings.supplier || null,
+    mappingSource: mappings.mappingSource || null,
+    mappingVersion: mappings.mappingVersion || null,
+    mappingVersionDocumentId: mappings.mappingDocumentId || null,
+    mappingRowCount: mappings.mappingRowCount || null,
+    activeVersionsFound: mappings.activeVersionsFound ?? null,
+    lookupFilter: { supplier, status: 'active', isActive: true },
+  });
+  const allIdentities = await scopedIdentities(strapi, { ...options, supplier });
   const identities = (allIdentities || [])
     .filter((identity) => identity.mappingStatus === 'verified')
     .map((identity) => reconcileIdentityInternalCode(identity, mappings));
@@ -278,7 +334,7 @@ async function previewPromotion(strapi, options = {}) {
   const results = [];
   for (const identity of identities) {
     try {
-      const eligible = eligibility(identity, mappings);
+      const eligible = eligibility(identity, mappings, supplier);
       const matching = await findMatchingColour(strapi, identity);
       const scopeReasons = [
         ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
@@ -307,9 +363,35 @@ async function previewPromotion(strapi, options = {}) {
   };
   const expiresAt = new Date(Date.now() + PLAN_TTL_MS).toISOString();
   const snapshot = (allIdentities || []).map((identity) => identitySnapshot(reconciledById.get(identityDocumentId(identity)) || identity)).sort((a, b) => String(a.identityDocumentId).localeCompare(String(b.identityDocumentId)));
-  const scope = { supplier: SUPPLIER, supplierProductCode: options.supplierProductCode || null, fabricName: options.fabricName || null, identityDocumentIds: Array.isArray(options.identityDocumentIds) ? [...options.identityDocumentIds].sort() : null };
+  const scope = { supplier, supplierProductCode: options.supplierProductCode || null, fabricName: options.fabricName || null, identityDocumentIds: Array.isArray(options.identityDocumentIds) ? [...options.identityDocumentIds].sort() : null };
   const planFingerprint = stableFingerprint({ scope, mappingVersion: mappings.mappingVersion || null, snapshot, results: orderedResults });
-  return { planFingerprint, planExpiresAt: expiresAt, scope, mappingVersion: mappings.mappingVersion || null, mappingSource: mappings.mappingSource || null, identityDocumentIds: identities.map(identityDocumentId), snapshot, summary, results: orderedResults, committed: false };
+  const diagnostics = {
+    diagnosticRequestId,
+    selectedSupplier: supplier,
+    mappingSupplier: mappings.supplier || supplier,
+    mappingVersion: mappings.mappingVersion || null,
+    mappingVersionDocumentId: mappings.mappingDocumentId || null,
+    mappingRowCount: mappings.mappingRowCount || null,
+    activeVersionsFound: mappings.activeVersionsFound ?? null,
+    firstIdentity: identities[0] ? {
+      identityDocumentId: identityDocumentId(identities[0]),
+      supplierProductCode: identities[0].supplierProductCode || null,
+      supplierColourCode: identities[0].supplierColourCode || null,
+      fabricColourCode: identities[0].fabricColourCode || null,
+      fabricDocumentId: identities[0].fabricDocumentId || null,
+      fabricName: first(identities[0].fabric)?.name || null,
+      brandName: first(identities[0].fabric)?.brand?.name || first(identities[0].fabric)?.brand?.[0]?.name || null,
+    } : null,
+  };
+  logColourDiagnostic(strapi, 'colour-preview-complete', {
+    diagnosticRequestId,
+    supplier,
+    identityCount: identities.length,
+    eligible: summary.eligible,
+    blocked: summary.blocked,
+    mappingVersion: mappings.mappingVersion || null,
+  });
+  return { planFingerprint, planExpiresAt: expiresAt, scope, mappingVersion: mappings.mappingVersion || null, mappingSource: mappings.mappingSource || null, identityDocumentIds: identities.map(identityDocumentId), snapshot, summary, results: orderedResults, diagnostics, committed: false };
 }
 
 async function inTransaction(strapi, callback) {
@@ -318,16 +400,17 @@ async function inTransaction(strapi, callback) {
 }
 
 async function promoteIdentity(strapi, identityId, options = {}) {
-  const mappings = options.mappings || await loadPromotionMappings(strapi);
+  const supplier = supplierFromOptions(options);
+  const mappings = options.mappings || await loadPromotionMappings(strapi, supplier);
   const identity = reconcileIdentityInternalCode(await loadIdentity(strapi, identityId), mappings);
-  const eligible = eligibility(identity, mappings);
+  const eligible = eligibility(identity, mappings, supplier);
   const matching = await findMatchingColour(strapi, identity);
   const scopeReasons = [...(options.scopeReasons || []), ...existingColourScopeReasons(matching)];
   const plan = buildPlan(identity, matching, eligible, scopeReasons);
   if (options.commit !== true || !plan.eligible) return { ...plan, committed: false };
   const result = await inTransaction(strapi, async (trx) => {
     const latest = reconcileIdentityInternalCode(await loadIdentity(strapi, identity.id), mappings);
-    const latestEligible = eligibility(latest, mappings);
+    const latestEligible = eligibility(latest, mappings, supplier);
     if (!latestEligible.eligible) throw new Error(`Promotion eligibility changed: ${latestEligible.reasons.join(', ')}`);
     const latestMatching = await findMatchingColour(strapi, latest);
     if (latestMatching.conflict) throw new Error('Existing Colour identity conflicts with the staged identity.');
@@ -355,7 +438,7 @@ async function promoteIdentity(strapi, identityId, options = {}) {
     for (const assetItem of latestEligible.approvedAssets) await strapi.entityService.update(ASSET_UID, assetItem.id, { data: { importStatus: 'promoted' }, transacting: trx });
     return { colour, colourWasCreated, promotedId, latest };
   });
-  const committedPlan = buildPlan(result.latest, { colour: result.colour, conflict: false, priority: matching.priority || 'created_colour', alreadyLinkedToFabric: true }, eligibility(result.latest, mappings), options.scopeReasons || []);
+  const committedPlan = buildPlan(result.latest, { colour: result.colour, conflict: false, priority: matching.priority || 'created_colour', alreadyLinkedToFabric: true }, eligibility(result.latest, mappings, supplier), options.scopeReasons || []);
   return {
     ...committedPlan,
     action: result.colourWasCreated ? 'create_colour' : 'match_existing_colour',
@@ -366,15 +449,24 @@ async function promoteIdentity(strapi, identityId, options = {}) {
 }
 
 async function promoteVerified(strapi, options = {}) {
-  const mappings = await loadPromotionMappings(strapi);
+  const diagnosticRequestId = ensureColourDiagnosticId(options.diagnosticRequestId);
+  const supplier = supplierFromOptions(options);
+  logColourDiagnostic(strapi, 'colour-promote-request', {
+    diagnosticRequestId,
+    route: '/order-management/ashley-wilde/promote/apply',
+    supplier,
+    hasPlanFingerprint: Boolean(options.planFingerprint),
+    identityDocumentIdCount: Array.isArray(options.identityDocumentIds) ? options.identityDocumentIds.length : 0,
+  });
+  const mappings = await loadPromotionMappings(strapi, supplier);
   if (options.commit === true && options.planFingerprint) {
     if (options.planExpiresAt && Date.parse(options.planExpiresAt) <= Date.now()) throw new Error('The promotion preview has expired. Run Preview promotion again.');
-    const current = await previewPromotion(strapi, { ...options, identityDocumentIds: undefined, commit: false, mappings });
+    const current = await previewPromotion(strapi, { ...options, supplier, identityDocumentIds: undefined, commit: false, mappings, diagnosticRequestId });
     if (current.planFingerprint !== options.planFingerprint) throw new Error('The promotion preview is stale because staging, mapping, scope, or eligibility changed. Run Preview promotion again.');
     const expected = [...(options.identityDocumentIds || [])].sort().join('|');
     if (expected !== current.identityDocumentIds.slice().sort().join('|')) throw new Error('The promotion scope no longer matches the approved preview. Run Preview promotion again.');
   }
-  const identities = await scopedIdentities(strapi, options);
+  const identities = await scopedIdentities(strapi, { ...options, supplier });
   const verified = (identities || [])
     .filter((identity) => identity.mappingStatus === 'verified')
     .map((identity) => reconcileIdentityInternalCode(identity, mappings));
@@ -382,10 +474,10 @@ async function promoteVerified(strapi, options = {}) {
   const results = [];
   for (const identity of verified) {
     const scopeReasons = [...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || [])];
-    try { results.push(await promoteIdentity(strapi, identity.id, { ...options, mappings, scopeReasons })); }
+    try { results.push(await promoteIdentity(strapi, identity.id, { ...options, supplier, mappings, scopeReasons })); }
     catch (error) { results.push({ identityDocumentId: identityDocumentId(identity), committed: false, eligible: false, skippedReasons: [error.message] }); }
   }
-  return {
+  const result = {
     committed: options.commit === true,
     total: results.length,
     summary: {
@@ -400,7 +492,26 @@ async function promoteVerified(strapi, options = {}) {
     },
     validation: { duplicateFabricColourCodes: validation.duplicateFabricColourCodes, duplicateIdentityScopes: validation.duplicateIdentityScopes, internalCodeCollisions: validation.internalCodeCollisions },
     results,
+    diagnostics: {
+      diagnosticRequestId,
+      selectedSupplier: supplier,
+      mappingSupplier: mappings.supplier || supplier,
+      mappingVersion: mappings.mappingVersion || null,
+      mappingVersionDocumentId: mappings.mappingDocumentId || null,
+      mappingRowCount: mappings.mappingRowCount || null,
+      activeVersionsFound: mappings.activeVersionsFound ?? null,
+      committed: options.commit === true,
+    },
   };
+  logColourDiagnostic(strapi, options.commit === true ? 'colour-promote-complete' : 'colour-promote-preview-complete', {
+    diagnosticRequestId,
+    supplier,
+    committed: options.commit === true,
+    total: result.total,
+    eligible: result.summary.eligible,
+    blocked: result.summary.blocked,
+  });
+  return result;
 }
 
 module.exports = { buildPlan, eligibility, existingColourScopeReasons, existingFabricColour, findMatchingColour, previewPromotion, promoteIdentity, promoteVerified, validateIdentitySet };

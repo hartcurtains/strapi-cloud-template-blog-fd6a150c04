@@ -1,6 +1,7 @@
 'use strict';
 
 const TRACE_ID_PATTERN = /^aw_[a-z0-9]{1,16}\*[a-z0-9]{1,16}\*[1-9]\d{0,5}$/i;
+const COLOUR_DIAGNOSTIC_ID_PATTERN = /^colour-[a-z0-9-]{1,96}$/i;
 
 function normalizeTraceId(value) {
   const candidate = String(value || '').trim();
@@ -28,6 +29,16 @@ function safeDiagnosticMessage(value) {
   return safeDiagnosticText(value, 500) || 'Unknown upload error';
 }
 
+function normalizeColourDiagnosticId(value) {
+  const candidate = String(value || '').trim();
+  return COLOUR_DIAGNOSTIC_ID_PATTERN.test(candidate) ? candidate : null;
+}
+
+function ensureColourDiagnosticId(value) {
+  return normalizeColourDiagnosticId(value)
+    || `colour-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function diagnosticContext({ traceId, relativePath, filename, sizeBytes, mimeType, attempt } = {}) {
   const normalizedTraceId = normalizeTraceId(traceId);
   const safeAttempt = Number.isSafeInteger(Number(attempt)) && Number(attempt) > 0
@@ -49,10 +60,19 @@ function logAshleyDiagnostic(strapi, stage, details = {}) {
   logger.info(`[AshleyUpload] ${JSON.stringify(entry)}`);
 }
 
+function logColourDiagnostic(strapi, event, details = {}) {
+  const entry = { timestamp: new Date().toISOString(), event, ...details };
+  const logger = strapi?.log?.info ? strapi.log : console;
+  logger.info(`[ColourImport] ${JSON.stringify(entry)}`);
+}
+
 module.exports = {
   attemptFromTraceId,
   diagnosticContext,
+  ensureColourDiagnosticId,
   logAshleyDiagnostic,
+  logColourDiagnostic,
+  normalizeColourDiagnosticId,
   normalizeTraceId,
   safeDiagnosticMessage,
   traceIdFromRequest,

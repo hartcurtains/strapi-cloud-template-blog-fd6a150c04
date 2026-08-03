@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useFetchClient } from '@strapi/strapi/admin';
 import adminCatalogRoutes from '../../../shared/routes';
 import ImageUploader from '../components/ImageUploader';
@@ -102,7 +102,7 @@ const productManagementResponsiveStyle = `
 `;
 
 export default function ProductManagementPage() {
-  const { post: adminPost } = useFetchClient();
+  const { post: adminPost, get: adminGet } = useFetchClient();
   const [activeTab, setActiveTab] = useState('fabrics');
   const [products, setProducts] = useState({});
   const [loading, setLoading] = useState(false);
@@ -123,7 +123,8 @@ export default function ProductManagementPage() {
   const [jsonInput, setJsonInput] = useState('');
   const [jsonError, setJsonError] = useState(null);
   const [showBulkImageUpload, setShowBulkImageUpload] = useState(false);
-  const [promotionScope, setPromotionScope] = useState({ supplier: 'Ashley Wilde', fabricName: '', supplierProductCode: '' });
+  const [activeSupplierMappings, setActiveSupplierMappings] = useState([]);
+  const [promotionScope, setPromotionScope] = useState({ supplier: '', fabricName: '', supplierProductCode: '' });
   const [promotionPreview, setPromotionPreview] = useState(null);
   const [promotionBusy, setPromotionBusy] = useState(false);
   const [promotionError, setPromotionError] = useState('');
@@ -134,6 +135,7 @@ export default function ProductManagementPage() {
   const [legacyCleanupError, setLegacyCleanupError] = useState('');
   const [legacyCleanupSuccess, setLegacyCleanupSuccess] = useState('');
   const [legacyCleanupConfirmOpen, setLegacyCleanupConfirmOpen] = useState(false);
+  const promotionDiagnosticRequestRef = useRef(null);
 
   // Product types configuration
   const productTypes = {
@@ -263,6 +265,22 @@ export default function ProductManagementPage() {
   useEffect(() => {
     fetchProducts();
   }, [activeTab]);
+
+  useEffect(() => {
+    let cancelled = false;
+    adminGet(adminCatalogRoutes.supplierMappingsSuppliers)
+      .then((response) => {
+        if (cancelled) return;
+        const suppliers = Array.isArray(response.data?.data) ? response.data.data : Array.isArray(response.data) ? response.data : [];
+        setActiveSupplierMappings(suppliers);
+        setPromotionScope((current) => {
+          if (suppliers.some((item) => item.supplier === current.supplier)) return current;
+          return { ...current, supplier: suppliers[0]?.supplier || '' };
+        });
+      })
+      .catch(() => { if (!cancelled) setActiveSupplierMappings([]); });
+    return () => { cancelled = true; };
+  }, [adminGet]);
 
   // Close template dropdown when clicking outside
   useEffect(() => {
@@ -1666,21 +1684,35 @@ export default function ProductManagementPage() {
   };
 
   const previewAshleyWildePromotion = async () => {
+    const diagnosticRequestId = `colour-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+    promotionDiagnosticRequestRef.current = diagnosticRequestId;
+    const requestPayload = { ...promotionScope, diagnosticRequestId };
+    if (typeof console?.debug === 'function') console.debug('[ColourImport][Preview]', {
+      diagnosticRequestId,
+      route: adminCatalogRoutes.ashleyWildePromotionPreview,
+      supplier: requestPayload.supplier,
+      fabricName: requestPayload.fabricName || null,
+      supplierProductCode: requestPayload.supplierProductCode || null,
+    });
     setPromotionBusy(true);
     setPromotionError('');
     setPromotionPreview(null);
     setPromotionStatus({ phase: 'previewing', message: 'Reviewing verified staged identities for the selected scope.', currentItem: promotionScope.fabricName || 'All Fabrics' });
     try {
-      const response = await adminPost(adminCatalogRoutes.ashleyWildePromotionPreview, promotionScope);
+      const response = await adminPost(adminCatalogRoutes.ashleyWildePromotionPreview, requestPayload);
       const preview = response.data?.data || response.data;
       const eligible = preview.summary?.eligible ?? 0;
+      const verifiedCandidates = preview.summary?.verifiedCandidates ?? 0;
+      const identitiesFound = preview.summary?.identitiesFound ?? 0;
       setPromotionPreview(preview);
       setPromotionStatus({
-        phase: 'verified',
+        phase: eligible > 0 ? 'verified' : 'blocked',
         current: eligible,
         total: preview.summary?.identitiesFound ?? eligible,
         currentItem: promotionScope.fabricName || 'All Fabrics',
-        message: `Preview complete: ${eligible} staged Colour identity(s) are eligible for confirmation.`,
+        message: eligible > 0
+          ? `Preview complete: ${eligible} staged Colour identity(s) are eligible for confirmation.`
+          : `Preview complete: no eligible staged Colour identities were found. ${identitiesFound} identity record(s) scanned; ${verifiedCandidates} verified candidate(s) found. Re-enrich pending identities before promoting.`,
         summary: preview.summary,
       });
     } catch (error) {
@@ -1702,13 +1734,23 @@ export default function ProductManagementPage() {
     setPromotionError('');
     setPromotionStatus({ phase: 'confirming', current: 0, total: plannedTotal, currentItem: promotionScope.fabricName || 'All Fabrics', message: `Confirming the reviewed promotion plan for ${plannedTotal} staged Colour identity(s).` });
     try {
-      const response = await adminPost(adminCatalogRoutes.ashleyWildePromotionApply, {
+      const diagnosticRequestId = reviewedPlan.diagnostics?.diagnosticRequestId || promotionDiagnosticRequestRef.current;
+      const requestPayload = {
         ...promotionScope,
+        diagnosticRequestId,
         confirm: true,
         planFingerprint: reviewedPlan.planFingerprint,
         planExpiresAt: reviewedPlan.planExpiresAt,
         identityDocumentIds: reviewedPlan.identityDocumentIds,
+      };
+      if (typeof console?.debug === 'function') console.debug('[ColourImport][Promote]', {
+        diagnosticRequestId,
+        route: adminCatalogRoutes.ashleyWildePromotionApply,
+        supplier: requestPayload.supplier,
+        planFingerprint: requestPayload.planFingerprint,
+        identityDocumentIdCount: requestPayload.identityDocumentIds?.length || 0,
       });
+      const response = await adminPost(adminCatalogRoutes.ashleyWildePromotionApply, requestPayload);
       const result = response.data?.data || response.data || {};
       const resultSummary = result.summary || {};
       const completedTotal = resultSummary.eligible ?? result.total ?? plannedTotal;
@@ -1792,19 +1834,19 @@ export default function ProductManagementPage() {
     { key: 'promoting', label: 'Promoting' },
     { key: 'complete', label: 'Complete' },
   ];
-  const promotionStageIndex = { previewing: 0, verified: 1, confirming: 2, promoting: 3, complete: 4, error: 2 };
+  const promotionStageIndex = { previewing: 0, verified: 1, blocked: 1, confirming: 2, promoting: 3, complete: 4, error: 2 };
   const promotionStatusIndex = promotionStatus ? promotionStageIndex[promotionStatus.phase] ?? 0 : 0;
   const promotionStatusTitle = {
-    previewing: 'Reviewing staged Colours', verified: 'Promotion verified', confirming: 'Confirming reviewed plan',
+    previewing: 'Reviewing staged Colours', verified: 'Promotion verified', blocked: 'Nothing eligible to promote', confirming: 'Confirming reviewed plan',
     promoting: 'Promoting verified Colours', complete: 'Promotion complete', error: 'Promotion needs attention',
   }[promotionStatus?.phase] || promotionStatus?.errorTitle || 'Promotion status';
   const promotionStatusCount = promotionStatus?.phase === 'verified'
     ? `${promotionStatus.summary?.eligible ?? promotionStatus.current ?? 0} eligible`
     : promotionStatus?.total > 0
       ? `${Math.min(promotionStatus.current || 0, promotionStatus.total)} / ${promotionStatus.total}`
-      : promotionStatus?.phase === 'complete' ? 'Complete' : promotionStatus?.phase === 'error' ? 'Stopped' : 'In progress';
+      : promotionStatus?.phase === 'complete' ? 'Complete' : ['error', 'blocked'].includes(promotionStatus?.phase) ? 'No eligible work' : 'In progress';
   const promotionStatusPanel = promotionStatus && (
-    <section className={`pm-promotion-status ${promotionStatus.phase === 'complete' ? 'pm-promotion-status--success' : ''} ${promotionStatus.phase === 'error' ? 'pm-promotion-status--error' : ''}`} aria-live="polite" aria-labelledby="pm-promotion-status-heading">
+    <section className={`pm-promotion-status ${promotionStatus.phase === 'complete' ? 'pm-promotion-status--success' : ''} ${['error', 'blocked'].includes(promotionStatus.phase) ? 'pm-promotion-status--error' : ''}`} aria-live="polite" aria-labelledby="pm-promotion-status-heading">
       <div className="pm-promotion-status-header">
         <div>
           <span className="pm-promotion-status-kicker">PROMOTION STATUS</span>
@@ -1826,7 +1868,7 @@ export default function ProductManagementPage() {
           const previewVerified = promotionStatus.phase === 'verified';
           const complete = promotionStatus.phase === 'complete' || index < promotionStatusIndex || (previewVerified && index === promotionStatusIndex);
           const active = !complete && index === promotionStatusIndex && ['previewing', 'confirming', 'promoting'].includes(promotionStatus.phase);
-          const failed = promotionStatus.phase === 'error' && index === promotionStatusIndex;
+          const failed = ['error', 'blocked'].includes(promotionStatus.phase) && index === promotionStatusIndex;
           return <div className={`pm-promotion-step ${complete ? 'pm-promotion-step--complete' : ''} ${active ? 'pm-promotion-step--active' : ''} ${failed ? 'pm-promotion-step--error' : ''}`} key={stage.key}>
             <span className="pm-promotion-step-dot">{complete ? <CheckCircle size={13} /> : failed ? <AlertCircle size={13} /> : active ? <Loader2 size={13} className="pm-promotion-status-spin" /> : index + 1}</span>
             <span>{stage.label}</span>
@@ -1888,7 +1930,8 @@ export default function ProductManagementPage() {
         <div className="pm-promotion-fields">
           <label className="pm-field-label">Supplier
             <select className="pm-field-control" value={promotionScope.supplier} onChange={(event) => { setPromotionScope({ ...promotionScope, supplier: event.target.value }); setPromotionPreview(null); setPromotionStatus(null); setLegacyCleanupPreview(null); setLegacyCleanupSuccess(''); }}>
-              <option value="Ashley Wilde">Ashley Wilde</option>
+              <option value="">Select supplier…</option>
+              {activeSupplierMappings.map((item) => <option key={item.supplier} value={item.supplier}>{item.supplier}</option>)}
             </select>
           </label>
           <label className="pm-field-label">Fabric
@@ -1909,9 +1952,27 @@ export default function ProductManagementPage() {
         {promotionStatusPanel}
         {promotionPreview && <div className="pm-promotion-preview" style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '13px', color: '#334155' }}>
-            <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Safely skipped: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Existing Colours skipped: <strong>{promotionPreview.summary?.skippedExistingColours ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
+            <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Verified candidates: <strong>{promotionPreview.summary?.verifiedCandidates ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Safely skipped: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Existing Colours skipped: <strong>{promotionPreview.summary?.skippedExistingColours ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
           </div>
           <div style={{ marginTop: '10px', fontSize: '11px', color: '#64748b' }}>Plan fingerprint: {promotionPreview.planFingerprint}</div>
+          {promotionPreview.diagnostics && <div style={{ marginTop: '10px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#475569', fontSize: '12px' }}>
+            <strong style={{ color: '#334155' }}>Preview diagnostics</strong>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px 16px', marginTop: '6px' }}>
+              <span>Supplier: <strong>{promotionPreview.diagnostics.selectedSupplier || '—'}</strong></span>
+              <span>Mapping supplier: <strong>{promotionPreview.diagnostics.mappingSupplier || '—'}</strong></span>
+              <span>Mapping source: <strong>{promotionPreview.mappingSource || '—'}</strong></span>
+              <span>Mapping version: <strong>{promotionPreview.diagnostics.mappingVersion || '—'}</strong></span>
+              <span>Mapping rows: <strong>{promotionPreview.diagnostics.mappingRowCount ?? '—'}</strong></span>
+              <span>Active versions: <strong>{promotionPreview.diagnostics.activeVersionsFound ?? '—'}</strong></span>
+              <span>Request ID: <strong>{promotionPreview.diagnostics.diagnosticRequestId || '—'}</strong></span>
+            </div>
+            {promotionPreview.diagnostics.firstIdentity && <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
+              <span>First product: <strong>{promotionPreview.diagnostics.firstIdentity.supplierProductCode || '—'}</strong></span>
+              <span>First colour: <strong>{promotionPreview.diagnostics.firstIdentity.supplierColourCode || '—'}</strong></span>
+              <span>Fabric: <strong>{promotionPreview.diagnostics.firstIdentity.fabricName || '—'}</strong></span>
+              <span>Brand: <strong>{promotionPreview.diagnostics.firstIdentity.brandName || '—'}</strong></span>
+            </div>}
+          </div>}
           {promotionPreview.results?.length > 0 && <div style={{ marginTop: '12px', maxHeight: '220px', overflow: 'auto', fontSize: '12px' }}>{promotionPreview.results.map((item) => <div key={item.identityDocumentId} style={{ padding: '6px 0', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', gap: '8px' }}><span>{item.fabricColourCode} — {item.officialColourName}</span><span style={{ color: item.eligible ? '#047857' : '#b91c1c', fontWeight: 700 }}>{item.eligible ? item.colourDecision : `Blocked: ${(item.skippedReasons || []).join(', ')}`}</span></div>)}</div>}
         </div>}
         <div style={{ marginTop: '22px', paddingTop: '18px', borderTop: '1px solid #fecaca' }}>

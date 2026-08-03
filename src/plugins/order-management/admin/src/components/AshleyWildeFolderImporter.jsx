@@ -19,6 +19,10 @@ const colours = {
 const PREPARED_WARNING_BYTES = 20 * 1024 * 1024;
 const ABSOLUTE_IMPORTER_FILE_BYTES = 50 * 1024 * 1024;
 
+function createColourDiagnosticRequestId() {
+  return `colour-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 function formatBytes(bytes) {
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
@@ -159,6 +163,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const fileQueueRef = useRef([]);
   const stagingRunRef = useRef(false);
   const traceAttemptsRef = useRef(new Map());
+  const diagnosticRequestRef = useRef(null);
 
   const refreshMappingMode = useCallback(async (supplier) => {
     if (!supplier) return null;
@@ -230,6 +235,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     setAcknowledgeSkips(false);
     setStagingFailures([]);
     setActivity(emptyActivity);
+    diagnosticRequestRef.current = null;
     setError('');
     if (supplier) refreshMappingMode(supplier).catch((modeError) => setError(safeErrorMessage(modeError)));
   };
@@ -313,6 +319,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
       supplierColourName: row.supplierColourName || null,
       internalColourCode: row.internalColourCode || null,
       fabricDocumentId: row.fabricDocumentId || row.resolvedFabricDocumentId || null,
+      diagnosticRequestId: analysis?.diagnosticRequestId || diagnosticRequestRef.current,
     };
 
     if (!media) {
@@ -422,6 +429,20 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     if (!selectedSupplier || !queuedFolder || queuedFolder.supplier !== selectedSupplier || !fileQueueRef.current.length || !acknowledgeSkips || analysisState === 'complete') return;
     setBusy(true);
     setError('');
+    const diagnosticRequestId = createColourDiagnosticRequestId();
+    diagnosticRequestRef.current = diagnosticRequestId;
+    const logPreviewRequest = (payload) => {
+      if (typeof console?.debug !== 'function') return;
+      console.debug('[ColourImport][Preview]', {
+        diagnosticRequestId,
+        route: adminCatalogRoutes.ashleyWildeAnalyse,
+        supplier: payload.supplier,
+        folderName: payload.folderName,
+        folderFingerprint: payload.folderFingerprint,
+        manifestCount: payload.manifest?.length || 0,
+        firstFilename: payload.manifest?.[0]?.relativePath || null,
+      });
+    };
     reportActivity('hashing', 0, fileQueueRef.current.length, '', `Preparing ${fileQueueRef.current.length} file(s) for analysis.`);
     try {
       await refreshMappingMode(selectedSupplier);
@@ -445,11 +466,13 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         const processedCount = batches.slice(0, index + 1).reduce((total, currentBatch) => total + currentBatch.length, 0);
         reportActivity('analysing', processedCount, hashed.length, batch[0]?.filename || '', `Processing ${processedCount} / ${hashed.length} — batch ${index + 1} of ${batches.length}`);
         const batchManifest = batch.map(({ relativePath, sha256, size, mimeType }) => ({ relativePath, sha256, size, mimeType }));
-        const response = await adminResponse(post, adminCatalogRoutes.ashleyWildeAnalyse, {
+        const requestPayload = {
           supplier: selectedSupplier,
           folderName: queuedFolder.folderName, folderFingerprint, manifest: batchManifest,
-          folderManifest: manifest, queueBatch: true,
-        });
+          folderManifest: manifest, queueBatch: true, diagnosticRequestId,
+        };
+        logPreviewRequest(requestPayload);
+        const response = await adminResponse(post, adminCatalogRoutes.ashleyWildeAnalyse, requestPayload);
         const analysisResponse = response;
         const serverAnalysis = analysisResponse.data;
         if (serverAnalysis?.supplier !== selectedSupplier) throw new Error('The server returned analysis for a different supplier.');
@@ -472,7 +495,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         current.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
         return analysedRows;
       });
-      setAnalysis({ ...lastServerAnalysis, folderName: queuedFolder.folderName, folderFingerprint, rows: analysedRows, summary: { ...summary }, analysisComplete: true });
+      setAnalysis({ ...lastServerAnalysis, diagnosticRequestId, folderName: queuedFolder.folderName, folderFingerprint, rows: analysedRows, summary: { ...summary }, analysisComplete: true });
       setAnalysisBatches(analysedBatches);
       setAnalysisState('complete');
       reportActivity('analysis_complete', hashed.length, hashed.length, '', 'Folder analysis complete. Review the results, then stage confirmed files.');
@@ -623,6 +646,25 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
                 <span><strong style={{ color: colours.amber }}>{analysis.summary.unresolvedFiles}</strong> unresolved</span>
                 <span><strong style={{ color: colours.red }}>{analysis.summary.conflictFiles}</strong> conflicts</span>
               </div>
+              <section aria-labelledby="aw-preview-diagnostics-heading" style={{ margin: '0 0 14px', padding: '12px', border: `1px solid ${colours.line}`, borderRadius: '6px', background: colours.surface, fontSize: '12px', color: colours.muted }}>
+                <h4 id="aw-preview-diagnostics-heading" style={{ margin: '0 0 8px', color: colours.text }}>Preview diagnostics</h4>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px 18px' }}>
+                  <span>Supplier: <strong style={{ color: colours.text }}>{analysis.supplier || '—'}</strong></span>
+                  <span>Mapping supplier: <strong style={{ color: colours.text }}>{analysis.mappingSupplier || analysis.supplier || '—'}</strong></span>
+                  <span>Mapping source: <strong style={{ color: colours.text }}>{analysis.mappingSource || '—'}</strong></span>
+                  <span>Mapping version: <strong style={{ color: colours.text }}>{analysis.mappingVersion || '—'}</strong></span>
+                  <span>Mapping rows: <strong style={{ color: colours.text }}>{analysis.mappingRowCount ?? '—'}</strong></span>
+                  <span>Active versions: <strong style={{ color: colours.text }}>{analysis.activeVersionsFound ?? '—'}</strong></span>
+                  <span>Request ID: <strong style={{ color: colours.text }}>{analysis.diagnosticRequestId || '—'}</strong></span>
+                </div>
+                {analysis.rows?.[0] && <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '8px 18px' }}>
+                  <span>First file: <strong style={{ color: colours.text }}>{analysis.rows[0].filename || '—'}</strong></span>
+                  <span>Parsed product: <strong style={{ color: colours.text }}>{analysis.rows[0].supplierProductCode || '—'}</strong></span>
+                  <span>Parsed colour: <strong style={{ color: colours.text }}>{analysis.rows[0].supplierColourCode || '—'}</strong></span>
+                  <span>Fabric: <strong style={{ color: colours.text }}>{analysis.rows[0].fabricName || 'Not resolved'}</strong></span>
+                  <span>Brand: <strong style={{ color: colours.text }}>{analysis.rows[0].fabricBrandName || '—'}</strong></span>
+                </div>}
+              </section>
               {(identicalHistory || priorSameName.length > 0) && <p style={{ fontSize: '13px', color: identicalHistory ? colours.green : colours.amber, margin: '0 0 12px' }}>{identicalHistory ? 'This exact folder fingerprint has been processed before.' : 'A folder with this name was processed before, but its contents have changed.'}</p>}
               {diagnosticRows.length > 0 && <section className="aw-conflict-panel" aria-labelledby="aw-conflict-heading">
                 <div className="aw-conflict-header">

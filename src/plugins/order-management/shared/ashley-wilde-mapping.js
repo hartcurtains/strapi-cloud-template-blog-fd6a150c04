@@ -318,7 +318,7 @@ function parseFilename(filename, colourMap) {
       fabricDocumentId: winner.product.fabricDocumentId, mappingVersion: winner.product.mappingVersion, supplierColourCode,
       supplierColourName: fullNameColour.supplierColourName, internalColourCode: fullNameColour.internalColourCode,
       ...(isKielderResolution ? { fabricColourCode: `${KIELDER_SUPPLIER_PRODUCT_CODE}${supplierColourCode}` } : {}),
-      mappingSource: fullNameColour.evidence?.source || 'approved Ashley Wilde mapping', evidence: fullNameColour.evidence || null,
+      mappingSource: fullNameColour.evidence?.source || `approved ${colourMap.supplier || SUPPLIER} mapping`, evidence: fullNameColour.evidence || null,
     };
   }
   if (!colour || colour.resolved === false) {
@@ -338,7 +338,7 @@ function parseFilename(filename, colourMap) {
     fabricDocumentId: winner.product.fabricDocumentId, mappingVersion: winner.product.mappingVersion, supplierColourCode,
     supplierColourName: colour.supplierColourName, internalColourCode: colour.internalColourCode,
     ...(isKielderResolution ? { fabricColourCode: `${KIELDER_SUPPLIER_PRODUCT_CODE}${supplierColourCode}` } : {}),
-    mappingSource: colour.evidence?.source || 'approved Ashley Wilde mapping', evidence: colour.evidence || null,
+    mappingSource: colour.evidence?.source || `approved ${colourMap.supplier || SUPPLIER} mapping`, evidence: colour.evidence || null,
   };
 }
 

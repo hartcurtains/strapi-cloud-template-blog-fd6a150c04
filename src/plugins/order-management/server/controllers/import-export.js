@@ -1,4 +1,7 @@
-const { attemptFromTraceId, diagnosticContext, traceIdFromRequest } = require('../utils/ashleyWildeDiagnostics');
+const {
+  attemptFromTraceId, diagnosticContext, ensureColourDiagnosticId,
+  logColourDiagnostic, safeDiagnosticMessage, traceIdFromRequest,
+} = require('../utils/ashleyWildeDiagnostics');
 const {
   brandRelationPayload,
   buildBrandIndex,
@@ -1446,9 +1449,18 @@ module.exports = {
   async analyseAshleyWildeFolder(ctx) {
     const importer = require('../services/ashley-wilde-import');
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    const body = ctx.request.body || {};
+    const diagnosticRequestId = ensureColourDiagnosticId(body.diagnosticRequestId);
+    logColourDiagnostic(strapi, 'colour-preview-controller', {
+      diagnosticRequestId,
+      route: '/order-management/ashley-wilde/analyse',
+      supplier: body.supplier || null,
+      fileCount: Array.isArray(body.folderManifest) ? body.folderManifest.length : Array.isArray(body.manifest) ? body.manifest.length : 0,
+    });
     try {
-      ctx.body = { success: true, data: await importer.analyseFolder(strapi, ctx.request.body, { adminId: importer.adminIdentity(ctx) }) };
+      ctx.body = { success: true, data: await importer.analyseFolder(strapi, { ...body, diagnosticRequestId }, { adminId: importer.adminIdentity(ctx), diagnosticRequestId }) };
     } catch (error) {
+      logColourDiagnostic(strapi, 'colour-preview-failed', { diagnosticRequestId, route: '/order-management/ashley-wilde/analyse', errorCode: error?.code || 'unknown', message: safeDiagnosticMessage(error?.message || error?.name) });
       ctx.status = error?.code === 'ASHLEY_WILDE_MAPPING_INVALID' ? 503 : 400;
       ctx.body = { success: false, error: importer.safeMessage(error) };
     }
@@ -1508,11 +1520,20 @@ module.exports = {
 
   async promoteAshleyWilde(ctx) {
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    const body = ctx.request.body || {};
+    const diagnosticRequestId = ensureColourDiagnosticId(body.diagnosticRequestId);
+    logColourDiagnostic(strapi, 'colour-preview-controller', {
+      diagnosticRequestId,
+      route: '/order-management/ashley-wilde/promote/preview',
+      supplier: body.supplier || null,
+      fabricName: body.fabricName || null,
+      supplierProductCode: body.supplierProductCode || null,
+    });
     try {
       const promotion = require('../services/ashley-wilde-promotion');
-      const body = ctx.request.body || {};
-      ctx.body = { success: true, preview: true, data: await promotion.previewPromotion(strapi, body) };
+      ctx.body = { success: true, preview: true, data: await promotion.previewPromotion(strapi, { ...body, diagnosticRequestId }) };
     } catch (error) {
+      logColourDiagnostic(strapi, 'colour-preview-failed', { diagnosticRequestId, route: '/order-management/ashley-wilde/promote/preview', errorCode: error?.code || 'unknown', message: safeDiagnosticMessage(error?.message || error?.name) });
       ctx.status = error.status === 403 ? 403 : 400;
       ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Ashley Wilde promotion preview could not be completed safely' } };
     }
@@ -1529,16 +1550,25 @@ module.exports = {
       ctx.body = { success: false, error: { status: 403, message: 'The signed-in administrator lacks permission to promote staged colours.' } };
       return;
     }
+    const body = ctx.request.body || {};
+    const diagnosticRequestId = ensureColourDiagnosticId(body.diagnosticRequestId);
+    logColourDiagnostic(strapi, 'colour-promote-request', {
+      diagnosticRequestId,
+      route: '/order-management/ashley-wilde/promote/apply',
+      supplier: body.supplier || null,
+      identityDocumentIdCount: Array.isArray(body.identityDocumentIds) ? body.identityDocumentIds.length : 0,
+      hasPlanFingerprint: Boolean(body.planFingerprint),
+    });
     try {
-      const body = ctx.request.body || {};
       if (!(body.confirm === true || body.confirm === 'true')) {
         ctx.status = 400;
         ctx.body = { success: false, error: { status: 400, message: 'Explicit confirmation is required to apply the reviewed promotion preview.' } };
         return;
       }
       const promotion = require('../services/ashley-wilde-promotion');
-      ctx.body = { success: true, preview: false, data: await promotion.promoteVerified(strapi, { ...body, commit: true }) };
+      ctx.body = { success: true, preview: false, data: await promotion.promoteVerified(strapi, { ...body, diagnosticRequestId, commit: true }) };
     } catch (error) {
+      logColourDiagnostic(strapi, 'colour-promote-failed', { diagnosticRequestId, route: '/order-management/ashley-wilde/promote/apply', errorCode: error?.code || 'unknown', message: safeDiagnosticMessage(error?.message || error?.name) });
       ctx.status = error.status === 403 ? 403 : 409;
       ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Ashley Wilde promotion could not be applied safely' } };
     }

@@ -6,11 +6,14 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   SUPPLIER, canonicalManifestLines, loadProductionMappings, normalizeCanonicalColourName, normalizeRelativePath,
-  normalizeStem, normalizeToken, parseFilename,
+  normalizeStem, normalizeToken, parseFilename, validateColourMap,
 } = require('../../shared/ashley-wilde-mapping');
 const supplierMappings = require('./supplier-mapping');
 const uploadPolicy = require('../../shared/ashley-wilde-upload-policy.json');
-const { diagnosticContext, logAshleyDiagnostic, safeDiagnosticMessage } = require('../utils/ashleyWildeDiagnostics');
+const {
+  diagnosticContext, ensureColourDiagnosticId, logAshleyDiagnostic, logColourDiagnostic,
+  safeDiagnosticMessage,
+} = require('../utils/ashleyWildeDiagnostics');
 
 const BATCH_UID = 'api::image-import-batch.image-import-batch';
 const FABRIC_UID = 'api::fabric.fabric';
@@ -251,7 +254,7 @@ function hasNamedBrandRelation(fabric) {
   return brands.some((brand) => String(brand?.name || brand?.attributes?.name || '').trim());
 }
 
-async function targetedFabricCandidates(strapi, filters, supplier, trustSupplierFilter = false) {
+async function targetedFabricCandidates(strapi, filters, supplier, trustSupplierFilter = false, diagnostics = {}) {
   const rows = [];
   if (typeof strapi.documents === 'function') {
     try {
@@ -276,41 +279,56 @@ async function targetedFabricCandidates(strapi, filters, supplier, trustSupplier
       ? { ...fabric, __supplierBrandMatch: supplier }
       : fabric
   ));
-  return candidates.filter((fabric) => brandMatchesSupplier(fabric, supplier));
+  const supplierCandidates = candidates.filter((fabric) => brandMatchesSupplier(fabric, supplier));
+  if (diagnostics.diagnosticRequestId) {
+    logColourDiagnostic(strapi, 'fabric-candidates', {
+      diagnosticRequestId: diagnostics.diagnosticRequestId,
+      supplier,
+      filters,
+      trustSupplierFilter,
+      candidates: supplierCandidates.slice(0, 20).map((fabric) => ({
+        documentId: fabric.documentId || null,
+        name: fabric.name || null,
+        productId: fabric.productId || null,
+        brand: (Array.isArray(fabric.brand) ? fabric.brand : [fabric.brand]).map((brand) => brand?.name || brand?.attributes?.name || null).filter(Boolean),
+      })),
+      candidateCount: supplierCandidates.length,
+    });
+  }
+  return supplierCandidates;
 }
 
-async function fabricCandidatesByName(strapi, name, supplier) {
+async function fabricCandidatesByName(strapi, name, supplier, diagnostics = {}) {
   const rows = await targetedFabricCandidates(strapi, {
     name: { $eqi: name },
-    brand: { name: { $eqi: supplier } },
-  }, supplier, true);
+  }, supplier, true, diagnostics);
   return rows.filter((fabric) => normalizedFabricName(fabric.name) === normalizedFabricName(name));
 }
 
-async function resolveSupplierFabric(strapi, parsed, requestedSupplier = parsed?.supplier || SUPPLIER) {
+async function resolveSupplierFabric(strapi, parsed, requestedSupplier = parsed?.supplier || SUPPLIER, diagnostics = {}) {
   const supplier = selectedSupplier(requestedSupplier);
-  if (!COLOUR_STATUSES.has(parsed.status)) return { parsed, fabric: null };
+  if (!COLOUR_STATUSES.has(parsed.status)) return { parsed, fabric: null, candidates: [] };
   if (parsed.fabricDocumentId) {
-    const branded = await targetedFabricCandidates(strapi, { documentId: parsed.fabricDocumentId }, supplier);
+    const branded = await targetedFabricCandidates(strapi, { documentId: parsed.fabricDocumentId }, supplier, true, diagnostics);
     if (branded.length === 1) {
       const fabric = branded[0];
-      return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
+      return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId, fabricBrandName: fabric.brand?.name || fabric.brand?.[0]?.name || supplier }, fabric, candidates: branded };
     }
-    if (branded.length > 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `The mapped Fabric ${parsed.fabricDocumentId} resolved to multiple catalogue records.` }, fabric: null };
+    if (branded.length > 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `The mapped Fabric ${parsed.fabricDocumentId} resolved to multiple catalogue records.` }, fabric: null, candidates: branded };
   }
   const names = [parsed.fabricName, ...(parsed.approvedAliases || [])].filter(Boolean);
   let candidates = [];
   for (const name of names) {
-    candidates = await fabricCandidatesByName(strapi, name, supplier);
+    candidates = await fabricCandidatesByName(strapi, name, supplier, diagnostics);
     if (candidates.length) break;
   }
   if (!candidates.length) {
     const mappedId = parsed.fabricDocumentId ? ` The saved mapping Fabric ${parsed.fabricDocumentId} was also unavailable.` : '';
-    return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `No ${supplier} fabric named ${parsed.fabricName} exists in the current catalog.${mappedId}` }, fabric: null };
+    return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `No ${supplier} fabric named ${parsed.fabricName} exists in the current catalog.${mappedId}` }, fabric: null, candidates };
   }
-  if (candidates.length !== 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `Multiple ${supplier} fabrics match ${parsed.fabricName}; resolution was refused.` }, fabric: null };
+  if (candidates.length !== 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `Multiple ${supplier} fabrics match ${parsed.fabricName}; resolution was refused.` }, fabric: null, candidates };
   const fabric = candidates[0];
-  return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
+  return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId, fabricBrandName: fabric.brand?.name || fabric.brand?.[0]?.name || supplier }, fabric, candidates };
 }
 
 async function resolveAshleyFabric(strapi, parsed) {
@@ -382,9 +400,27 @@ async function findMedia(strapi, filename, sha256, size) {
   return { media: null, exact: false };
 }
 
-async function inspectMatch(strapi, parsed, manifestEntry) {
+async function inspectMatch(strapi, parsed, manifestEntry, diagnostics = {}) {
   if (!COLOUR_STATUSES.has(parsed.status)) return parsed;
-  const resolution = await resolveSupplierFabric(strapi, parsed, parsed.supplier);
+  const resolution = await resolveSupplierFabric(strapi, parsed, parsed.supplier, diagnostics);
+  if (diagnostics.diagnosticRequestId) {
+    logColourDiagnostic(strapi, 'fabric-resolution', {
+      diagnosticRequestId: diagnostics.diagnosticRequestId,
+      supplier: parsed.supplier,
+      filename: path.basename(manifestEntry.relativePath),
+      requestedFabricName: parsed.fabricName || null,
+      requestedFabricDocumentId: parsed.fabricDocumentId || null,
+      status: resolution.parsed?.status || null,
+      warning: resolution.parsed?.warning || null,
+      selectedFabric: resolution.fabric ? {
+        documentId: resolution.fabric.documentId || null,
+        name: resolution.fabric.name || null,
+        productId: resolution.fabric.productId || null,
+        brand: resolution.fabric.brand?.name || resolution.fabric.brand?.[0]?.name || parsed.supplier,
+      } : null,
+      candidateCount: resolution.candidates?.length || 0,
+    });
+  }
   if (!resolution.fabric) return resolution.parsed;
   parsed = resolution.parsed;
   const identity = await findStagedIdentity(strapi, parsed, ['assets']);
@@ -447,6 +483,21 @@ async function loadAshleyImporterMappings(strapi, options = {}) {
 async function loadSupplierImporterMappings(strapi, supplier, options = {}) {
   const requestedSupplier = selectedSupplier(supplier);
   if (options.mappings) {
+    const suppliedColourMap = options.mappings.colourMap;
+    if (suppliedColourMap && normalizedFabricName(suppliedColourMap.supplier) !== normalizedFabricName(SUPPLIER)) {
+      validateColourMap(suppliedColourMap, `supplied ${requestedSupplier} mapping`, requestedSupplier);
+      return {
+        mode: 'supplied',
+        source: 'supplied-mapping',
+        supplier: requestedSupplier,
+        colourMap: suppliedColourMap,
+        mappingVersion: suppliedColourMap.mappingVersion || suppliedColourMap.generatedAt || null,
+        mappingImportDocumentId: null,
+        mappingRowCount: Object.values(suppliedColourMap.products || {}).reduce((total, product) => total + Object.keys(product.colours || {}).length, 0),
+        codeRegistry: options.mappings.codeRegistry || null,
+        imageIndex: options.mappings.imageIndex || null,
+      };
+    }
     const loaded = loadProductionMappings(options.mappings);
     if (normalizedFabricName(loaded.colourMap.supplier) !== normalizedFabricName(requestedSupplier)) {
       throw new Error(`The supplied mapping belongs to ${loaded.colourMap.supplier}, not ${requestedSupplier}.`);
@@ -467,6 +518,7 @@ async function loadSupplierImporterMappings(strapi, supplier, options = {}) {
     mappingVersion: active.version.version,
     mappingImportDocumentId: active.version.documentId,
     mappingRowCount: active.rows.length,
+    activeVersionsFound: active.activeVersionsFound || 1,
     codeRegistry: null,
     imageIndex: null,
   };
@@ -474,7 +526,29 @@ async function loadSupplierImporterMappings(strapi, supplier, options = {}) {
 
 async function analyseFolder(strapi, body, options = {}) {
   const supplier = selectedSupplier(body?.supplier);
+  const diagnosticRequestId = ensureColourDiagnosticId(options.diagnosticRequestId || body?.diagnosticRequestId);
+  logColourDiagnostic(strapi, 'colour-preview-request', {
+    diagnosticRequestId,
+    requestedSupplier: body?.supplier || null,
+    supplier,
+    folderName: body?.folderName || null,
+    fileCount: Array.isArray(body?.folderManifest) ? body.folderManifest.length : Array.isArray(body?.manifest) ? body.manifest.length : 0,
+    firstFilename: path.basename(String(body?.folderManifest?.[0]?.relativePath || body?.manifest?.[0]?.relativePath || '')) || null,
+    queueBatch: body?.queueBatch === true,
+  });
   const mappings = await loadSupplierImporterMappings(strapi, supplier, options);
+  logColourDiagnostic(strapi, 'mapping-selection', {
+    diagnosticRequestId,
+    requestedSupplier: supplier,
+    selectedMappingSupplier: mappings.supplier || mappings.colourMap?.supplier || null,
+    mappingMode: mappings.mode || null,
+    mappingSource: mappings.source || null,
+    mappingVersion: mappings.mappingVersion || null,
+    mappingVersionDocumentId: mappings.mappingImportDocumentId || null,
+    mappingRowCount: mappings.mappingRowCount || null,
+    activeVersionsFound: mappings.activeVersionsFound || 1,
+    lookupFilter: { supplier, status: 'active', isActive: true },
+  });
   const manifest = normalizeManifest(body?.manifest);
   const completeManifest = body?.queueBatch ? normalizeManifest(body?.folderManifest) : manifest;
   const fingerprint = manifestFingerprint(completeManifest, supplier);
@@ -487,8 +561,24 @@ async function analyseFolder(strapi, body, options = {}) {
   for (const entry of manifest) {
     const filename = path.basename(entry.relativePath);
     let parsed = parseSupplierFilename(filename, mappings.colourMap, supplier);
+    logColourDiagnostic(strapi, 'filename-parse', {
+      diagnosticRequestId,
+      supplier,
+      originalFilename: filename,
+      normalizedFilename: normalizeStem(filename),
+      availableProductCodes: Object.values(mappings.colourMap.products || {})
+        .map((product) => product.supplierProductCode)
+        .filter(Boolean)
+        .slice(0, 25),
+      parsedProductCode: parsed.supplierProductCode || null,
+      parsedColourCode: parsed.supplierColourCode || null,
+      parsedFabricColourCode: parsed.fabricColourCode || null,
+      parsedFabricName: parsed.fabricName || null,
+      parsedStatus: parsed.status || null,
+      rejectionReason: parsed.warning || (parsed.status === 'unknown_mapping_product' ? 'No mapping product prefix matched.' : null),
+    });
     if (seenHashes.has(entry.sha256) && COLOUR_STATUSES.has(parsed.status)) parsed = { ...parsed, status: 'exact_duplicate', duplicateStatus: 'exact_duplicate', warning: 'Identical content appears more than once in this folder.' };
-    else parsed = await inspectMatch(strapi, parsed, entry);
+    else parsed = await inspectMatch(strapi, parsed, entry, { diagnosticRequestId });
     seenHashes.add(entry.sha256);
     rows.push({
       ...entry,
@@ -504,6 +594,7 @@ async function analyseFolder(strapi, body, options = {}) {
   }
   const summary = summaryForRows(rows);
   if (body?.queueBatch) return {
+    diagnosticRequestId,
     supplier,
     folderName,
     folderFingerprint: fingerprint,
@@ -514,6 +605,8 @@ async function analyseFolder(strapi, body, options = {}) {
     mappingVersion: mappings.mappingVersion || null,
     mappingVersionDocumentId: mappings.mappingImportDocumentId || null,
     mappingRowCount: mappings.mappingRowCount || null,
+    mappingSupplier: mappings.supplier || mappings.colourMap?.supplier || supplier,
+    activeVersionsFound: mappings.activeVersionsFound || 1,
     analysisToken: createAnalysisToken({
       supplier,
       mappingImportDocumentId: mappings.mappingImportDocumentId,

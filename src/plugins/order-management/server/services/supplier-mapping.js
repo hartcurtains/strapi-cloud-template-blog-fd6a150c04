@@ -973,7 +973,17 @@ async function getActiveImporterMappings(strapi, supplier) {
   const version = await getActiveVersion(strapi, requestedSupplier);
   if (!version) return null;
   const rows = await mappingsForVersion(strapi, version);
-  return normalizeActiveImporterMapping({ version, rows }, requestedSupplier);
+  let activeVersionsFound = 1;
+  try {
+    const activeVersions = await strapi.entityService.findMany(IMPORT_UID, {
+      filters: { supplier: requestedSupplier, status: 'active', isActive: true },
+      limit: 1000,
+    });
+    activeVersionsFound = Array.isArray(activeVersions) ? activeVersions.length : 1;
+  } catch {
+    // The selected active version remains authoritative if the diagnostic count is unavailable.
+  }
+  return { ...normalizeActiveImporterMapping({ version, rows }, requestedSupplier), activeVersionsFound };
 }
 
 async function listActiveMappingSuppliers(strapi) {
