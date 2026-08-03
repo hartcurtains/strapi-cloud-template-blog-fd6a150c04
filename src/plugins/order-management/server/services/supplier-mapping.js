@@ -142,7 +142,8 @@ function relationItems(value) {
 }
 
 function belongsToSupplier(fabric, supplier) {
-  return relationItems(fabric?.brand).some((brand) => normalizedNameKey(brand?.name || brand?.attributes?.name) === normalizedNameKey(supplier))
+  return relationItems(fabric?.brand).some((brand) => typeof brand === 'object'
+    && normalizedNameKey(brand?.name || brand?.attributes?.name) === normalizedNameKey(supplier))
     || normalizedNameKey(fabric?.__supplierBrandMatch) === normalizedNameKey(supplier);
 }
 
@@ -285,16 +286,19 @@ async function fabricCatalogue(strapi, supplier, requestedFabricNames = []) {
             start: 0,
           });
           const matchingRows = Array.isArray(found) ? found : [];
+          const hasNamedBrandRelation = (fabric) => relationItems(fabric.brand).some((brand) => (
+            typeof brand === 'object' && clean(brand?.name || brand?.attributes?.name)
+          ));
           supplierMappingLog('fabric-catalogue.targeted', {
             supplier,
             fabricName,
             status,
             returned: matchingRows.length,
-            populatedBrands: matchingRows.filter((fabric) => relationItems(fabric.brand).length > 0).length,
+            populatedBrands: matchingRows.filter(hasNamedBrandRelation).length,
             documentIds: matchingRows.map((fabric) => fabric.documentId || fabric.id || null),
           });
           targetedRows.push(...matchingRows.map((fabric) => (
-            relationItems(fabric.brand).length
+            hasNamedBrandRelation(fabric)
               ? fabric
               : { ...fabric, __supplierBrandMatch: supplier }
           )));
