@@ -27,6 +27,42 @@ test('existing Colour detection is scoped to the canonical colour name on one Fa
   assert.deepEqual(promotion.existingColourScopeReasons({ colour: null, alreadyLinkedToFabric: false }), []);
 });
 
+test('an explicitly staged replacement makes only its existing Colour thumbnail eligible for update', () => {
+  const matching = {
+    colour: { id: 401, documentId: 'colour-maidenhair-ink', name: 'Ink', thumbnail: { id: 501 } },
+    alreadyLinkedToFabric: true,
+    conflict: false,
+    priority: 'fabric_canonical_colour_name',
+  };
+  const replacement = {
+    id: 211,
+    documentId: 'asset-maidenhair-ink',
+    importStatus: 'staged',
+    duplicateStatus: 'unique',
+    assetType: 'ordinary_colour',
+    media: { id: 311, documentId: 'media-maidenhair-ink-new' },
+    referenceMetadata: { replaceExistingImage: true },
+  };
+  const eligible = { eligible: true, reasons: [], approvedAssets: [replacement] };
+  const identity = {
+    documentId: 'identity-maidenhair-ink',
+    identityKey: 'ashley-wilde|fabric-maidenhair|maidenhair|in',
+    mappingStatus: 'verified', evidenceStatus: 'verified_official',
+    fabric: { documentId: 'fabric-maidenhair', name: 'Maidenhair' },
+    fabricDocumentId: 'fabric-maidenhair', supplierProductCode: 'MAIDENHAIR', supplierColourCode: 'IN',
+    fabricColourCode: 'MAIDENHAIRIN', officialColourName: 'Ink', internalColourCode: 'INK',
+  };
+
+  assert.deepEqual(promotion.existingColourScopeReasons(matching, eligible), []);
+  const plan = promotion.buildPlan(identity, matching, eligible);
+  assert.equal(plan.eligible, true);
+  assert.equal(plan.action, 'update_existing_colour_image');
+  assert.equal(plan.colourDecision, 'update_existing_colour_thumbnail');
+  assert.equal(plan.assetDecision, 'replace_existing_thumbnail');
+  assert.equal(plan.replacesExistingImage, true);
+  assert.equal(plan.preserveExistingThumbnail, false);
+});
+
 test('bulk preview skips only an existing Colour and keeps a missing sibling eligible', async () => {
   const fabric = {
     id: 111,
@@ -304,6 +340,66 @@ test('promotion commits a missing sibling after skipping the existing Colour on 
   assert.equal(writes.filter((write) => write.operation === 'create' && write.uid === COLOUR_UID).length, 1);
   assert.equal(writes.filter((write) => write.operation === 'update' && write.uid === IDENTITY_UID).length, 1);
   assert.equal(writes.filter((write) => write.operation === 'update' && write.uid === ASSET_UID).length, 1);
+});
+
+test('promotion replaces the thumbnail only for the explicitly re-uploaded existing Colour', async () => {
+  const oldMedia = { id: 301, documentId: 'media-maidenhair-ink-old' };
+  const newMedia = { id: 302, documentId: 'media-maidenhair-ink-new' };
+  const colour = { id: 401, documentId: 'colour-maidenhair-ink', name: 'Ink', thumbnail: oldMedia };
+  const fabric = { id: 101, documentId: 'fabric-maidenhair', name: 'Maidenhair', colours: [colour] };
+  colour.fabrics = [{ id: fabric.id, documentId: fabric.documentId }];
+  const asset = {
+    id: 201,
+    documentId: 'asset-maidenhair-ink',
+    importStatus: 'staged',
+    duplicateStatus: 'unique',
+    assetType: 'ordinary_colour',
+    media: newMedia,
+    referenceMetadata: { replaceExistingImage: true, previousMediaId: oldMedia.documentId },
+  };
+  const identity = {
+    id: 1,
+    documentId: 'identity-maidenhair-ink',
+    identityKey: 'ashley-wilde|fabric-maidenhair|maidenhair|in',
+    mappingStatus: 'verified', evidenceStatus: 'verified_official', supplier: 'Ashley Wilde',
+    fabric, fabricDocumentId: fabric.documentId,
+    supplierProductCode: 'MAIDENHAIR', supplierColourCode: 'IN', fabricColourCode: 'MAIDENHAIRIN',
+    officialColourName: 'Ink', internalColourCode: 'INK', assets: [asset], promotedColour: null,
+  };
+  const writes = [];
+  const strapi = {
+    db: { transaction: async (callback) => callback({ trx: { transaction: true } }) },
+    entityService: {
+      findOne: async (uid, id) => {
+        assert.equal(uid, IDENTITY_UID);
+        assert.equal(id, identity.id);
+        return identity;
+      },
+      findMany: async (uid) => uid === COLOUR_UID ? [] : [],
+      create: async () => { throw new Error('Replacement promotion must not create a Colour.'); },
+      update: async (uid, id, options) => {
+        writes.push({ uid, id, options });
+        if (uid === COLOUR_UID) return { ...colour, thumbnail: newMedia };
+        return { id, ...options.data };
+      },
+    },
+  };
+  const mappings = {
+    supplier: 'Ashley Wilde',
+    codeRegistry: { codes: { INK: { colourName: 'Ink' } } },
+    mappingVersion: 'mapping-v1', mappingSource: 'test',
+  };
+
+  const result = await promotion.promoteIdentity(strapi, identity.id, { commit: true, mappings });
+
+  assert.equal(result.committed, true);
+  assert.equal(result.action, 'update_existing_colour_image');
+  assert.equal(result.colourDecision, 'update_existing_colour_thumbnail');
+  const colourWrite = writes.find((write) => write.uid === COLOUR_UID);
+  assert.deepEqual(colourWrite.options.data, { thumbnail: newMedia.id });
+  assert.equal(writes.filter((write) => write.uid === COLOUR_UID).length, 1);
+  assert.equal(writes.filter((write) => write.uid === IDENTITY_UID).length, 1);
+  assert.equal(writes.filter((write) => write.uid === ASSET_UID).length, 1);
 });
 
 test('confirmed promotion writes Strapi Entity Service relation IDs and commits the reviewed identity', async () => {

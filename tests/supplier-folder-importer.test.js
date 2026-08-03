@@ -150,6 +150,56 @@ test('Ashley Wilde active mapping still resolves Alaska / Aqua', async () => {
   assert.equal(alaska.status, 'would_stage_identity');
 });
 
+test('changed content under the same scoped filename requires the explicit replacement option', async () => {
+  const strapi = strapiFor();
+  const originalFindMany = strapi.entityService.findMany.bind(strapi.entityService);
+  const identity = {
+    id: 71,
+    documentId: 'identity-alaska-aqua',
+    officialColourName: 'Aqua',
+    mappingStatus: 'promoted',
+  };
+  const priorAsset = {
+    id: 81,
+    documentId: 'asset-alaska-aqua',
+    originalFilename: 'ALASKAAQ.jpg',
+    normalizedFilename: 'alaskaaq',
+    sha256: 'a'.repeat(64),
+    importStatus: 'promoted',
+    duplicateStatus: 'unique',
+    fabricColourIdentity: { documentId: identity.documentId },
+  };
+  strapi.entityService.findMany = async (uid, query = {}) => {
+    if (uid === 'api::fabric-colour-identity.fabric-colour-identity') return [identity];
+    if (uid === 'api::fabric-colour-asset.fabric-colour-asset') {
+      if (query.filters?.assetKey) return [];
+      if (query.filters?.normalizedFilename === 'alaskaaq') return [priorAsset];
+      return [];
+    }
+    return originalFindMany(uid, query);
+  };
+  const folderManifest = [{ ...manifest('ALASKAAQ.jpg')[0], sha256: 'b'.repeat(64), mimeType: 'image/jpeg' }];
+  const body = {
+    supplier: 'Ashley Wilde', folderName: 'Replacement images',
+    folderFingerprint: importer.manifestFingerprint(folderManifest, 'Ashley Wilde'),
+    manifest: folderManifest, folderManifest, queueBatch: true,
+  };
+
+  const ordinary = await importer.analyseFolder(strapi, body, { adminId: 'admin-1' });
+  assert.equal(ordinary.rows[0].status, 'conflicting_image');
+
+  const replacement = await importer.analyseFolder(strapi, { ...body, replaceExistingImages: true }, { adminId: 'admin-1' });
+  assert.equal(replacement.rows[0].status, 'would_replace_asset');
+  assert.equal(replacement.rows[0].replaceExistingImage, true);
+  assert.equal(replacement.summary.readyFiles, 1);
+  assert.equal(replacement.summary.conflictFiles, 0);
+  const signed = importer.verifyAnalysisToken(replacement.analysisToken, {
+    supplier: 'Ashley Wilde', mappingImportDocumentId: 'ashley-active-import', mappingVersion: 'ashley-active-v1',
+    fingerprint: body.folderFingerprint, manifestFileCount: 1, uploadedPaths: ['ALASKAAQ.jpg'], adminId: 'admin-1',
+  });
+  assert.equal(signed.analyzedFiles[0].replaceExistingImage, true);
+});
+
 test('selecting the wrong supplier reports that supplier and never searches another active map', async () => {
   const row = (await analyse('Ashley Wilde', 'alicest.jpg')).rows[0];
   assert.equal(row.status, 'unknown_mapping_product');
@@ -250,4 +300,7 @@ test('folder UI requires the selected supplier and sends it to analyse and final
   assert.match(source, /value=\{selectedSupplier\}/);
   assert.match(source, /supplier:\s*selectedSupplier/);
   assert.match(source, /disabled=\{[^}]*!selectedSupplier/);
+  assert.match(source, /Replace images already in the catalogue/);
+  assert.match(source, /replaceExistingImages,\s*\n\s*folderName:/);
+  assert.match(source, /Colours not included in this upload stay unchanged/);
 });

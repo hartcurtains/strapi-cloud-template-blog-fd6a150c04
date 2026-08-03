@@ -1780,7 +1780,7 @@ export default function ProductManagementPage() {
         current: completedTotal,
         total: result.total ?? plannedTotal,
         currentItem: promotionScope.fabricName || 'All Fabrics',
-        message: `Promotion complete: ${resultSummary.newColours ?? 0} new Colour(s) created and ${resultSummary.existingColoursToReuse ?? 0} existing Colour(s) reused.`,
+        message: `Promotion complete: ${resultSummary.newColours ?? 0} new Colour(s) created, ${resultSummary.existingColourImagesUpdated ?? 0} existing image(s) updated, and ${resultSummary.existingColoursToReuse ?? 0} existing Colour(s) reused.`,
         summary: resultSummary,
       });
     } catch (error) {
@@ -1918,6 +1918,7 @@ export default function ProductManagementPage() {
         <span>Current operation: <strong>{promotionStatus.currentItem || 'Selected scope'}</strong></span>
         {promotionStatus.summary && <>
           <span>Created: <strong>{promotionStatus.summary.newColours ?? 0}</strong></span>
+          <span>Images updated: <strong>{promotionStatus.summary.existingColourImagesUpdated ?? 0}</strong></span>
           <span>Reused: <strong>{promotionStatus.summary.existingColoursToReuse ?? 0}</strong></span>
           <span>Skipped: <strong>{promotionStatus.summary.blocked ?? 0}</strong></span>
         </>}
@@ -1992,7 +1993,7 @@ export default function ProductManagementPage() {
         {promotionStatusPanel}
         {promotionPreview && <div className="pm-promotion-preview" style={{ marginTop: '18px', padding: '14px', borderRadius: '10px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '8px', fontSize: '13px', color: '#334155' }}>
-            <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Verified candidates: <strong>{promotionPreview.summary?.verifiedCandidates ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Safely skipped: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Existing Colours skipped: <strong>{promotionPreview.summary?.skippedExistingColours ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
+            <span>Found: <strong>{promotionPreview.summary?.identitiesFound ?? 0}</strong></span><span>Verified candidates: <strong>{promotionPreview.summary?.verifiedCandidates ?? 0}</strong></span><span>Eligible: <strong>{promotionPreview.summary?.eligible ?? 0}</strong></span><span>Safely skipped: <strong>{promotionPreview.summary?.blocked ?? 0}</strong></span><span>Existing Colours skipped: <strong>{promotionPreview.summary?.skippedExistingColours ?? 0}</strong></span><span>Images to update: <strong>{promotionPreview.summary?.existingColourImagesToUpdate ?? 0}</strong></span><span>Reuse Colours: <strong>{promotionPreview.summary?.existingColoursToReuse ?? 0}</strong></span><span>New Colours: <strong>{promotionPreview.summary?.newColours ?? 0}</strong></span><span>Reuse media: <strong>{promotionPreview.summary?.mediaToReuse ?? 0}</strong></span>
           </div>
           <div style={{ marginTop: '10px', fontSize: '11px', color: '#64748b' }}>Plan fingerprint: {promotionPreview.planFingerprint}</div>
           {promotionPreview.diagnostics && <div style={{ marginTop: '10px', padding: '10px', border: '1px solid #cbd5e1', borderRadius: '8px', color: '#475569', fontSize: '12px' }}>

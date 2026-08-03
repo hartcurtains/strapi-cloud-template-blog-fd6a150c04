@@ -10,7 +10,7 @@ export const STAGING_REQUEST_TIMEOUT_MS = uploadPolicy.requestTimeoutMs;
 export const READY_STATUSES = new Set([
   'matched', 'would_create_colour', 'would_create_internal_code',
   'would_create_relation', 'would_upload_and_link', 'previously_uploaded',
-  'would_stage_identity', 'would_stage_asset', 'pending_manual_mapping', 'already_staged', 'staged',
+  'would_stage_identity', 'would_stage_asset', 'would_replace_asset', 'pending_manual_mapping', 'already_staged', 'staged', 'staged_replacement',
 ]);
 
 export function isSupportedFileName(filename) {

@@ -87,8 +87,13 @@ function existingFabricColour(identity) {
   if (!expectedName || !Array.isArray(fabric?.colours)) return null;
   return stableEntities(fabric.colours).find((colour) => normalizeCanonicalColourName(colour?.name) === expectedName) || null;
 }
-function existingColourScopeReasons(matching) {
-  return matching?.alreadyLinkedToFabric ? ['colour_already_exists_for_fabric'] : [];
+function isReplacementAsset(asset) {
+  return asset?.referenceMetadata?.replaceExistingImage === true;
+}
+function existingColourScopeReasons(matching, eligible) {
+  return matching?.alreadyLinkedToFabric && !eligible?.approvedAssets?.some(isReplacementAsset)
+    ? ['colour_already_exists_for_fabric']
+    : [];
 }
 function hasFabric(colour, fabric) {
   const expected = String(relationKey(fabric));
@@ -335,7 +340,9 @@ function eligibility(identity, mappings, requestedSupplier = mappings?.supplier 
   if (key(supplier) !== key(SUPPLIER) && (!fabricBelongsToSupplier(fabric, supplier))) reasons.push('fabric_brand_supplier_mismatch');
   const assets = Array.isArray(identity.assets) ? identity.assets : [];
   if (assets.some((asset) => asset.duplicateStatus === 'conflicting_image' || asset.conflictGroup)) reasons.push('unresolved_asset_conflict');
-  const approvedAssets = stableEntities(assets.filter((asset) => asset.importStatus === 'staged' && PROMOTABLE_ASSET_TYPES.has(asset.assetType) && (asset.media || asset.existingMedia)));
+  const stagedAssets = stableEntities(assets.filter((asset) => asset.importStatus === 'staged' && PROMOTABLE_ASSET_TYPES.has(asset.assetType) && (asset.media || asset.existingMedia)));
+  const replacementAssets = stagedAssets.filter(isReplacementAsset);
+  const approvedAssets = replacementAssets.length ? replacementAssets : stagedAssets;
   if (!approvedAssets.length) reasons.push('no_approved_promotable_asset');
   return { eligible: reasons.length === 0, reasons, approvedAssets };
 }
@@ -344,6 +351,7 @@ function buildPlan(identity, matching, eligible, scopeReasons = []) {
   const colour = matching.colour;
   const asset = eligible.approvedAssets[0];
   const fabric = first(identity.fabric);
+  const replacesExistingImage = Boolean(colour && isReplacementAsset(asset));
   return {
     identityDocumentId: identityDocumentId(identity),
     identityKey: identity.identityKey,
@@ -357,18 +365,19 @@ function buildPlan(identity, matching, eligible, scopeReasons = []) {
     internalCodeDecision: identity.internalCodeReconciled ? (identity.internalCodeGenerated ? 'generate_deterministic_code' : 'repair_to_canonical_code') : 'reuse_verified_code',
     mappingStatus: identity.mappingStatus,
     evidenceStatus: identity.evidenceStatus,
-    action: matching.conflict ? 'promotion_conflict' : colour ? 'match_existing_colour' : 'create_colour',
-    colourDecision: colour ? 'reuse_existing_colour' : 'create_new_colour',
+    action: matching.conflict ? 'promotion_conflict' : replacesExistingImage ? 'update_existing_colour_image' : colour ? 'match_existing_colour' : 'create_colour',
+    colourDecision: replacesExistingImage ? 'update_existing_colour_thumbnail' : colour ? 'reuse_existing_colour' : 'create_new_colour',
     matchPriority: matching.priority,
     existingColourDocumentId: colour?.documentId || colour?.id || null,
     stagedAssetDocumentIds: eligible.approvedAssets.map((item) => item.documentId || item.id),
     stagedMediaId: first(asset)?.media?.documentId || first(asset)?.media?.id || first(asset)?.media || first(asset)?.existingMedia?.documentId || first(asset)?.existingMedia?.id || first(asset)?.existingMedia || null,
-    assetDecision: asset ? 'reuse_staged_media' : 'blocked_no_approved_asset',
+    assetDecision: replacesExistingImage ? 'replace_existing_thumbnail' : asset ? 'reuse_staged_media' : 'blocked_no_approved_asset',
     eligible: eligible.eligible && !matching.conflict && scopeReasons.length === 0,
     skippedReasons: [...eligible.reasons, ...scopeReasons, ...(matching.conflict ? ['existing_colour_identity_conflict'] : [])],
     alreadyExistsForFabric: Boolean(matching.alreadyLinkedToFabric),
-    preserveExistingThumbnail: Boolean(colour?.thumbnail),
+    preserveExistingThumbnail: Boolean(colour?.thumbnail) && !replacesExistingImage,
     preserveExistingFabricRelations: Boolean(colour?.fabrics?.length),
+    replacesExistingImage,
   };
 }
 
@@ -388,7 +397,7 @@ function identitySnapshot(identity) {
     storedInternalColourCode: identity.storedInternalColourCode ?? identity.internalColourCode ?? null,
     internalColourCode: identity.internalColourCode || null,
     promotedColour: relationKey(identity.promotedColour) || null,
-    assets: (identity.assets || []).map((asset) => ({ documentId: asset.documentId || asset.id, updatedAt: asset.updatedAt || null, sha256: asset.sha256 || null, importStatus: asset.importStatus || null, duplicateStatus: asset.duplicateStatus || null, media: relationKey(asset.media) || relationKey(asset.existingMedia) || null })).sort((a, b) => String(a.documentId).localeCompare(String(b.documentId))),
+    assets: (identity.assets || []).map((asset) => ({ documentId: asset.documentId || asset.id, updatedAt: asset.updatedAt || null, sha256: asset.sha256 || null, importStatus: asset.importStatus || null, duplicateStatus: asset.duplicateStatus || null, replaceExistingImage: isReplacementAsset(asset), media: relationKey(asset.media) || relationKey(asset.existingMedia) || null })).sort((a, b) => String(a.documentId).localeCompare(String(b.documentId))),
   };
 }
 
@@ -490,7 +499,7 @@ async function previewPromotion(strapi, options = {}) {
       const matching = await findMatchingColour(strapi, identity, { colourRows });
       const scopeReasons = [
         ...(validation.reasonsByIdentity.get(identityDocumentId(identity)) || []),
-        ...existingColourScopeReasons(matching),
+        ...existingColourScopeReasons(matching, eligible),
       ];
       results.push(buildPlan(identity, matching, eligible, scopeReasons));
     } catch (error) {
@@ -507,6 +516,7 @@ async function previewPromotion(strapi, options = {}) {
     existingColoursToReuse: orderedResults.filter((item) => item.eligible && item.colourDecision === 'reuse_existing_colour').length,
     newColours: orderedResults.filter((item) => item.eligible && item.colourDecision === 'create_new_colour').length,
     mediaToReuse: orderedResults.filter((item) => item.eligible && item.assetDecision === 'reuse_staged_media').length,
+    existingColourImagesToUpdate: orderedResults.filter((item) => item.eligible && item.replacesExistingImage).length,
     conflicts: orderedResults.filter((item) => item.skippedReasons?.includes('existing_colour_identity_conflict') || item.skippedReasons?.includes('unresolved_asset_conflict')).length,
     skippedExistingColours: orderedResults.filter((item) => item.skippedReasons?.includes('colour_already_exists_for_fabric')).length,
     skippedExistingFabrics: new Set(orderedResults.filter((item) => item.skippedReasons?.includes('colour_already_exists_for_fabric')).map((item) => item.fabricDocumentId)).size,
@@ -563,7 +573,7 @@ async function promoteIdentity(strapi, identityId, options = {}) {
   const identity = reconcileIdentityInternalCode(await loadIdentity(strapi, identityId), mappings);
   const eligible = eligibility(identity, mappings, supplier);
   const matching = await findMatchingColour(strapi, identity, { colourRows: options.colourRows });
-  const scopeReasons = [...(options.scopeReasons || []), ...existingColourScopeReasons(matching)];
+  const scopeReasons = [...(options.scopeReasons || []), ...existingColourScopeReasons(matching, eligible)];
   const plan = buildPlan(identity, matching, eligible, scopeReasons);
   if (options.commit !== true || !plan.eligible) return { ...plan, committed: false };
   const result = await inTransaction(strapi, async (trx) => {
@@ -572,7 +582,7 @@ async function promoteIdentity(strapi, identityId, options = {}) {
     if (!latestEligible.eligible) throw new Error(`Promotion eligibility changed: ${latestEligible.reasons.join(', ')}`);
     const latestMatching = await findMatchingColour(strapi, latest, { colourRows: options.colourRows });
     if (latestMatching.conflict) throw new Error('Existing Colour identity conflicts with the staged identity.');
-    if (existingColourScopeReasons(latestMatching).length) throw new Error('colour_already_exists_for_fabric');
+    if (existingColourScopeReasons(latestMatching, latestEligible).length) throw new Error('colour_already_exists_for_fabric');
     const asset = latestEligible.approvedAssets[0];
     const fabricId = entityRelationId(latest.fabric);
     const mediaId = entityRelationId(asset.media) || entityRelationId(asset.existingMedia);
@@ -584,6 +594,7 @@ async function promoteIdentity(strapi, identityId, options = {}) {
     } else {
       const update = {};
       if (!hasFabric(colour, latest.fabric) && fabricId) update.fabrics = { connect: [fabricId] };
+      if (isReplacementAsset(asset)) update.thumbnail = mediaId;
       if (Object.keys(update).length) colour = await strapi.entityService.update(COLOUR_UID, colour.id, { data: update, transacting: trx });
     }
     const promotedRelationId = entityRelationId(colour);
@@ -599,8 +610,8 @@ async function promoteIdentity(strapi, identityId, options = {}) {
   const committedPlan = buildPlan(result.latest, { colour: result.colour, conflict: false, priority: matching.priority || 'created_colour', alreadyLinkedToFabric: true }, eligibility(result.latest, mappings, supplier), options.scopeReasons || []);
   return {
     ...committedPlan,
-    action: result.colourWasCreated ? 'create_colour' : 'match_existing_colour',
-    colourDecision: result.colourWasCreated ? 'create_new_colour' : 'reuse_existing_colour',
+    action: result.colourWasCreated ? 'create_colour' : committedPlan.replacesExistingImage ? 'update_existing_colour_image' : 'match_existing_colour',
+    colourDecision: result.colourWasCreated ? 'create_new_colour' : committedPlan.replacesExistingImage ? 'update_existing_colour_thumbnail' : 'reuse_existing_colour',
     committed: true,
     promotedColourDocumentId: result.promotedId,
   };
@@ -664,6 +675,7 @@ async function promoteVerified(strapi, options = {}) {
       existingColoursToReuse: results.filter((item) => item.eligible && item.colourDecision === 'reuse_existing_colour').length,
       newColours: results.filter((item) => item.committed && item.colourDecision === 'create_new_colour').length,
       mediaToReuse: results.filter((item) => item.committed && item.assetDecision === 'reuse_staged_media').length,
+      existingColourImagesUpdated: results.filter((item) => item.committed && item.replacesExistingImage).length,
     },
     validation: { duplicateFabricColourCodes: validation.duplicateFabricColourCodes, duplicateIdentityScopes: validation.duplicateIdentityScopes, internalCodeCollisions: validation.internalCodeCollisions },
     results,

@@ -20,7 +20,7 @@ const FABRIC_UID = 'api::fabric.fabric';
 const IDENTITY_UID = 'api::fabric-colour-identity.fabric-colour-identity';
 const ASSET_UID = 'api::fabric-colour-asset.fabric-colour-asset';
 const FILE_UID = 'plugin::upload.file';
-const COLOUR_STATUSES = new Set(['matched', 'mapped', 'pending_manual_mapping', 'would_stage_identity', 'would_stage_asset', 'already_staged', 'staged', 'exact_duplicate', 'conflicting_image']);
+const COLOUR_STATUSES = new Set(['matched', 'mapped', 'pending_manual_mapping', 'would_stage_identity', 'would_stage_asset', 'would_replace_asset', 'already_staged', 'staged', 'staged_replacement', 'exact_duplicate', 'conflicting_image']);
 const ANALYSIS_TOKEN_TTL_MS = 15 * 60 * 1000;
 
 function safeMessage(error) {
@@ -135,6 +135,7 @@ function createAnalysisToken({ supplier = SUPPLIER, mappingImportDocumentId, map
       supplierColourName: file.supplierColourName || null,
       internalColourCode: file.internalColourCode || null,
       fabricDocumentId: file.fabricDocumentId || file.resolvedFabricDocumentId || null,
+      replaceExistingImage: file.replaceExistingImage === true,
     })),
   };
   const encoded = base64url(JSON.stringify(payload));
@@ -431,14 +432,25 @@ async function inspectMatch(strapi, parsed, manifestEntry, diagnostics = {}) {
   if (stagedAsset) return { ...parsed, status: 'already_staged', identityDocumentId: identity?.documentId, assetDocumentId: stagedAsset.documentId, duplicateStatus: stagedAsset.duplicateStatus };
   if (!identity) return { ...parsed, status: 'would_stage_identity' };
   const sameLogical = await findIdentityFilenameAssets(strapi, identity, manifestEntry.relativePath);
-  if (sameLogical.some((item) => String(item.sha256).toLowerCase() !== manifestEntry.sha256)) return { ...parsed, status: 'conflicting_image', conflictGroup: conflictGroupFor(parsed, manifestEntry.relativePath), warning: 'The same logical asset name already exists with a different SHA-256.' };
+  if (sameLogical.some((item) => String(item.sha256).toLowerCase() !== manifestEntry.sha256)) {
+    if (diagnostics.replaceExistingImages === true) {
+      return {
+        ...parsed,
+        status: 'would_replace_asset',
+        identityDocumentId: identity.documentId,
+        replaceExistingImage: true,
+        warning: 'This re-upload will replace the existing image for this Fabric colour after promotion.',
+      };
+    }
+    return { ...parsed, status: 'conflicting_image', conflictGroup: conflictGroupFor(parsed, manifestEntry.relativePath), warning: 'The same logical asset name already exists with a different SHA-256.' };
+  }
   return { ...parsed, status: 'would_stage_asset', identityDocumentId: identity.documentId };
 }
 
 function summaryForRows(rows) {
   const unresolved = new Set(['unknown_mapping_product', 'fabric_not_found_in_current_catalog', 'ambiguous_catalog_fabric', 'ambiguous_filename', 'identity_conflict', 'conflicting_image']);
   const blocked = new Set(['unsupported_file', 'classified_asset', 'duplicate_in_folder', 'exact_duplicate']);
-  const ready = new Set(['matched', 'mapped', 'pending_manual_mapping', 'would_stage_identity', 'would_stage_asset', 'already_staged', 'staged']);
+  const ready = new Set(['matched', 'mapped', 'pending_manual_mapping', 'would_stage_identity', 'would_stage_asset', 'would_replace_asset', 'already_staged', 'staged', 'staged_replacement']);
   return {
     totalFiles: rows.length,
     matchedFiles: rows.filter((row) => ready.has(row.status)).length,
@@ -526,6 +538,7 @@ async function loadSupplierImporterMappings(strapi, supplier, options = {}) {
 
 async function analyseFolder(strapi, body, options = {}) {
   const supplier = selectedSupplier(body?.supplier);
+  const replaceExistingImages = body?.replaceExistingImages === true;
   const diagnosticRequestId = ensureColourDiagnosticId(options.diagnosticRequestId || body?.diagnosticRequestId);
   logColourDiagnostic(strapi, 'colour-preview-request', {
     diagnosticRequestId,
@@ -578,7 +591,7 @@ async function analyseFolder(strapi, body, options = {}) {
       rejectionReason: parsed.warning || (parsed.status === 'unknown_mapping_product' ? 'No mapping product prefix matched.' : null),
     });
     if (seenHashes.has(entry.sha256) && COLOUR_STATUSES.has(parsed.status)) parsed = { ...parsed, status: 'exact_duplicate', duplicateStatus: 'exact_duplicate', warning: 'Identical content appears more than once in this folder.' };
-    else parsed = await inspectMatch(strapi, parsed, entry, { diagnosticRequestId });
+    else parsed = await inspectMatch(strapi, parsed, entry, { diagnosticRequestId, replaceExistingImages });
     seenHashes.add(entry.sha256);
     rows.push({
       ...entry,
@@ -596,6 +609,7 @@ async function analyseFolder(strapi, body, options = {}) {
   if (body?.queueBatch) return {
     diagnosticRequestId,
     supplier,
+    replaceExistingImages,
     folderName,
     folderFingerprint: fingerprint,
     mappingSchemaVersion: mappings.colourMap.schemaVersion,
@@ -682,7 +696,7 @@ async function stageMediaAsset(strapi, descriptor, metadata, mappings, batchCont
   const supplier = selectedSupplier(mappings.supplier || mappings.colourMap?.supplier);
   const parsed = parseSupplierFilename(descriptor.name, mappings.colourMap, supplier);
   if (!COLOUR_STATUSES.has(parsed.status)) return createBlockedAsset(strapi, descriptor, metadata, parsed, batchContext);
-  const inspected = await inspectMatch(strapi, parsed, metadata);
+  const inspected = await inspectMatch(strapi, parsed, metadata, { replaceExistingImages: batchContext.replaceExistingImage === true });
   if (['identity_conflict', 'fabric_not_found_in_current_catalog', 'ambiguous_catalog_fabric', 'conflicting_image'].includes(inspected.status)) return { filename: descriptor.name, ...inspected, uploaded: false, failed: true };
   if (inspected.status === 'exact_duplicate' || inspected.status === 'already_staged') return { filename: descriptor.name, ...inspected, uploaded: false, linked: false, skipped: true };
   const resolution = await resolveSupplierFabric(strapi, parsed, supplier);
@@ -696,6 +710,45 @@ async function stageMediaAsset(strapi, descriptor, metadata, mappings, batchCont
   const sameLogical = await findIdentityFilenameAssets(strapi, identity, descriptor.name);
   const conflicting = sameLogical.find((item) => String(item.sha256).toLowerCase() !== metadata.sha256);
   if (conflicting) {
+    if (batchContext.replaceExistingImage === true) {
+      const target = sameLogical.find((item) => item.importStatus === 'promoted')
+        || [...sameLogical].sort((left, right) => String(left.documentId || left.id).localeCompare(String(right.documentId || right.id)))[0];
+      const priorMediaId = target.media?.documentId || target.media?.id || target.media || target.existingMedia?.documentId || target.existingMedia?.id || target.existingMedia || null;
+      const replacementMetadata = {
+        ...(target.referenceMetadata || {}),
+        supplier,
+        supplierProductCode: resolvedParsed.supplierProductCode,
+        supplierColourCode: resolvedParsed.supplierColourCode,
+        replaceExistingImage: true,
+        previousSha256: target.sha256,
+        previousMediaId: priorMediaId,
+        replacedAt: new Date().toISOString(),
+      };
+      const replacement = await strapi.entityService.update(ASSET_UID, target.id, { data: {
+        name: descriptor.name,
+        assetKey: assetKey(resolvedParsed, metadata.sha256),
+        originalFilename: descriptor.name,
+        normalizedFilename: normalizedAssetFilename(descriptor.name),
+        relativePath: metadata.relativePath || descriptor.name,
+        sha256: metadata.sha256,
+        fileSize: metadata.size,
+        mimeType: descriptor.mimeType,
+        assetType: resolvedParsed.assetType || 'ordinary_colour',
+        media: mediaWasReused ? null : media.id,
+        existingMedia: mediaWasReused ? media.id : null,
+        duplicateStatus: mediaWasReused ? 'exact_duplicate' : 'unique',
+        conflictGroup: null,
+        importStatus: 'staged',
+        notes: 'Explicit image replacement staged for promotion.',
+        batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null },
+        referenceMetadata: replacementMetadata,
+      } });
+      for (const prior of sameLogical) {
+        if (String(prior.id) === String(target.id)) continue;
+        await strapi.entityService.update(ASSET_UID, prior.id, { data: { duplicateStatus: 'logical_duplicate', conflictGroup: null, importStatus: 'blocked', notes: 'Superseded by an explicit image replacement.' } });
+      }
+      return { filename: descriptor.name, ...resolvedParsed, status: 'staged_replacement', uploaded: !mediaWasReused, linked: true, skipped: false, replaced: true, mediaId: media.id, mediaDocumentId: media.documentId || null, identityDocumentId: identity.documentId, assetDocumentId: replacement.documentId || target.documentId };
+    }
     const group = conflictGroupFor(resolvedParsed, descriptor.name);
     for (const prior of sameLogical) await strapi.entityService.update(ASSET_UID, prior.id, { data: { duplicateStatus: 'conflicting_image', conflictGroup: group, importStatus: 'blocked' } });
     const conflictAsset = await strapi.entityService.create(ASSET_UID, { data: { name: descriptor.name, assetKey: assetKey(resolvedParsed, metadata.sha256), originalFilename: descriptor.name, normalizedFilename: normalizedAssetFilename(descriptor.name), relativePath: metadata.relativePath || descriptor.name, sha256: metadata.sha256, fileSize: metadata.size, mimeType: descriptor.mimeType, assetType: resolvedParsed.assetType || 'ordinary_colour', duplicateStatus: 'conflicting_image', conflictGroup: group, importStatus: 'blocked', fabricColourIdentity: identity.documentId, notes: 'Conflicting image hash; media upload and promotion are blocked.', batchMetadata: { folderName: batchContext.folderName || null, folderFingerprint: batchContext.folderFingerprint || null }, referenceMetadata: { supplier } } });
@@ -968,7 +1021,7 @@ async function finaliseAshleyWildeMediaInternal(strapi, body, options = {}) {
   await persistFilePhase(strapi, mappings, body, 'media_uploaded', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, sha256: analysedFile.sha256, size: analysedFile.size, mimeType: analysedFile.mimeType, ...diagnostic });
   await persistFilePhase(strapi, mappings, body, 'finalising_staging', { mediaId: media.id, mediaDocumentId: media.documentId || null, filename, ...diagnostic });
   try {
-    const result = await timedStage(strapi, 'staging-finalise', () => stageMediaAsset(strapi, descriptor, metadata, mappings, { supplier, folderName: body.folderName, folderFingerprint: body.folderFingerprint }, media), { ...diagnostic, relativePath, mediaId: media.id, bytes: analysedFile.size });
+    const result = await timedStage(strapi, 'staging-finalise', () => stageMediaAsset(strapi, descriptor, metadata, mappings, { supplier, folderName: body.folderName, folderFingerprint: body.folderFingerprint, replaceExistingImage: analysedFile.replaceExistingImage === true }, media), { ...diagnostic, relativePath, mediaId: media.id, bytes: analysedFile.size });
     const complete = { ...result, phase: 'complete', mediaId: media.id, mediaDocumentId: media.documentId || null, relativePath };
     const history = await persistFilePhase(strapi, mappings, body, 'complete', { ...complete, ...diagnostic });
     return { result: complete, history };
@@ -997,7 +1050,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
     metadataPresent: batchMetadata.length > 0,
     analysisTokenPresent: Boolean(body?.analysisToken),
   });
-  if (!options.mappings) verifyAnalysisToken(body?.analysisToken, {
+  const analysisPayload = !options.mappings ? verifyAnalysisToken(body?.analysisToken, {
     supplier,
     mappingImportDocumentId: mappings.mappingImportDocumentId,
     mappingVersion: mappings.mappingVersion,
@@ -1005,7 +1058,7 @@ async function processBatch(strapi, descriptors, body, options = {}) {
     manifestFileCount: manifest.length,
     uploadedPaths: batchMetadata.map((item) => item.relativePath),
     adminId: options.adminId,
-  });
+  }) : null;
   safeLog(strapi, 'analysis-token-validation-complete', {
     authenticatedAdminId: options.adminId || null,
     batchFileCount: descriptors.length,
@@ -1048,7 +1101,8 @@ async function processBatch(strapi, descriptors, body, options = {}) {
       continue;
     }
     try {
-      const result = await timedStage(strapi, 'file-processing', () => processFile(strapi, descriptor, metadata, mappings, { supplier, folderName: body.folderName, folderFingerprint: fingerprint }), { fileIndex, filename: descriptor.name, bytes: descriptor.size });
+      const analysedFile = analysisPayload ? analysedFileFor(analysisPayload, relativePath) : null;
+      const result = await timedStage(strapi, 'file-processing', () => processFile(strapi, descriptor, metadata, mappings, { supplier, folderName: body.folderName, folderFingerprint: fingerprint, replaceExistingImage: analysedFile?.replaceExistingImage === true }), { fileIndex, filename: descriptor.name, bytes: descriptor.size });
       results.push({ ...result, relativePath });
     } catch (error) {
       safeLog(strapi, 'file-processing-failed', { fileIndex, filename: descriptor.name, bytes: descriptor.size, errorCode: error?.code || 'unknown' });

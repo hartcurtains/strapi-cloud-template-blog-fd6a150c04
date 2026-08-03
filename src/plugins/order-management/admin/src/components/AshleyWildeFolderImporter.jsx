@@ -115,13 +115,14 @@ function partialStageMessage(total, failures) {
 }
 
 const dateLabel = (value) => value ? new Date(value).toLocaleString() : 'Not uploaded';
-const statusTone = (status) => status === 'completed' || status === 'staged' ? colours.green
+const statusTone = (status) => ['completed', 'staged', 'staged_replacement', 'would_replace_asset'].includes(status) ? colours.green
   : ['failed', 'unsupported_file', 'identity_conflict', 'conflicting_image', 'colour_conflict', 'thumbnail_conflict'].includes(status) ? colours.red
     : ['partial', 'completed_with_skips', 'pending_manual_mapping', 'blocked', 'exact_duplicate', 'logical_duplicate'].includes(status) ? colours.amber : colours.muted;
 const statusLabel = (status) => ({
   matched: 'safely mapped', mapped: 'Fabric resolved', pending_manual_mapping: 'pending manual mapping',
   classified_asset: 'blocked filename / non-colour', blocked: 'blocked', exact_duplicate: 'exact duplicate',
   logical_duplicate: 'logical duplicate', conflicting_image: 'conflicting image', identity_conflict: 'mapping conflict',
+  would_replace_asset: 'will replace existing image', staged_replacement: 'replacement staged',
   staged: 'staged', failed: 'failed', already_staged: 'already staged',
 }[status] || String(status || 'unknown').replaceAll('_', ' '));
 const diagnosticStatuses = new Set([
@@ -155,6 +156,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
   const [availableSuppliers, setAvailableSuppliers] = useState([]);
   const [suppliersLoading, setSuppliersLoading] = useState(true);
   const [selectedSupplier, setSelectedSupplier] = useState('');
+  const [replaceExistingImages, setReplaceExistingImages] = useState(false);
   const [queuedFolder, setQueuedFolder] = useState(null);
   const [analysisState, setAnalysisState] = useState('idle');
   const [analysisBatches, setAnalysisBatches] = useState([]);
@@ -226,6 +228,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     folderFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
     fileQueueRef.current = [];
     setSelectedSupplier(supplier);
+    setReplaceExistingImages(false);
     setFolderFiles([]);
     setQueuedFolder(null);
     setAnalysis(null);
@@ -238,6 +241,21 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
     diagnosticRequestRef.current = null;
     setError('');
     if (supplier) refreshMappingMode(supplier).catch((modeError) => setError(safeErrorMessage(modeError)));
+  };
+
+  const handleReplacementChange = (event) => {
+    const replace = event.target.checked;
+    folderFiles.forEach((item) => item.previewUrl && URL.revokeObjectURL(item.previewUrl));
+    setReplaceExistingImages(replace);
+    setFolderFiles([]);
+    setAnalysis(null);
+    setAnalysisBatches([]);
+    setAnalysisState(queuedFolder ? 'pending' : 'idle');
+    setSelected(new Set());
+    setAcknowledgeSkips(false);
+    setStagingFailures([]);
+    setActivity(queuedFolder ? { phase: 'queued', current: 0, total: queuedFolder.totalFiles, filename: '', message: 'Replacement mode changed. Analyse the folder again.' } : emptyActivity);
+    setError('');
   };
 
   const reportActivity = (phase, current, total, filename, message) => {
@@ -468,6 +486,7 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
         const batchManifest = batch.map(({ relativePath, sha256, size, mimeType }) => ({ relativePath, sha256, size, mimeType }));
         const requestPayload = {
           supplier: selectedSupplier,
+          replaceExistingImages,
           folderName: queuedFolder.folderName, folderFingerprint, manifest: batchManifest,
           folderManifest: manifest, queueBatch: true, diagnosticRequestId,
         };
@@ -615,6 +634,10 @@ export default function AshleyWildeFolderImporter({ onStagingStart } = {}) {
               {availableSuppliers.map((item) => <option key={item.supplier} value={item.supplier}>{item.supplier}</option>)}
             </select>
             {!suppliersLoading && availableSuppliers.length === 0 && <small>No suppliers currently have an active colour mapping version.</small>}
+          </label>
+          <label className="aw-action-note" style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', margin: '0 0 14px', maxWidth: '720px' }}>
+            <input type="checkbox" checked={replaceExistingImages} onChange={handleReplacementChange} disabled={busy} style={{ marginTop: '3px' }} />
+            <span><strong>Replace images already in the catalogue</strong><br /><small>When a selected filename already exists for the same supplier, Fabric and colour, stage the new image and update that Colour thumbnail during promotion. Colours not included in this upload stay unchanged.</small></span>
           </label>
           <label aria-disabled={busy || !selectedSupplier} style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', padding: '10px 16px', borderRadius: '6px', border: `1px solid ${colours.line}`, background: '#fff', color: colours.text, fontWeight: 600, opacity: !selectedSupplier ? 0.5 : 1, cursor: busy ? 'wait' : !selectedSupplier ? 'not-allowed' : 'pointer' }}>
             <FolderOpen size={18} /> Select folder
