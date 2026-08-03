@@ -132,9 +132,14 @@ function logicalRows(rows) {
   return [...byDocument.values()];
 }
 
+function relationItems(value) {
+  const unwrapped = value?.data ?? value;
+  if (Array.isArray(unwrapped)) return unwrapped;
+  return unwrapped ? [unwrapped] : [];
+}
+
 function belongsToSupplier(fabric, supplier) {
-  const brands = Array.isArray(fabric?.brand) ? fabric.brand : [fabric?.brand];
-  return brands.some((brand) => normalizedNameKey(brand?.name) === normalizedNameKey(supplier));
+  return relationItems(fabric?.brand).some((brand) => normalizedNameKey(brand?.name || brand?.attributes?.name) === normalizedNameKey(supplier));
 }
 
 function productIdDerivedCodes(fabric) {
@@ -176,20 +181,28 @@ async function fabricCatalogue(strapi, supplier) {
   const query = {
     filters: {},
     populate: { brand: true },
-    // Document Service uses pagination; its `findMany` contract does not use
-    // the Entity Service `limit` option. The catalogue contains more than the
-    // default page, so omitting this would hide later Brands such as Emily Bond.
-    pagination: { page: 1, pageSize: 1000 },
   };
 
   let rows = null;
   if (typeof strapi.documents === 'function') {
     try {
       const documents = strapi.documents(FABRIC_UID);
-      const [draftRows, publishedRows] = await Promise.all([
-        documents.findMany({ ...query, status: 'draft' }),
-        documents.findMany({ ...query, status: 'published' }),
-      ]);
+      const findAll = async (status) => {
+        const pageSize = 100;
+        let total = null;
+        if (typeof documents.count === 'function') {
+          total = await documents.count({ filters: query.filters, status }).catch(() => null);
+        }
+        const found = [];
+        for (let page = 1; page <= 100; page += 1) {
+          const pageRows = await documents.findMany({ ...query, status, pagination: { page, pageSize } });
+          if (!Array.isArray(pageRows) || !pageRows.length) break;
+          found.push(...pageRows);
+          if ((total !== null && found.length >= total) || (total === null && pageRows.length < pageSize)) break;
+        }
+        return found;
+      };
+      const [draftRows, publishedRows] = await Promise.all([findAll('draft'), findAll('published')]);
       rows = logicalRows([...(draftRows || []), ...(publishedRows || [])]);
     } catch {
       // Keep a compatibility fallback for older Strapi runtimes and focused test harnesses.
