@@ -1685,6 +1685,12 @@ export default function ProductManagementPage() {
     return 'Review the exact error above, then run Preview promotion again before retrying.';
   };
 
+  const promotionStatusTotals = (preview) => (preview?.diagnostics?.statusBreakdown || []).reduce((totals, item) => ({
+    promoted: totals.promoted + Number(item.promoted || 0),
+    pending: totals.pending + Number(item.pending || 0),
+    other: totals.other + Number(item.other || 0),
+  }), { promoted: 0, pending: 0, other: 0 });
+
   const previewAshleyWildePromotion = async () => {
     const diagnosticRequestId = `colour-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
     promotionDiagnosticRequestRef.current = diagnosticRequestId;
@@ -1706,16 +1712,20 @@ export default function ProductManagementPage() {
       const eligible = preview.summary?.eligible ?? 0;
       const verifiedCandidates = preview.summary?.verifiedCandidates ?? 0;
       const identitiesFound = preview.summary?.identitiesFound ?? 0;
+      const promotedCandidates = promotionStatusTotals(preview).promoted;
+      const alreadyComplete = eligible === 0 && verifiedCandidates === 0 && promotedCandidates > 0;
       setPromotionPreview(preview);
       setPromotionStatus({
-        phase: eligible > 0 ? 'verified' : 'blocked',
-        current: eligible,
+        phase: eligible > 0 ? 'verified' : alreadyComplete ? 'complete' : 'blocked',
+        current: alreadyComplete ? promotedCandidates : eligible,
         total: preview.summary?.identitiesFound ?? eligible,
         currentItem: promotionScope.fabricName || 'All Fabrics',
         message: eligible > 0
           ? `Preview complete: ${eligible} staged Colour identity(s) are eligible for confirmation.`
-          : `Preview complete: no eligible staged Colour identities were found. ${identitiesFound} identity record(s) scanned; ${verifiedCandidates} verified candidate(s) found. Review the per-brand status below and re-enrich pending identities before promoting.`,
-        summary: preview.summary,
+          : alreadyComplete
+            ? `No new identities remain to promote. ${promotedCandidates} identity record(s) are already promoted.`
+            : `Preview complete: no eligible staged Colour identities were found. ${identitiesFound} identity record(s) scanned; ${verifiedCandidates} verified candidate(s) found. Review the per-brand status below and re-enrich pending identities before promoting.`,
+        summary: { ...preview.summary, promotedCandidates },
       });
     } catch (error) {
       const message = promotionErrorMessage(error);
@@ -1775,6 +1785,33 @@ export default function ProductManagementPage() {
       });
     } catch (error) {
       const message = promotionErrorMessage(error);
+      if (/<!DOCTYPE|Unexpected token|not valid JSON/i.test(message)) {
+        try {
+          const recoveryResponse = await adminPost(adminCatalogRoutes.ashleyWildePromotionPreview, {
+            ...promotionScope,
+            diagnosticRequestId: reviewedPlan.diagnostics?.diagnosticRequestId || promotionDiagnosticRequestRef.current,
+          });
+          const recoveryPreview = recoveryResponse.data?.data || recoveryResponse.data;
+          const expectedIds = new Set((reviewedPlan.results || []).filter((item) => item.eligible).map((item) => item.identityDocumentId));
+          const promotedIds = new Set((recoveryPreview.snapshot || []).filter((item) => expectedIds.has(item.identityDocumentId) && item.mappingStatus === 'promoted').map((item) => item.identityDocumentId));
+          const recoveryTotals = promotionStatusTotals(recoveryPreview);
+          setPromotionPreview(recoveryPreview);
+          if (expectedIds.size > 0 && promotedIds.size === expectedIds.size) {
+            await fetchProducts();
+            setPromotionStatus({ phase: 'complete', current: promotedIds.size, total: expectedIds.size, currentItem: promotionScope.fabricName || 'All Fabrics', message: `The server completed all ${promotedIds.size} planned promotion(s), but the final response was lost. Preview confirms they are promoted.`, summary: { ...recoveryPreview.summary, promotedCandidates: recoveryTotals.promoted } });
+            setPromotionError('');
+            return;
+          }
+          const recoveryMessage = promotedIds.size > 0
+            ? `The server promoted ${promotedIds.size} of ${expectedIds.size} planned identity(s) before the response was lost. Do not retry blindly; run Preview promotion again to reconcile the remaining scope.`
+            : 'The server returned an HTML error page instead of JSON. The request may still be completing; wait, then run Preview promotion again before retrying.';
+          setPromotionStatus({ phase: 'error', errorTitle: 'Promotion response lost', errorPhase: 'apply', currentItem: promotionScope.fabricName || 'All Fabrics', message: recoveryMessage, recovery: 'Run Preview promotion again before confirming any remaining work.', summary: { ...recoveryPreview.summary, promotedCandidates: recoveryTotals.promoted } });
+          setPromotionError(recoveryMessage);
+          return;
+        } catch {
+          // Fall through to the original request error if the read-only recovery preview also fails.
+        }
+      }
       setPromotionStatus({ phase: 'error', errorTitle: 'Promote verified failed', errorPhase: 'apply', currentItem: promotionScope.fabricName || 'All Fabrics', message, recovery: promotionRecoveryMessage('apply', message) });
       setPromotionError(message);
     } finally {
@@ -1969,7 +2006,7 @@ export default function ProductManagementPage() {
               <span>Active versions: <strong>{promotionPreview.diagnostics.activeVersionsFound ?? '—'}</strong></span>
               <span>Request ID: <strong>{promotionPreview.diagnostics.diagnosticRequestId || '—'}</strong></span>
             </div>
-            {promotionPreview.diagnostics.statusBreakdown?.length > 0 && <div style={{ marginTop: '8px' }}><strong style={{ color: '#334155' }}>Brand status</strong><div style={{ display: 'grid', gap: '4px', marginTop: '4px' }}>{promotionPreview.diagnostics.statusBreakdown.map((item) => <div key={item.supplier} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}><span>{item.supplier}:</span><span>{item.total} found</span><span>{item.verified} verified</span><span>{item.pending} pending</span><span>{item.mappingMatched} mapping matched</span></div>)}</div></div>}
+            {promotionPreview.diagnostics.statusBreakdown?.length > 0 && <div style={{ marginTop: '8px' }}><strong style={{ color: '#334155' }}>Brand status</strong><div style={{ display: 'grid', gap: '4px', marginTop: '4px' }}>{promotionPreview.diagnostics.statusBreakdown.map((item) => <div key={item.supplier} style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}><span>{item.supplier}:</span><span>{item.total} found</span><span>{item.verified} verified</span><span>{item.pending} pending</span><span>{item.promoted} promoted</span><span>{item.mappingMatched} mapping matched</span></div>)}</div></div>}
             {promotionPreview.diagnostics.firstIdentity && <div style={{ marginTop: '6px', display: 'flex', flexWrap: 'wrap', gap: '6px 16px' }}>
               <span>First product: <strong>{promotionPreview.diagnostics.firstIdentity.supplierProductCode || '—'}</strong></span>
               <span>First colour: <strong>{promotionPreview.diagnostics.firstIdentity.supplierColourCode || '—'}</strong></span>
