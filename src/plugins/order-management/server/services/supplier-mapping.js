@@ -176,7 +176,10 @@ async function fabricCatalogue(strapi, supplier) {
   const query = {
     filters: {},
     populate: { brand: true },
-    limit: 10000,
+    // Document Service uses pagination; its `findMany` contract does not use
+    // the Entity Service `limit` option. The catalogue contains more than the
+    // default page, so omitting this would hide later Brands such as Emily Bond.
+    pagination: { page: 1, pageSize: 1000 },
   };
 
   let rows = null;
