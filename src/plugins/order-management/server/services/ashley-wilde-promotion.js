@@ -141,6 +141,52 @@ function validateIdentitySet(identities) {
   return { reasonsByIdentity, duplicateFabricColourCodes, duplicateIdentityScopes, internalCodeCollisions };
 }
 
+function allocateSharedCollisionCode(identity, mappings, usedCodes) {
+  const officialName = normalizeCanonicalColourName(identity.officialColourName);
+  const seed = [
+    officialName || key(identity.officialColourName),
+    key(identity.supplier),
+    String(identity.fabricDocumentId || relationKey(first(identity.fabric))),
+    key(identity.supplierProductCode),
+    key(identity.supplierColourCode),
+  ].join('|');
+  const digest = crypto.createHash('sha256').update(seed, 'utf8').digest('hex').toUpperCase();
+  const entries = registryEntries(mappings);
+  for (let length = 8; length <= digest.length; length += 2) {
+    const candidate = `AW${digest.slice(0, length)}`;
+    if (usedCodes.has(candidate)) continue;
+    const owner = entries.find(([code]) => code === candidate)?.[1];
+    if (owner && normalizeCanonicalColourName(owner.colourName) !== officialName) continue;
+    mappings.codeRegistry.codes[candidate] = { colourName: identity.officialColourName, generated: true };
+    usedCodes.add(candidate);
+    return candidate;
+  }
+  throw new Error(`Unable to allocate a deterministic internal colour code for ${identity.officialColourName}`);
+}
+
+function repairSharedInternalCodeCollisions(identities, mappingsByIdentityId) {
+  const collisionIds = new Set();
+  for (const rows of groupBy(identities, (identity) => key(identity.internalColourCode)).values()) {
+    const names = new Set(rows.map((identity) => normalizeCanonicalColourName(identity.officialColourName)).filter(Boolean));
+    if (rows.length < 2 || names.size < 2) continue;
+    rows.slice().sort((left, right) => String(identityDocumentId(left)).localeCompare(String(identityDocumentId(right))))
+      .slice(1)
+      .forEach((identity) => collisionIds.add(identityDocumentId(identity)));
+  }
+  if (!collisionIds.size) return identities;
+
+  const usedCodes = new Set();
+  for (const identity of identities) if (identity.internalColourCode) usedCodes.add(normalizeToken(identity.internalColourCode));
+  for (const mappings of mappingsByIdentityId.values()) for (const [code] of registryEntries(mappings)) usedCodes.add(code);
+  return identities.map((identity) => {
+    if (!collisionIds.has(identityDocumentId(identity))) return identity;
+    const mappings = mappingsByIdentityId.get(identityDocumentId(identity));
+    if (!mappings) return identity;
+    const internalColourCode = allocateSharedCollisionCode(identity, mappings, usedCodes);
+    return { ...identity, internalColourCode, internalCodeReconciled: true, internalCodeGenerated: true };
+  });
+}
+
 function exactLegacyIdentity(row, identity) {
   const fields = ['supplier', 'fabricDocumentId', 'supplierProductCode', 'supplierColourCode'];
   const present = fields.filter((field) => row?.[field] !== undefined && row?.[field] !== null && row[field] !== '');
@@ -408,11 +454,12 @@ async function previewPromotion(strapi, options = {}) {
   }
   const candidateIdentities = (allIdentities || []).filter((identity) => identity.mappingStatus === 'verified');
   const mappingsByIdentityId = new Map();
-  const identities = candidateIdentities.map((identity) => {
+  const reconciledIdentities = candidateIdentities.map((identity) => {
     const mappings = mappingForIdentity(mappingScope, identity);
     mappingsByIdentityId.set(identityDocumentId(identity), mappings);
     return mappings ? reconcileIdentityInternalCode(identity, mappings) : identity;
   });
+  const identities = repairSharedInternalCodeCollisions(reconciledIdentities, mappingsByIdentityId);
   const reconciledById = new Map(identities.map((identity) => [identityDocumentId(identity), identity]));
   const validation = validateIdentitySet(identities);
   const results = [];
@@ -573,11 +620,12 @@ async function promoteVerified(strapi, options = {}) {
       const mappings = mappingForIdentity(mappingScope, identity);
       return { identity: mappings ? reconcileIdentityInternalCode(identity, mappings) : identity, mappings };
     });
-  const verified = verifiedEntries.map((entry) => entry.identity);
+  const mappingsByIdentityId = new Map(verifiedEntries.map((entry) => [identityDocumentId(entry.identity), entry.mappings]));
+  const verified = repairSharedInternalCodeCollisions(verifiedEntries.map((entry) => entry.identity), mappingsByIdentityId);
   const validation = validateIdentitySet(verified);
   const results = [];
-  for (const entry of verifiedEntries) {
-    const { identity, mappings } = entry;
+  for (const identity of verified) {
+    const mappings = mappingsByIdentityId.get(identityDocumentId(identity));
     if (!mappings) {
       results.push({ identityDocumentId: identityDocumentId(identity), committed: false, eligible: false, skippedReasons: ['active_mapping_missing_for_supplier'] });
       continue;
