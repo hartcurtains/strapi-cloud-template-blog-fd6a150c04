@@ -32,8 +32,8 @@ function activeVersion(supplier, slug, fabrics, mappingCount) {
 
 const versions = [
   activeVersion('Emily Bond', 'emily', [
-    { fabricName: 'Alice', fabricDocumentId: 'emily-alice', supplierProductCode: 'ALICE' },
-    { fabricName: 'Basil', fabricDocumentId: 'emily-basil', supplierProductCode: 'BASIL' },
+    { fabricName: 'Alice', fabricDocumentId: 'stale-emily-alice', supplierProductCode: 'ALICE' },
+    { fabricName: 'Basil', fabricDocumentId: 'stale-emily-basil', supplierProductCode: 'BASIL' },
   ], 2),
   activeVersion('Ashley Wilde', 'ashley', [
     { fabricName: 'Alaska', fabricDocumentId: 'ashley-alaska', supplierProductCode: 'ALASKA' },
@@ -44,8 +44,8 @@ const versions = [
 
 const mappingRows = {
   'emily-active-import': [
-    { supplier: 'Emily Bond', fabricName: 'Alice', fabricDocumentId: 'emily-alice', supplierProductCode: 'ALICE', supplierColourCode: 'ST', officialColourName: 'Stone', internalColourCode: 'ST', evidenceStatus: 'verified_official', source: 'official supplier mapping' },
-    { supplier: 'Emily Bond', fabricName: 'Basil', fabricDocumentId: 'emily-basil', supplierProductCode: 'BASIL', supplierColourCode: 'PE', officialColourName: 'Pebble', internalColourCode: 'PE', evidenceStatus: 'verified_official', source: 'official supplier mapping' },
+    { supplier: 'Emily Bond', fabricName: 'Alice', fabricDocumentId: 'stale-emily-alice', supplierProductCode: 'ALICE', supplierColourCode: 'ST', officialColourName: 'Stone', internalColourCode: 'ST', evidenceStatus: 'verified_official', source: 'official supplier mapping' },
+    { supplier: 'Emily Bond', fabricName: 'Basil', fabricDocumentId: 'stale-emily-basil', supplierProductCode: 'BASIL', supplierColourCode: 'PE', officialColourName: 'Pebble', internalColourCode: 'PE', evidenceStatus: 'verified_official', source: 'official supplier mapping' },
   ],
   'ashley-active-import': [
     { supplier: 'Ashley Wilde', fabricName: 'Alaska', fabricDocumentId: 'ashley-alaska', supplierProductCode: 'ALASKA', supplierColourCode: 'AQ', officialColourName: 'Aqua', internalColourCode: 'AQ', evidenceStatus: 'verified_official', source: 'official supplier mapping' },
@@ -158,7 +158,7 @@ test('selecting the wrong supplier reports that supplier and never searches anot
   assert.equal(row.warning, 'Ashley Wilde mapping does not contain product code ALICE.');
 });
 
-test('Fabric resolution rejects a mapped document belonging to another Brand', async () => {
+test('a stale or cross-Brand mapped ID falls back only to the exact selected-Brand Fabric name', async () => {
   const resolution = await importer.resolveSupplierFabric(strapiFor(), {
     status: 'matched',
     supplier: 'Emily Bond',
@@ -167,9 +167,52 @@ test('Fabric resolution rejects a mapped document belonging to another Brand', a
     supplierProductCode: 'ALICE',
     supplierColourCode: 'ST',
   }, 'Emily Bond');
+  assert.equal(resolution.fabric.documentId, 'emily-alice');
+  assert.equal(resolution.parsed.status, 'mapped');
+  assert.equal(resolution.parsed.fabricDocumentId, 'emily-alice');
+});
+
+test('a stale mapped ID never falls through to another Brand when the selected Brand/name is absent', async () => {
+  const resolution = await importer.resolveSupplierFabric(strapiFor(), {
+    status: 'matched',
+    supplier: 'Emily Bond',
+    fabricName: 'Not Alice',
+    fabricDocumentId: 'ashley-alice',
+    supplierProductCode: 'ALICE',
+    supplierColourCode: 'ST',
+  }, 'Emily Bond');
   assert.equal(resolution.fabric, null);
   assert.equal(resolution.parsed.status, 'fabric_not_found_in_current_catalog');
-  assert.match(resolution.parsed.warning, /current Emily Bond catalog/);
+  assert.match(resolution.parsed.warning, /No Emily Bond fabric named Not Alice/);
+});
+
+test('Fabric resolution reads draft/published Document Service records before exact-name fallback', async () => {
+  const strapi = strapiFor();
+  const entityFindMany = strapi.entityService.findMany;
+  strapi.entityService.findMany = async (uid, query) => (
+    uid === 'api::fabric.fabric' ? [] : entityFindMany(uid, query)
+  );
+  const mappingDocuments = strapi.documents;
+  strapi.documents = (uid) => {
+    if (uid !== 'api::fabric.fabric') return mappingDocuments(uid);
+    return {
+      async findMany(query) {
+        if (query.filters?.documentId) return [];
+        if (query.status === 'draft') return [{ documentId: 'emily-alice-draft', name: 'Alice', brand: { name: 'Emily Bond' } }];
+        return [];
+      },
+    };
+  };
+  const resolution = await importer.resolveSupplierFabric(strapi, {
+    status: 'matched',
+    supplier: 'Emily Bond',
+    fabricName: 'Alice',
+    fabricDocumentId: 'stale-emily-alice',
+    supplierProductCode: 'ALICE',
+    supplierColourCode: 'ST',
+  }, 'Emily Bond');
+  assert.equal(resolution.fabric.documentId, 'emily-alice-draft');
+  assert.equal(resolution.parsed.status, 'mapped');
 });
 
 test('missing selected supplier mapping uses the required supplier-specific error', async () => {

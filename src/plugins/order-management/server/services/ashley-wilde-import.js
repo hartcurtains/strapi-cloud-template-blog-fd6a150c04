@@ -241,27 +241,62 @@ function parseSupplierFilename(filename, colourMap, supplier) {
 }
 
 function brandMatchesSupplier(fabric, supplier) {
+  if (normalizedFabricName(fabric?.__supplierBrandMatch) === normalizedFabricName(supplier)) return true;
   const brands = Array.isArray(fabric?.brand) ? fabric.brand : [fabric?.brand];
   return brands.some((brand) => normalizedFabricName(brand?.name || brand?.attributes?.name) === normalizedFabricName(supplier));
 }
 
+function hasNamedBrandRelation(fabric) {
+  const brands = Array.isArray(fabric?.brand) ? fabric.brand : [fabric?.brand];
+  return brands.some((brand) => String(brand?.name || brand?.attributes?.name || '').trim());
+}
+
+async function targetedFabricCandidates(strapi, filters, supplier, trustSupplierFilter = false) {
+  const rows = [];
+  if (typeof strapi.documents === 'function') {
+    try {
+      const documents = strapi.documents(FABRIC_UID);
+      for (const status of ['draft', 'published']) {
+        const found = await documents.findMany({ filters, populate: ['brand'], status, limit: 100, start: 0 });
+        if (Array.isArray(found)) rows.push(...found);
+      }
+    } catch { /* Older runtimes and focused test harnesses use Entity Service below. */ }
+  }
+  try {
+    const found = await strapi.entityService.findMany(FABRIC_UID, {
+      filters,
+      populate: ['brand'],
+      publicationState: 'preview',
+      limit: 100,
+    });
+    if (Array.isArray(found)) rows.push(...found);
+  } catch { /* A successful Document Service lookup is sufficient. */ }
+  const candidates = logicalRows(rows).map((fabric) => (
+    trustSupplierFilter && !hasNamedBrandRelation(fabric)
+      ? { ...fabric, __supplierBrandMatch: supplier }
+      : fabric
+  ));
+  return candidates.filter((fabric) => brandMatchesSupplier(fabric, supplier));
+}
+
 async function fabricCandidatesByName(strapi, name, supplier) {
-  const rows = await strapi.entityService.findMany(FABRIC_UID, { filters: { name: { $eqi: name } }, populate: ['brand'], limit: 100 });
-  return logicalRows(rows.filter((fabric) => normalizedFabricName(fabric.name) === normalizedFabricName(name) && brandMatchesSupplier(fabric, supplier)));
+  const rows = await targetedFabricCandidates(strapi, {
+    name: { $eqi: name },
+    brand: { name: { $eqi: supplier } },
+  }, supplier, true);
+  return rows.filter((fabric) => normalizedFabricName(fabric.name) === normalizedFabricName(name));
 }
 
 async function resolveSupplierFabric(strapi, parsed, requestedSupplier = parsed?.supplier || SUPPLIER) {
   const supplier = selectedSupplier(requestedSupplier);
   if (!COLOUR_STATUSES.has(parsed.status)) return { parsed, fabric: null };
   if (parsed.fabricDocumentId) {
-    const exact = await strapi.entityService.findMany(FABRIC_UID, { filters: { documentId: parsed.fabricDocumentId }, populate: ['brand'], limit: 2 });
-    const branded = logicalRows((exact || []).filter((fabric) => brandMatchesSupplier(fabric, supplier)));
+    const branded = await targetedFabricCandidates(strapi, { documentId: parsed.fabricDocumentId }, supplier);
     if (branded.length === 1) {
       const fabric = branded[0];
       return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
     }
-    if (!branded.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `The mapped Fabric ${parsed.fabricDocumentId} does not exist in the current ${supplier} catalog.` }, fabric: null };
-    return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `The mapped Fabric ${parsed.fabricDocumentId} resolved to multiple catalogue records.` }, fabric: null };
+    if (branded.length > 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `The mapped Fabric ${parsed.fabricDocumentId} resolved to multiple catalogue records.` }, fabric: null };
   }
   const names = [parsed.fabricName, ...(parsed.approvedAliases || [])].filter(Boolean);
   let candidates = [];
@@ -269,7 +304,10 @@ async function resolveSupplierFabric(strapi, parsed, requestedSupplier = parsed?
     candidates = await fabricCandidatesByName(strapi, name, supplier);
     if (candidates.length) break;
   }
-  if (!candidates.length) return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `No ${supplier} fabric named ${parsed.fabricName} exists in the current catalog.` }, fabric: null };
+  if (!candidates.length) {
+    const mappedId = parsed.fabricDocumentId ? ` The saved mapping Fabric ${parsed.fabricDocumentId} was also unavailable.` : '';
+    return { parsed: { ...parsed, status: 'fabric_not_found_in_current_catalog', warning: `No ${supplier} fabric named ${parsed.fabricName} exists in the current catalog.${mappedId}` }, fabric: null };
+  }
   if (candidates.length !== 1) return { parsed: { ...parsed, status: 'ambiguous_catalog_fabric', warning: `Multiple ${supplier} fabrics match ${parsed.fabricName}; resolution was refused.` }, fabric: null };
   const fabric = candidates[0];
   return { parsed: { ...parsed, status: 'mapped', fabricName: fabric.name, fabricDocumentId: fabric.documentId, resolvedFabricDocumentId: fabric.documentId }, fabric };
