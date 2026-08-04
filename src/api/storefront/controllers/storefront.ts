@@ -16,25 +16,42 @@ const identity = (item: any) => ({
   key: item.key || null,
 })
 
-const findPublicOptions = async (strapi: any, uid: string, options: any = {}) => {
-  const records = await strapi.entityService.findMany(uid, {
+const findPublicOptions = async (strapi: any, section: string, uid: string, options: any = {}, requestId: string) => {
+  const query = {
     publicationState: 'live',
     limit: 200,
-    sort: options.sort || ['sort_order:asc', 'id:asc'],
+    // `id` is present in every deployed content type. Optional configurator
+    // schemas may add sort_order, but the legacy production schemas do not.
+    sort: options.sort || ['id:asc'],
     ...(options.filters ? { filters: options.filters } : {}),
     ...(options.populate ? { populate: options.populate } : {}),
-  })
-  return Array.isArray(records) ? records : []
+  }
+  const log = (level: 'info' | 'error', payload: Record<string, any>) => {
+    const logger = strapi?.log?.[level]
+    if (typeof logger === 'function') logger(JSON.stringify({ requestId, section, ...payload }))
+  }
+  log('info', { event: 'configurator-options-query-start', uid, filters: query.filters || {}, populate: query.populate || {} })
+  try {
+    const records = await strapi.entityService.findMany(uid, query)
+    if (!Array.isArray(records)) {
+      const shapeError = new Error(`Expected an array from ${uid}, received ${records === null ? 'null' : typeof records}`)
+      log('error', { event: 'configurator-options-query-failure', uid, errorName: shapeError.name, errorMessage: shapeError.message, stack: shapeError.stack })
+      throw shapeError
+    }
+    log('info', { event: 'configurator-options-query-success', uid, resultType: 'array', resultCount: records.length })
+    return records
+  } catch (error: any) {
+    log('error', { event: 'configurator-options-query-failure', uid, errorName: error?.name || 'Error', errorMessage: error?.message || String(error), stack: error?.stack || null })
+    throw error
+  }
 }
-
-const activeConfigurator = { active: true, is_configurator_option: true }
 
 function publicOption(item: any, extra: Record<string, any> = {}) {
   return {
     ...identity(item),
     label: item.display_name || item.name || item.liningType || item.colour || '',
     name: item.display_name || item.name || item.liningType || item.colour || '',
-    active: true,
+    active: item.active !== false,
     sortOrder: Number(item.sort_order) || 0,
     ...extra,
   }
@@ -45,11 +62,17 @@ function publicLiningType(item: any) {
     liningType: item.display_name || item.liningType || item.name || '',
     appliesToCurtains: item.applies_to_curtains === true,
     appliesToBlinds: item.applies_to_blinds === true,
+    thumbnail: firstMediaUrl(item.thumbnail),
+    availableColours: Array.isArray(item.lining_colour_options)
+      ? item.lining_colour_options.filter((colour: any) => colour?.active !== false).map(publicLiningColour)
+      : [],
   })
 }
 
 function publicLiningColour(item: any) {
   return publicOption(item, {
+    thumbnail: firstMediaUrl(item.thumbnail),
+    hex: item.hex || null,
     surchargePerMetre: Number(item.surcharge_per_metre) || 0,
     surchargePerMetrePence: Math.round((Number(item.surcharge_per_metre) || 0) * 100),
     blackout: item.blackout === true,
@@ -120,26 +143,37 @@ export default {
   },
 
   async configuratorOptions(ctx: any) {
+    const requestId = ctx.get('x-request-id') || `configurator-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    if (typeof strapi?.log?.info === 'function') strapi.log.info(JSON.stringify({ event: 'configurator-options-request-start', requestId, path: ctx.path }))
     const [curtainTypes, blindTypes, legacyTrimmings, linings, liningColours, mechanisations, mechanismFinishes, cushionFinishes, cushionPads, cushionSizes, pricingRules, configurations] = await Promise.all([
-      findPublicOptions(strapi, 'api::curtain-type.curtain-type', { filters: activeConfigurator, populate: { thumbnail: true } }),
-      findPublicOptions(strapi, 'api::blind-type.blind-type', { filters: activeConfigurator, populate: { thumbnail: true } }),
-      findPublicOptions(strapi, 'api::trimming.trimming', { filters: { active: true, available_for_made_to_measure: true } }),
-      findPublicOptions(strapi, 'api::lining.lining', { filters: activeConfigurator, populate: { lining_colour_options: true } }),
-      findPublicOptions(strapi, 'api::lining-colour.lining-colour', { filters: { active: true }, populate: { compatible_lining_types: true } }),
-      findPublicOptions(strapi, 'api::mechanisation.mechanisation', { filters: activeConfigurator, populate: { mechanism_finishes: true } }),
-      findPublicOptions(strapi, 'api::mechanism-finish.mechanism-finish', { filters: { active: true }, populate: { compatible_mechanisations: true } }),
-      findPublicOptions(strapi, 'api::cushion-piping.cushion-piping', { filters: { active: true } }),
-      findPublicOptions(strapi, 'api::cushion-pad.cushion-pad', { filters: { active: true } }),
-      findPublicOptions(strapi, 'api::cushion-size.cushion-size', { filters: { active: true } }),
-      findPublicOptions(strapi, 'api::pricing-rule.pricing-rule'),
-      findPublicOptions(strapi, 'api::made-to-measure-configuration.made-to-measure-configuration', { filters: { active: true } }),
+      // These filters/relations are not present in the deployed legacy schemas.
+      findPublicOptions(strapi, 'curtain-types', 'api::curtain-type.curtain-type', { populate: { thumbnail: true } }, requestId),
+      findPublicOptions(strapi, 'blind-types', 'api::blind-type.blind-type', { populate: { thumbnail: true } }, requestId),
+      findPublicOptions(strapi, 'trimmings', 'api::trimming.trimming', {}, requestId),
+      findPublicOptions(strapi, 'linings', 'api::lining.lining', { populate: { thumbnail: true, lining_colour_options: { populate: { thumbnail: true } } } }, requestId),
+      findPublicOptions(strapi, 'lining-colours', 'api::lining-colour.lining-colour', { populate: { thumbnail: true, compatible_lining_types: true } }, requestId),
+      findPublicOptions(strapi, 'mechanisations', 'api::mechanisation.mechanisation', { populate: { thumbnail: true } }, requestId),
+      findPublicOptions(strapi, 'mechanism-finishes', 'api::mechanism-finish.mechanism-finish', { populate: { thumbnail: true, compatible_mechanisations: true } }, requestId),
+      findPublicOptions(strapi, 'cushion-finishes', 'api::cushion-piping.cushion-piping', { populate: { thumbnail: true } }, requestId),
+      findPublicOptions(strapi, 'cushion-pads', 'api::cushion-pad.cushion-pad', { populate: { thumbnail: true } }, requestId),
+      findPublicOptions(strapi, 'cushion-sizes', 'api::cushion-size.cushion-size', { populate: { thumbnail: true } }, requestId),
+      findPublicOptions(strapi, 'pricing-rules', 'api::pricing-rule.pricing-rule', {}, requestId),
+      findPublicOptions(strapi, 'configurations', 'api::made-to-measure-configuration.made-to-measure-configuration', { filters: { active: true } }, requestId),
     ])
     const configurationByType = Object.fromEntries(configurations.map((item: any) => [item.product_type, item]))
-    const curtainLiningTypes = linings.filter((item: any) => item.applies_to_curtains === true).map(publicLiningType)
-    const blindLiningTypes = linings.filter((item: any) => item.applies_to_blinds === true).map(publicLiningType)
-    const curtainLiningColours = liningColours.filter((item: any) => item.applies_to_curtains === true).map(publicLiningColour)
-    const blindLiningColours = liningColours.filter((item: any) => item.applies_to_blinds === true).map(publicLiningColour)
+    const activeLinings = linings.filter((item: any) => item.active !== false)
+    const activeLiningColours = liningColours.filter((item: any) => item.active !== false)
+    const curtainLiningTypes = activeLinings.filter((item: any) => item.applies_to_curtains === true).map(publicLiningType)
+    const blindLiningTypes = activeLinings.filter((item: any) => item.applies_to_blinds === true).map(publicLiningType)
+    const curtainLiningColours = activeLiningColours.filter((item: any) => item.applies_to_curtains === true).map(publicLiningColour)
+    const blindLiningColours = activeLiningColours.filter((item: any) => item.applies_to_blinds === true).map(publicLiningColour)
     const activeCushionFinishes = cushionFinishes.filter((item: any) => ['piped', 'unpiped'].includes(item.type))
+    const sampleConfiguration = configurationByType.fabric_sample
+    const parsedSampleUnitPricePence = Number(sampleConfiguration?.sample_unit_price_pence)
+    const parsedSampleMaximumQuantity = Number(sampleConfiguration?.sample_max_quantity)
+    const sampleUnitPricePence = Number.isSafeInteger(parsedSampleUnitPricePence) && parsedSampleUnitPricePence >= 0 ? parsedSampleUnitPricePence : null
+    const sampleMaximumQuantity = Number.isSafeInteger(parsedSampleMaximumQuantity) && parsedSampleMaximumQuantity >= 1 ? parsedSampleMaximumQuantity : null
+    const sampleConfigured = Boolean(sampleConfiguration && sampleUnitPricePence !== null && sampleMaximumQuantity !== null)
     const data = {
       curtain: {
         curtainTypes: curtainTypes.map((item: any) => publicOption(item, { fullnessMultiplier: Number(item.fullness_multiplier) || 0, thumbnail: firstMediaUrl(item.thumbnail) })),
@@ -166,14 +200,14 @@ export default {
         delivery: configMetadata(configurationByType.cushion, 'cushion'),
       },
       sample: {
-        enabled: Boolean(configurationByType.fabric_sample && configurationByType.fabric_sample.sample_unit_price_pence != null && Number.isSafeInteger(Number(configurationByType.fabric_sample.sample_unit_price_pence)) && Number(configurationByType.fabric_sample.sample_unit_price_pence) >= 0 && Number(configurationByType.fabric_sample.sample_max_quantity) >= 1),
-        unitPrice: configurationByType.fabric_sample?.sample_unit_price_pence != null ? Number(configurationByType.fabric_sample.sample_unit_price_pence) / 100 : null,
-        unitPricePence: configurationByType.fabric_sample?.sample_unit_price_pence ?? null,
+        enabled: sampleConfigured,
+        unitPrice: sampleUnitPricePence !== null ? sampleUnitPricePence / 100 : null,
+        unitPricePence: sampleUnitPricePence,
         currency: 'GBP',
-        maximumQuantity: configurationByType.fabric_sample?.sample_max_quantity ?? null,
-        maxQuantity: configurationByType.fabric_sample?.sample_max_quantity ?? null,
-        unavailableReason: configurationByType.fabric_sample?.sample_unit_price_pence != null && configurationByType.fabric_sample?.sample_max_quantity != null ? null : 'Fabric sample ordering is not configured.',
-        delivery: configMetadata(configurationByType.fabric_sample, 'fabric-sample'),
+        maximumQuantity: sampleMaximumQuantity,
+        maxQuantity: sampleMaximumQuantity,
+        unavailableReason: sampleConfigured ? null : 'Fabric sample ordering is not configured.',
+        delivery: configMetadata(sampleConfiguration, 'fabric-sample'),
       },
       // Legacy keys remain stable for existing consumers, but disabled option
       // collections are empty so they cannot be selected by new configurators.

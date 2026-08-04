@@ -21,17 +21,26 @@
     },
     "colour": {
       "type": "string",
-      "required": true
+      "required": false
+    },
+    "key": { "type": "string", "unique": true },
+    "display_name": { "type": "string" },
+    "active": { "type": "boolean", "default": true },
+    "sort_order": { "type": "integer", "default": 0 },
+    "is_configurator_option": { "type": "boolean", "default": false },
+    "applies_to_curtains": { "type": "boolean", "default": true },
+    "applies_to_blinds": { "type": "boolean", "default": true },
+    "lining_colour_options": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::lining-colour.lining-colour",
+      "mappedBy": "compatible_lining_types"
     },
     "thumbnail": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": [
-        "images",
-        "files",
-        "videos",
-        "audios"
-      ]
+      "required": false,
+      "allowedTypes": ["images"]
     },
     "pricing_rule": {
       "type": "relation",

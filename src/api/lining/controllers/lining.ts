@@ -4,19 +4,22 @@
 
 import { factories } from '@strapi/strapi'
 
+const liningPopulate = (query: any): Record<string, any> => {
+  const requested = query?.populate
+  const populateQuery = (typeof requested === 'object' && requested !== null && !Array.isArray(requested))
+    ? requested as Record<string, any>
+    : {}
+  return {
+    ...populateQuery,
+    thumbnail: true,
+    lining_colour_options: { populate: { thumbnail: true } },
+  }
+}
+
 export default factories.createCoreController('api::lining.lining', ({ strapi }) => ({
   async find(ctx) {
     const { query } = ctx
-    const populateQuery = (typeof query.populate === 'object' && query.populate !== null && !Array.isArray(query.populate)) 
-      ? (query.populate as Record<string, any>) 
-      : {}
-    
-    // Ensure all relations are populated
-    const populate: Record<string, any> = {
-      ...populateQuery,
-      // Add any relations that linings might have
-    }
-    
+    const populate = liningPopulate(query)
     const sanitizedQuery = await this.sanitizeQuery(ctx)
     sanitizedQuery.populate = populate
     
@@ -28,16 +31,7 @@ export default factories.createCoreController('api::lining.lining', ({ strapi })
   async findOne(ctx) {
     const { id } = ctx.params
     const { query } = ctx
-    const populateQuery = (typeof query.populate === 'object' && query.populate !== null && !Array.isArray(query.populate)) 
-      ? (query.populate as Record<string, any>) 
-      : {}
-    
-    // Ensure all relations are populated
-    const populate: Record<string, any> = {
-      ...populateQuery,
-      // Add any relations that linings might have
-    }
-    
+    const populate = liningPopulate(query)
     const sanitizedQuery = await this.sanitizeQuery(ctx)
     sanitizedQuery.populate = populate
     

@@ -1,0 +1,34 @@
+{
+  "kind": "collectionType",
+  "collectionName": "lining_colours",
+  "info": {
+    "singularName": "lining-colour",
+    "pluralName": "lining-colours",
+    "displayName": "Lining Colour / Finish"
+  },
+  "options": { "draftAndPublish": true },
+  "pluginOptions": {},
+  "attributes": {
+    "key": { "type": "string", "required": true, "unique": true },
+    "display_name": { "type": "string", "required": true },
+    "hex": { "type": "string", "required": false },
+    "active": { "type": "boolean", "default": true },
+    "sort_order": { "type": "integer", "default": 0 },
+    "blackout": { "type": "boolean", "default": false },
+    "surcharge_per_metre": { "type": "decimal", "required": true, "default": 7 },
+    "applies_to_curtains": { "type": "boolean", "default": true },
+    "applies_to_blinds": { "type": "boolean", "default": true },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "compatible_lining_types": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::lining.lining",
+      "inversedBy": "lining_colour_options"
+    }
+  }
+}
