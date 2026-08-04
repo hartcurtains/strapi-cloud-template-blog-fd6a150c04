@@ -60,6 +60,9 @@ function publicOption(item: any, extra: Record<string, any> = {}) {
 function publicLiningType(item: any) {
   return publicOption(item, {
     liningType: item.display_name || item.liningType || item.name || '',
+    pricePerMetre: Number(item.price_per_metre) || 0,
+    pricePerMetrePence: Math.round((Number(item.price_per_metre) || 0) * 100),
+    blackout: item.blackout === true,
     appliesToCurtains: item.applies_to_curtains === true,
     appliesToBlinds: item.applies_to_blinds === true,
     thumbnail: firstMediaUrl(item.thumbnail),
@@ -73,9 +76,6 @@ function publicLiningColour(item: any) {
   return publicOption(item, {
     thumbnail: firstMediaUrl(item.thumbnail),
     hex: item.hex || null,
-    surchargePerMetre: Number(item.surcharge_per_metre) || 0,
-    surchargePerMetrePence: Math.round((Number(item.surcharge_per_metre) || 0) * 100),
-    blackout: item.blackout === true,
     appliesToCurtains: item.applies_to_curtains === true,
     appliesToBlinds: item.applies_to_blinds === true,
     compatibleLiningTypeKeys: Array.isArray(item.compatible_lining_types)
@@ -100,13 +100,13 @@ function configMetadata(config: any, fallbackKey: string) {
   }
 }
 
-function liningSurchargeRules(colours: any[]) {
-  const values = colours.map((colour: any) => ({ key: colour.key || colour.documentId || colour.id, perMetre: Number(colour.surchargePerMetre ?? colour.surcharge_per_metre) || 0 }))
+function liningPricingRules(linings: any[]) {
+  const values = linings.map((lining: any) => ({ key: lining.key || lining.documentId || lining.id, perMetre: Number(lining.pricePerMetre ?? lining.price_per_metre) || 0 }))
   const uniqueValues = [...new Set(values.map(item => item.perMetre))]
   return {
-    liningColourPerMetre: uniqueValues.length === 1 ? uniqueValues[0] : null,
-    byColourKey: Object.fromEntries(values.map(item => [item.key, item.perMetre])),
-    source: 'lining-colour.surcharge_per_metre',
+    liningPerMetre: uniqueValues.length === 1 ? uniqueValues[0] : null,
+    byLiningTypeKey: Object.fromEntries(values.map(item => [item.key, item.perMetre])),
+    source: 'lining.price_per_metre',
   }
 }
 
@@ -179,7 +179,7 @@ export default {
         curtainTypes: curtainTypes.map((item: any) => publicOption(item, { fullnessMultiplier: Number(item.fullness_multiplier) || 0, thumbnail: firstMediaUrl(item.thumbnail) })),
         liningTypes: curtainLiningTypes,
         liningColours: curtainLiningColours,
-        surchargeRules: liningSurchargeRules(curtainLiningColours),
+        surchargeRules: liningPricingRules(curtainLiningTypes),
         delivery: configMetadata(configurationByType.curtain, 'curtain'),
         disabledOptionCategories: ['trimmings', 'curtain_poles', 'curtain_tracks'],
       },
@@ -189,7 +189,7 @@ export default {
         mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item, { compatibleMechanismKeys: Array.isArray(item.compatible_mechanisations) ? item.compatible_mechanisations.map((mechanism: any) => mechanism.key || mechanism.documentId || mechanism.id).filter(Boolean) : [] })),
         liningTypes: blindLiningTypes,
         liningColours: blindLiningColours,
-        surchargeRules: liningSurchargeRules(blindLiningColours),
+        surchargeRules: liningPricingRules(blindLiningTypes),
         delivery: configMetadata(configurationByType.blind, 'blind'),
         disabledOptionCategories: ['trimmings'],
       },

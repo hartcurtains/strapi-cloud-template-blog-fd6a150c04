@@ -28,6 +28,7 @@
     },
     "key": { "type": "string", "unique": true },
     "display_name": { "type": "string" },
+    "blackout": { "type": "boolean", "default": false },
     "active": { "type": "boolean", "default": true },
     "sort_order": {
       "type": "integer",

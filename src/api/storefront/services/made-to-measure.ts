@@ -231,11 +231,12 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
 
   const selectedOptions: Record<string, any> = {}
   const lining = await validateLining(strapi, line, productType, issues)
-  if (lining.type) selectedOptions.liningType = optionSnapshot(lining.type)
+  if (lining.type) selectedOptions.liningType = optionSnapshot(lining.type, {
+    unitPrice: numberValue(lining.type.price_per_metre),
+    unitPricePence: toPence(lining.type.price_per_metre),
+    blackout: lining.type.blackout === true,
+  })
   if (lining.colour) selectedOptions.liningColour = optionSnapshot(lining.colour, {
-    unitPrice: numberValue(lining.colour.surcharge_per_metre),
-    unitPricePence: toPence(lining.colour.surcharge_per_metre),
-    blackout: lining.colour.blackout === true,
   })
 
   if (productType === 'curtain') {
@@ -494,8 +495,8 @@ async function calculateLine(strapi: any, line: any, index: number) {
     accessories.push({ type: 'cushion_pad', label: validated.selectedOptions.cushionPad.label, quantity, unit: 'item', unitPrice: fromPence(unit), unitPricePence: unit, total: fromPence(multiplyPence(unit, quantity)), totalPence: multiplyPence(unit, quantity) })
   }
   const liningMetres = productType === 'cushion' ? 0 : materialMetres
-  if (validated.selectedOptions.liningColour) {
-    const unit = validated.selectedOptions.liningColour.unitPricePence || 0
+  if (validated.selectedOptions.liningType) {
+    const unit = validated.selectedOptions.liningType.unitPricePence || 0
     const total = multiplyPence(unit, liningMetres * quantity)
     accessories.push({
       type: 'lining',

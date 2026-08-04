@@ -26,8 +26,6 @@
         "content-manager": { "visible": false }
       }
     },
-    "blackout": { "type": "boolean", "default": false },
-    "surcharge_per_metre": { "type": "decimal", "required": true, "default": 7 },
     "applies_to_curtains": { "type": "boolean", "default": true },
     "applies_to_blinds": { "type": "boolean", "default": true },
     "thumbnail": {

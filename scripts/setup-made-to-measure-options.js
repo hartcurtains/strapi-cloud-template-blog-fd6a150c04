@@ -12,11 +12,12 @@ const { createStrapi } = require('@strapi/strapi');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const records = [
-  { uid: 'api::lining.lining', key: 'lined', data: { key: 'lined', liningType: 'Lined', display_name: 'Lined', active: true, sort_order: 10, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
+  { uid: 'api::lining.lining', key: 'lined', data: { key: 'lined', liningType: 'Full lining', display_name: 'Full lining', active: true, sort_order: 10, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
   { uid: 'api::lining.lining', key: 'interlined', data: { key: 'interlined', liningType: 'Interlined', display_name: 'Interlined', active: true, sort_order: 20, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
+  { uid: 'api::lining.lining', key: 'blackout', data: { key: 'blackout', liningType: 'Blackout Lining', display_name: 'Blackout Lining', blackout: true, active: true, sort_order: 30, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
   ...[
-    ['white', 'White', '#ffffff', false, 10], ['pale-ivory', 'Pale Ivory', '#f5f0dd', false, 20], ['ivory', 'Ivory', '#ece4ca', false, 30], ['cream', 'Cream', '#e8d8ad', false, 40], ['blackout-lining', 'Blackout Lining', '#303030', true, 50],
-  ].map(([key, display_name, hex, blackout, sort_order]) => ({ uid: 'api::lining-colour.lining-colour', key, data: { key, display_name, hex, active: true, sort_order, blackout, surcharge_per_metre: 7, applies_to_curtains: true, applies_to_blinds: true } })),
+    ['white', 'White', '#ffffff', 10], ['pale-ivory', 'Pale Ivory', '#f5f0dd', 20], ['ivory', 'Ivory', '#ece4ca', 30], ['cream', 'Cream', '#e8d8ad', 40],
+  ].map(([key, display_name, hex, sort_order]) => ({ uid: 'api::lining-colour.lining-colour', key, data: { key, display_name, hex, active: true, sort_order, applies_to_curtains: true, applies_to_blinds: true } })),
   { uid: 'api::blind-type.blind-type', key: 'stacked', data: { key: 'stacked', name: 'Stacked', display_name: 'Stacked', active: true, sort_order: 10, is_configurator_option: true } },
   { uid: 'api::blind-type.blind-type', key: 'waterfall', data: { key: 'waterfall', name: 'Waterfall', display_name: 'Waterfall', active: true, sort_order: 20, is_configurator_option: true } },
   { uid: 'api::mechanisation.mechanisation', key: 'corded-left', data: { key: 'corded-left', name: 'Corded Left', display_name: 'Corded Left', price: 0, active: true, sort_order: 10, is_configurator_option: true, mechanism_family: 'corded' } },
@@ -47,8 +48,58 @@ async function findByKey(strapi, uid, key) {
   return Array.isArray(found) ? found[0] || null : null;
 }
 
+const legacyLiningNames = {
+  lined: ['full lining', 'lined'],
+  interlined: ['interlining', 'interlined'],
+};
+
+function normaliseLiningName(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+async function findLegacyLining(strapi, key) {
+  const names = legacyLiningNames[key] || [];
+  if (!names.length) return null;
+  const found = await strapi.entityService.findMany('api::lining.lining', { limit: 200 });
+  return Array.isArray(found)
+    ? found.find(item => item.active !== false && !item.key && names.includes(normaliseLiningName(item.liningType))) || null
+    : null;
+}
+
+async function findExisting(strapi, record) {
+  const keyed = await findByKey(strapi, record.uid, record.key);
+  if (keyed) return keyed;
+  if (record.uid === 'api::lining.lining') return findLegacyLining(strapi, record.key);
+  return null;
+}
+
+async function reconcileLegacyLining(strapi, record, apply) {
+  if (record.uid !== 'api::lining.lining') return null;
+  const keyed = await findByKey(strapi, record.uid, record.key);
+  const legacy = await findLegacyLining(strapi, record.key);
+  if (!legacy || !keyed || legacy.id === keyed.id) return null;
+
+  if (!apply) return { action: 'would-migrate', key: record.key, fromId: legacy.id, disableId: keyed.id };
+
+  // Preserve the earlier keyed record, but take it out of the live option set
+  // so the manually priced legacy record becomes the single canonical option.
+  await strapi.entityService.update(record.uid, keyed.id, {
+    data: { key: null, active: false, is_configurator_option: false },
+  });
+  const migrated = await strapi.entityService.update(record.uid, legacy.id, { data: record.data });
+  return { action: 'migrated', key: record.key, fromId: legacy.id, disableId: keyed.id, id: migrated.id };
+}
+
+async function retireLegacyBlackoutColour(strapi, apply) {
+  const legacy = await findByKey(strapi, 'api::lining-colour.lining-colour', 'blackout-lining');
+  if (!legacy || legacy.active === false) return null;
+  if (!apply) return { action: 'would-retire', key: 'blackout-lining', id: legacy.id };
+  await strapi.entityService.update('api::lining-colour.lining-colour', legacy.id, { data: { active: false } });
+  return { action: 'retired', key: 'blackout-lining', id: legacy.id };
+}
+
 async function upsert(strapi, record, apply) {
-  const existing = await findByKey(strapi, record.uid, record.key);
+  const existing = await findExisting(strapi, record);
   if (existing) {
     const updateData = Object.fromEntries(Object.entries(record.data).filter(([field]) => field !== 'thumbnail'));
     const hasChanges = Object.entries(updateData).some(([field, value]) => JSON.stringify(existing[field] ?? null) !== JSON.stringify(value ?? null));
@@ -79,14 +130,21 @@ async function main(argv = process.argv.slice(2)) {
   await app.register();
   await app.bootstrap();
   try {
+    const migrations = [];
+    for (const record of records.filter(item => item.uid === 'api::lining.lining')) {
+      const migration = await reconcileLegacyLining(app, record, apply);
+      if (migration) migrations.push(migration);
+    }
+    const retiredBlackoutColour = await retireLegacyBlackoutColour(app, apply);
+    if (retiredBlackoutColour) migrations.push(retiredBlackoutColour);
     const results = [];
     for (const record of records) results.push(await upsert(app, record, apply));
     const byKey = new Map(results.filter(item => item.id).map(item => [item.key, item]));
-    const liningTypes = ['lined', 'interlined'].map(key => byKey.get(key)).filter(Boolean);
+    const liningTypes = ['lined', 'interlined', 'blackout'].map(key => byKey.get(key)).filter(Boolean);
     const cordedMechanisms = ['corded-left', 'corded-right'].map(key => byKey.get(key)).filter(Boolean);
-    for (const key of ['white', 'pale-ivory', 'ivory', 'cream', 'blackout-lining']) await connectRelation(app, 'api::lining-colour.lining-colour', key, 'compatible_lining_types', liningTypes, apply);
+    for (const key of ['white', 'pale-ivory', 'ivory', 'cream']) await connectRelation(app, 'api::lining-colour.lining-colour', key, 'compatible_lining_types', liningTypes, apply);
     for (const key of ['chrome', 'brass']) await connectRelation(app, 'api::mechanism-finish.mechanism-finish', key, 'compatible_mechanisations', cordedMechanisms, apply);
-    console.log(JSON.stringify({ mode: apply ? 'apply' : 'dry-run', created: results.filter(item => item.action === 'created').map(item => `${item.uid}:${item.key}`), updated: results.filter(item => item.action === 'updated').map(item => `${item.uid}:${item.key}`), wouldUpdate: results.filter(item => item.action === 'would-update').map(item => `${item.uid}:${item.key}`), existing: results.filter(item => item.action === 'exists').map(item => `${item.uid}:${item.key}`), records: records.length }, null, 2));
+    console.log(JSON.stringify({ mode: apply ? 'apply' : 'dry-run', migrations, created: results.filter(item => item.action === 'created').map(item => `${item.uid}:${item.key}`), updated: results.filter(item => item.action === 'updated').map(item => `${item.uid}:${item.key}`), wouldUpdate: results.filter(item => item.action === 'would-update').map(item => `${item.uid}:${item.key}`), existing: results.filter(item => item.action === 'exists').map(item => `${item.uid}:${item.key}`), records: records.length }, null, 2));
     return results;
   } finally {
     await app.destroy();
