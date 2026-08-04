@@ -22,6 +22,8 @@ export default {
       method: 'POST',
       path: '/orders',
       handler: 'order.create',
+      // Authentication is enforced in the controller so the route remains
+      // compatible with this Strapi 5 project's route conventions.
       config: {},
     },
     {

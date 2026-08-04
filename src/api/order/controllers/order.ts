@@ -3,6 +3,7 @@
  */
 
 import { factories } from '@strapi/strapi';
+import { calculateMadeToMeasureQuote, calculateOrderQuote, isAuthoritativeMadeToMeasureLine, isSampleLine, MadeToMeasureValidationError } from '../../storefront/services/made-to-measure';
 
 export default factories.createCoreController("api::order.order", ({ strapi }) => ({
   async find(ctx) {
@@ -25,6 +26,7 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
 
   async create(ctx) {
     try {
+      if (!ctx.state.user?.id) return ctx.unauthorized('Sign-in is required before checkout.');
       const { body } = ctx.request;
       const submitted = body?.data || body;
       if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted)) {
@@ -51,10 +53,43 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       );
       orderData.statusOrder = 'pending';
       orderData.paymentStatus = 'pending';
+      orderData.user = ctx.state.user.id;
+
+      const orderItems = Array.isArray(orderData.orderItems) ? orderData.orderItems : [];
+      const sampleItems = orderItems.filter(isSampleLine);
+      if (sampleItems.length) {
+        // A mixed checkout is a single server quote: configured made-to-measure
+        // products, ordinary fabric and samples are each re-priced from their
+        // live records before the combined subtotal and total are persisted.
+        const quote = await calculateOrderQuote(strapi, { items: orderItems, shipping: submitted.shipping });
+        orderData.orderItems = quote.items;
+        orderData.subtotal = quote.breakdown.subtotal;
+        orderData.shipping = quote.breakdown.shipping;
+        orderData.total = quote.breakdown.total;
+        orderData.selected_options = quote.selectedOptions;
+        orderData.quote_breakdown = quote.breakdown;
+        orderData.sample_pricing_snapshot = quote.samplePricingSnapshot;
+        orderData.pricing_version = quote.pricingVersion;
+      }
+
+      // New made-to-measure payloads opt into the authoritative calculator. Old
+      // catalogue orders retain their existing orderItems/price shape and remain
+      // readable without a backfill.
+      const requiresAuthoritativeQuote = orderItems.some(isAuthoritativeMadeToMeasureLine);
+      if (requiresAuthoritativeQuote && !sampleItems.length) {
+        const quote = await calculateMadeToMeasureQuote(strapi, { items: orderItems, shipping: submitted.shipping });
+        orderData.subtotal = quote.breakdown.subtotal;
+        orderData.shipping = quote.breakdown.delivery.total;
+        orderData.total = quote.breakdown.total;
+        orderData.selected_options = quote.items.map((item: any) => item.selectedOptions);
+        orderData.quote_breakdown = quote.breakdown;
+        orderData.pricing_version = quote.pricingVersion;
+      }
 
       const order = await strapi.entityService.create('api::order.order', { data: orderData as any });
       return ctx.send({ data: order });
     } catch (error) {
+      if (error instanceof MadeToMeasureValidationError) return ctx.badRequest({ error: error.message, details: error.issues });
       console.error('❌ Order Controller - Error creating order:', error);
       console.error('❌ Order Controller - Error details:', error.message);
       console.error('❌ Order Controller - Error stack:', error.stack);

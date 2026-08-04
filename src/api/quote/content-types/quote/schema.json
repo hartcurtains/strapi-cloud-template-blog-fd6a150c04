@@ -1,0 +1,28 @@
+{
+  "kind": "collectionType",
+  "collectionName": "quotes",
+  "info": {
+    "singularName": "quote",
+    "pluralName": "quotes",
+    "displayName": "Quote"
+  },
+  "options": { "draftAndPublish": false },
+  "pluginOptions": {},
+  "attributes": {
+    "quote_number": { "type": "string", "required": true, "unique": true },
+    "status": { "type": "enumeration", "enum": ["draft", "issued", "expired", "converted"], "default": "issued" },
+    "items": { "type": "json", "required": true },
+    "selected_options": { "type": "json" },
+    "quote_breakdown": { "type": "json", "required": true },
+    "subtotal": { "type": "decimal", "required": true },
+    "shipping": { "type": "decimal", "required": true, "default": 0 },
+    "total": { "type": "decimal", "required": true },
+    "pricing_version": { "type": "string" },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "quotes"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "made_to_measure_configurations",
+  "info": {
+    "singularName": "made-to-measure-configuration",
+    "pluralName": "made-to-measure-configurations",
+    "displayName": "Made-to-Measure Configuration",
+    "description": "Fabric sample price is per individual fabric sample. The maximum applies to one active basket/order, not a customer's lifetime purchases."
+  },
+  "options": { "draftAndPublish": true },
+  "pluginOptions": {},
+  "attributes": {
+    "key": { "type": "string", "required": true, "unique": true },
+    "product_type": {
+      "type": "enumeration",
+      "required": true,
+      "enum": ["curtain", "blind", "cushion", "fabric_sample"]
+    },
+    "display_name": { "type": "string", "required": true },
+    "active": { "type": "boolean", "default": true },
+    "delivery_lead_time": { "type": "string" },
+    "delivery_message": { "type": "text" },
+    "delivery_returns_copy": { "type": "text" },
+    "disabled_option_categories": { "type": "json" },
+    "sample_max_quantity": { "type": "integer" },
+    "sample_unit_price_pence": {
+      "type": "integer",
+      "min": 0,
+      "description": "Sample unit price in pence (for example, 100 is £1.00 per fabric sample)."
+    },
+    "pricing_version": { "type": "string" }
+  }
+}

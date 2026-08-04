@@ -83,11 +83,21 @@
       "type": "json",
       "required": true
     },
+    "selected_options": { "type": "json" },
+    "quote_breakdown": { "type": "json" },
+    "sample_pricing_snapshot": { "type": "json" },
+    "pricing_version": { "type": "string" },
     "fabrics": {
       "type": "relation",
       "relation": "manyToMany",
       "target": "api::fabric.fabric",
       "mappedBy": "orders"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "orders"
     }
   }
 }
