@@ -11,9 +11,21 @@
   "attributes": {
     "key": { "type": "string", "required": true, "unique": true },
     "display_name": { "type": "string", "required": true },
-    "hex": { "type": "string", "required": false },
+    "hex": {
+      "type": "string",
+      "required": false,
+      "pluginOptions": {
+        "content-manager": { "visible": false }
+      }
+    },
     "active": { "type": "boolean", "default": true },
-    "sort_order": { "type": "integer", "default": 0 },
+    "sort_order": {
+      "type": "integer",
+      "default": 0,
+      "pluginOptions": {
+        "content-manager": { "visible": false }
+      }
+    },
     "blackout": { "type": "boolean", "default": false },
     "surcharge_per_metre": { "type": "decimal", "required": true, "default": 7 },
     "applies_to_curtains": { "type": "boolean", "default": true },

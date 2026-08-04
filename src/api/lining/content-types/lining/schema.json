@@ -21,12 +21,21 @@
     },
     "colour": {
       "type": "string",
-      "required": false
+      "required": false,
+      "pluginOptions": {
+        "content-manager": { "visible": false }
+      }
     },
     "key": { "type": "string", "unique": true },
     "display_name": { "type": "string" },
     "active": { "type": "boolean", "default": true },
-    "sort_order": { "type": "integer", "default": 0 },
+    "sort_order": {
+      "type": "integer",
+      "default": 0,
+      "pluginOptions": {
+        "content-manager": { "visible": false }
+      }
+    },
     "is_configurator_option": { "type": "boolean", "default": false },
     "applies_to_curtains": { "type": "boolean", "default": true },
     "applies_to_blinds": { "type": "boolean", "default": true },
