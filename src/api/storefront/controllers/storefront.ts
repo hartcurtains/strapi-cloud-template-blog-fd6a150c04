@@ -198,7 +198,9 @@ export default {
     try {
       const body = ctx.request.body?.data || ctx.request.body || {}
       const quote = await strapi.service('api::pricing-rule.pricing-rule').calculateMadeToMeasureQuote(body)
-      const quoteRecord = await strapi.entityService.create('api::quote.quote', {
+      // The quote content type is present at runtime; older generated Strapi
+      // typings do not include this newly added UID yet.
+      const quoteRecord = await strapi.entityService.create('api::quote.quote' as any, {
         data: {
           quote_number: `Q-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
           items: quote.items,
