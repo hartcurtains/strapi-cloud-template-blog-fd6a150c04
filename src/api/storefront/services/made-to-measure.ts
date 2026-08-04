@@ -214,7 +214,7 @@ async function validateLining(strapi: any, line: any, productType: string, issue
   return { type, colour }
 }
 
-export async function validateLineOptions(strapi: any, line: any, productTypeInput: string, issues: ValidationIssue[] = []) {
+export async function validateLineOptions(strapi: any, line: any, productTypeInput: string, issues: ValidationIssue[] = []): Promise<{ productType: string, issues: ValidationIssue[], selectedOptions: Record<string, any>, lining?: any }> {
   const productType = PRODUCT_ALIASES[productTypeInput] || productTypeInput
   if (!['curtain', 'blind', 'cushion'].includes(productType)) {
     issue(issues, 'productType', 'Product type must be curtain, blind, or cushion.')
