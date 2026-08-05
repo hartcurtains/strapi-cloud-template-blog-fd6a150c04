@@ -109,13 +109,11 @@ async function findByIdentifier(strapi: any, uid: string, identifier: any, popul
   // content type actually defines. Fall back to the legacy behaviour (include
   // key) when the schema cannot be inspected (e.g. in unit tests).
   const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value))
-  const ors: any[] = numeric ? [{ id: Number(value) }] : []
-  if (!numeric && attributes) {
-    if (attributes.documentId) ors.push({ documentId: value })
-    if (attributes.key) ors.push({ key: value })
-  } else if (!numeric) {
-    ors.push({ documentId: value }, { key: value })
-  }
+  // Every Strapi v5 content type has a `documentId` (it is not always exposed
+  // by getModel().attributes), so string identifiers always query it. `key` is
+  // only queried when the schema actually defines it (e.g. fabric does not).
+  const ors: any[] = numeric ? [{ id: Number(value) }] : [{ documentId: value }]
+  if (!numeric && attributes && attributes.key) ors.push({ key: value })
   // Extra filters (e.g. active / is_configurator_option) are validated on the
   // returned record below instead of in the query: combining them with $or in
   // a $and crashes on the deployed Postgres instance, and deployed schemas may
