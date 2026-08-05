@@ -100,6 +100,8 @@ const issue = (issues: ValidationIssue[], field: string, message: string) => iss
 async function findByIdentifier(strapi: any, uid: string, identifier: any, populate: any = undefined, filters: any = {}) {
   const value = optionIdentifier(identifier)
   if (!hasSelection(value)) return null
+  const model = typeof strapi.getModel === 'function' ? (strapi.getModel(uid) || null) : null
+  const attributes = (model && model.attributes) || null
   // Numeric ids must be queried on `id`; string keys/documentIds must be
   // queried on those fields. Mixing both in one $or makes Strapi throw, so
   // only build filters matching the identifier type. Some content types
@@ -108,19 +110,23 @@ async function findByIdentifier(strapi: any, uid: string, identifier: any, popul
   // key) when the schema cannot be inspected (e.g. in unit tests).
   const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value))
   const ors: any[] = numeric ? [{ id: Number(value) }] : []
-  if (!numeric && typeof strapi.getModel === 'function') {
-    const model = strapi.getModel(uid)
-    const attributes = (model && model.attributes) || {}
+  if (!numeric && attributes) {
     if (attributes.documentId) ors.push({ documentId: value })
     if (attributes.key) ors.push({ key: value })
   } else if (!numeric) {
     ors.push({ documentId: value }, { key: value })
   }
+  // Only apply extra filters (e.g. active / is_configurator_option) when the
+  // content type actually defines those attributes. Deployed schemas may
+  // predate them (e.g. curtain-type) and filtering on unknown fields throws.
+  const safeFilters = attributes
+    ? Object.fromEntries(Object.entries(filters || {}).filter(([field]) => Boolean(attributes[field])))
+    : (filters || {})
   const results = await strapi.entityService.findMany(uid, {
     publicationState: 'live',
     filters: {
       $and: [
-        filters,
+        safeFilters,
         { $or: ors },
       ],
     },
