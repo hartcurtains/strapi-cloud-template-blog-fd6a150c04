@@ -100,17 +100,20 @@ const issue = (issues: ValidationIssue[], field: string, message: string) => iss
 async function findByIdentifier(strapi: any, uid: string, identifier: any, populate: any = undefined, filters: any = {}) {
   const value = optionIdentifier(identifier)
   if (!hasSelection(value)) return null
-  // Some content types (e.g. fabric) have no `key` attribute. Filtering on a
-  // field the schema lacks makes Strapi throw, so only query attributes the
+  // Numeric ids must be queried on `id`; string keys/documentIds must be
+  // queried on those fields. Mixing both in one $or makes Strapi throw, so
+  // only build filters matching the identifier type. Some content types
+  // (e.g. fabric) have no `key` attribute, so only query attributes the
   // content type actually defines. Fall back to the legacy behaviour (include
   // key) when the schema cannot be inspected (e.g. in unit tests).
-  const ors: any[] = [{ id: value }]
-  if (typeof strapi.getModel === 'function') {
+  const numeric = typeof value === 'number' || (typeof value === 'string' && /^\d+$/.test(value))
+  const ors: any[] = numeric ? [{ id: Number(value) }] : []
+  if (!numeric && typeof strapi.getModel === 'function') {
     const model = strapi.getModel(uid)
     const attributes = (model && model.attributes) || {}
     if (attributes.documentId) ors.push({ documentId: value })
     if (attributes.key) ors.push({ key: value })
-  } else {
+  } else if (!numeric) {
     ors.push({ documentId: value }, { key: value })
   }
   const results = await strapi.entityService.findMany(uid, {
