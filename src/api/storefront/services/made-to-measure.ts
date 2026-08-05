@@ -100,12 +100,25 @@ const issue = (issues: ValidationIssue[], field: string, message: string) => iss
 async function findByIdentifier(strapi: any, uid: string, identifier: any, populate: any = undefined, filters: any = {}) {
   const value = optionIdentifier(identifier)
   if (!hasSelection(value)) return null
+  // Some content types (e.g. fabric) have no `key` attribute. Filtering on a
+  // field the schema lacks makes Strapi throw, so only query attributes the
+  // content type actually defines. Fall back to the legacy behaviour (include
+  // key) when the schema cannot be inspected (e.g. in unit tests).
+  const ors: any[] = [{ id: value }]
+  if (typeof strapi.getModel === 'function') {
+    const model = strapi.getModel(uid)
+    const attributes = (model && model.attributes) || {}
+    if (attributes.documentId) ors.push({ documentId: value })
+    if (attributes.key) ors.push({ key: value })
+  } else {
+    ors.push({ documentId: value }, { key: value })
+  }
   const results = await strapi.entityService.findMany(uid, {
     publicationState: 'live',
     filters: {
       $and: [
         filters,
-        { $or: [{ key: value }, { documentId: value }, { id: value }] },
+        { $or: ors },
       ],
     },
     populate,
@@ -120,6 +133,20 @@ async function activeOption(strapi: any, name: keyof typeof OPTION_UIDS, identif
     ? { active: true }
     : { active: true, is_configurator_option: true }
   return findByIdentifier(strapi, uid, identifier, populate, extra)
+}
+
+async function activeBlackoutOption(strapi: any) {
+  const results = await strapi.entityService.findMany('api::lining.lining', {
+    publicationState: 'live',
+    filters: {
+      $and: [
+        { active: true },
+        { $or: [{ key: 'blackout' }, { key: 'blackout-lining' }, { blackout: true }] },
+      ],
+    },
+    limit: 1,
+  })
+  return Array.isArray(results) ? results[0] || null : null
 }
 
 async function activeConfiguration(strapi: any, key: string) {
@@ -238,6 +265,26 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
   })
   if (lining.colour) selectedOptions.liningColour = optionSnapshot(lining.colour, {
   })
+
+  const blackoutRequested = line?.blackoutLining === true || line?.selectedBlackoutLining === true
+  if (blackoutRequested && productType !== 'cushion' && lining.type && lining.type.blackout !== true) {
+    const blackout = await activeBlackoutOption(strapi)
+    if (!blackout) {
+      issue(issues, 'blackoutLining', 'The blackout lining option is unavailable or inactive.')
+    } else if (productType === 'curtain' && blackout.applies_to_curtains !== true) {
+      issue(issues, 'blackoutLining', 'The blackout lining option is not available for curtains.')
+    } else if (productType === 'blind' && blackout.applies_to_blinds !== true) {
+      issue(issues, 'blackoutLining', 'The blackout lining option is not available for blinds.')
+    } else if (numberValue(blackout.price_per_metre) <= 0) {
+      issue(issues, 'blackoutLining', 'The blackout lining price is not configured.')
+    } else {
+      selectedOptions.blackoutLining = optionSnapshot(blackout, {
+        unitPrice: numberValue(blackout.price_per_metre),
+        unitPricePence: toPence(blackout.price_per_metre),
+        blackout: true,
+      })
+    }
+  }
 
   if (productType === 'curtain') {
     const curtainTypeSelection = selected(line, ['curtainTypeKey', 'curtainTypeId', 'selectedCurtainType', 'curtainType'])
@@ -501,6 +548,20 @@ async function calculateLine(strapi: any, line: any, index: number) {
     accessories.push({
       type: 'lining',
       label: `${validated.selectedOptions.liningType.label} — ${validated.selectedOptions.liningColour.label}`,
+      quantity: liningMetres * quantity,
+      unit: 'metre',
+      unitPrice: fromPence(unit),
+      unitPricePence: unit,
+      total: fromPence(total),
+      totalPence: total,
+    })
+  }
+  if (validated.selectedOptions.blackoutLining) {
+    const unit = validated.selectedOptions.blackoutLining.unitPricePence || 0
+    const total = multiplyPence(unit, liningMetres * quantity)
+    accessories.push({
+      type: 'blackout_lining',
+      label: 'Blackout lining',
       quantity: liningMetres * quantity,
       unit: 'metre',
       unitPrice: fromPence(unit),

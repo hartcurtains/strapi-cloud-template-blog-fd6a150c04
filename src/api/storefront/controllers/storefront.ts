@@ -16,7 +16,7 @@ const identity = (item: any) => ({
   key: item.key || null,
 })
 
-const findPublicOptions = async (strapi: any, section: string, uid: string, options: any = {}, requestId: string) => {
+const findPublicOptions = async (strapi: any, section: string, uid: string, options: any = {}, requestId: string, optional = false) => {
   const query = {
     publicationState: 'live',
     limit: 200,
@@ -42,6 +42,10 @@ const findPublicOptions = async (strapi: any, section: string, uid: string, opti
     return records
   } catch (error: any) {
     log('error', { event: 'configurator-options-query-failure', uid, errorName: error?.name || 'Error', errorMessage: error?.message || String(error), stack: error?.stack || null })
+    if (optional) {
+      log('info', { event: 'configurator-options-query-optional-empty', uid })
+      return []
+    }
     throw error
   }
 }
@@ -57,7 +61,26 @@ function publicOption(item: any, extra: Record<string, any> = {}) {
   }
 }
 
-function publicLiningType(item: any) {
+function relationItems(value: any): any[] {
+  const items = Array.isArray(value) ? value : (Array.isArray(value?.data) ? value.data : [])
+  return items.map((item: any) => item?.attributes ? {
+    ...item.attributes,
+    id: item.id ?? item.attributes.id,
+    documentId: item.documentId ?? item.attributes.documentId,
+  } : item).filter(Boolean)
+}
+
+function publicLiningType(item: any, fallbackColours: any[] = [], appliesField: 'applies_to_curtains' | 'applies_to_blinds' = 'applies_to_curtains') {
+  const typeIdentifiers = new Set([item.key, item.documentId, item.id].filter(Boolean).map((value: any) => String(value)))
+  const linkedColours = relationItems(item.lining_colour_options)
+  const compatibleFallbackColours = fallbackColours.filter((colour: any) => {
+    if (colour[appliesField] !== true) return false
+    return relationItems(colour.compatible_lining_types).some((type: any) =>
+      [type.key, type.documentId, type.id].filter(Boolean).some((value: any) => typeIdentifiers.has(String(value)))
+    )
+  })
+  const colours = linkedColours.length > 0 ? linkedColours : compatibleFallbackColours
+
   return publicOption(item, {
     liningType: item.display_name || item.liningType || item.name || '',
     pricePerMetre: Number(item.price_per_metre) || 0,
@@ -66,9 +89,7 @@ function publicLiningType(item: any) {
     appliesToCurtains: item.applies_to_curtains === true,
     appliesToBlinds: item.applies_to_blinds === true,
     thumbnail: firstMediaUrl(item.thumbnail),
-    availableColours: Array.isArray(item.lining_colour_options)
-      ? item.lining_colour_options.filter((colour: any) => colour?.active !== false).map(publicLiningColour)
-      : [],
+    availableColours: colours.filter((colour: any) => colour?.active !== false).map(publicLiningColour),
   })
 }
 
@@ -78,9 +99,7 @@ function publicLiningColour(item: any) {
     hex: item.hex || null,
     appliesToCurtains: item.applies_to_curtains === true,
     appliesToBlinds: item.applies_to_blinds === true,
-    compatibleLiningTypeKeys: Array.isArray(item.compatible_lining_types)
-      ? item.compatible_lining_types.map((type: any) => type.key || type.documentId || type.id).filter(Boolean)
-      : [],
+    compatibleLiningTypeKeys: relationItems(item.compatible_lining_types).map((type: any) => type.key || type.documentId || type.id).filter(Boolean),
   })
 }
 
@@ -153,18 +172,18 @@ export default {
       findPublicOptions(strapi, 'linings', 'api::lining.lining', { populate: { thumbnail: true, lining_colour_options: { populate: { thumbnail: true } } } }, requestId),
       findPublicOptions(strapi, 'lining-colours', 'api::lining-colour.lining-colour', { populate: { thumbnail: true, compatible_lining_types: true } }, requestId),
       findPublicOptions(strapi, 'mechanisations', 'api::mechanisation.mechanisation', { populate: { thumbnail: true } }, requestId),
-      findPublicOptions(strapi, 'mechanism-finishes', 'api::mechanism-finish.mechanism-finish', { populate: { thumbnail: true, compatible_mechanisations: true } }, requestId),
+      findPublicOptions(strapi, 'mechanism-finishes', 'api::mechanism-finish.mechanism-finish', { populate: { thumbnail: true, compatible_mechanisations: true } }, requestId, true),
       findPublicOptions(strapi, 'cushion-finishes', 'api::cushion-piping.cushion-piping', { populate: { thumbnail: true } }, requestId),
       findPublicOptions(strapi, 'cushion-pads', 'api::cushion-pad.cushion-pad', { populate: { thumbnail: true } }, requestId),
       findPublicOptions(strapi, 'cushion-sizes', 'api::cushion-size.cushion-size', { populate: { thumbnail: true } }, requestId),
       findPublicOptions(strapi, 'pricing-rules', 'api::pricing-rule.pricing-rule', {}, requestId),
-      findPublicOptions(strapi, 'configurations', 'api::made-to-measure-configuration.made-to-measure-configuration', { filters: { active: true } }, requestId),
+      findPublicOptions(strapi, 'configurations', 'api::made-to-measure-configuration.made-to-measure-configuration', { filters: { active: true } }, requestId, true),
     ])
     const configurationByType = Object.fromEntries(configurations.map((item: any) => [item.product_type, item]))
     const activeLinings = linings.filter((item: any) => item.active !== false)
     const activeLiningColours = liningColours.filter((item: any) => item.active !== false)
-    const curtainLiningTypes = activeLinings.filter((item: any) => item.applies_to_curtains === true).map(publicLiningType)
-    const blindLiningTypes = activeLinings.filter((item: any) => item.applies_to_blinds === true).map(publicLiningType)
+    const curtainLiningTypes = activeLinings.filter((item: any) => item.applies_to_curtains === true).map((item: any) => publicLiningType(item, activeLiningColours, 'applies_to_curtains'))
+    const blindLiningTypes = activeLinings.filter((item: any) => item.applies_to_blinds === true).map((item: any) => publicLiningType(item, activeLiningColours, 'applies_to_blinds'))
     const curtainLiningColours = activeLiningColours.filter((item: any) => item.applies_to_curtains === true).map(publicLiningColour)
     const blindLiningColours = activeLiningColours.filter((item: any) => item.applies_to_blinds === true).map(publicLiningColour)
     const activeCushionFinishes = cushionFinishes.filter((item: any) => ['piped', 'unpiped'].includes(item.type))
@@ -186,7 +205,7 @@ export default {
       blind: {
         blindTypes: blindTypes.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail) })),
         mechanisms: mechanisations.map((item: any) => publicOption(item, { mechanismFamily: item.mechanism_family || null, price: Number(item.price) || 0, compatibleFinishKeys: Array.isArray(item.mechanism_finishes) ? item.mechanism_finishes.map((finish: any) => finish.key || finish.documentId || finish.id).filter(Boolean) : [] })),
-        mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item, { compatibleMechanismKeys: Array.isArray(item.compatible_mechanisations) ? item.compatible_mechanisations.map((mechanism: any) => mechanism.key || mechanism.documentId || mechanism.id).filter(Boolean) : [] })),
+        mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), compatibleMechanismKeys: Array.isArray(item.compatible_mechanisations) ? item.compatible_mechanisations.map((mechanism: any) => mechanism.key || mechanism.documentId || mechanism.id).filter(Boolean) : [] })),
         liningTypes: blindLiningTypes,
         liningColours: blindLiningColours,
         surchargeRules: liningPricingRules(blindLiningTypes),
@@ -217,7 +236,7 @@ export default {
       linings: curtainLiningTypes,
       liningColours: curtainLiningColours,
       mechanisations: mechanisations.map((item: any) => publicOption(item, { price: Number(item.price) || 0 })),
-      mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item)),
+      mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), compatibleMechanismKeys: Array.isArray(item.compatible_mechanisations) ? item.compatible_mechanisations.map((mechanism: any) => mechanism.key || mechanism.documentId || mechanism.id).filter(Boolean) : [] })),
       cushionPipingTypes: activeCushionFinishes.map((item: any) => publicOption(item, { type: item.type, price: Number(item.price) || 0 })),
       cushionPads: cushionPads.map((item: any) => publicOption(item, { type: item.type, price: item.type === 'cover_only' ? 0 : null })),
       cushionSizes: cushionSizes.map((item: any) => publicOption(item, { shape: item.shape, width_cm: Number(item.width_cm), height_cm: Number(item.height_cm), duckFeatherSurcharge: Number(item.duck_feather_surcharge) || 0 })),
@@ -232,22 +251,27 @@ export default {
     try {
       const body = ctx.request.body?.data || ctx.request.body || {}
       const quote = await strapi.service('api::pricing-rule.pricing-rule').calculateMadeToMeasureQuote(body)
-      // The quote content type is present at runtime; older generated Strapi
-      // typings do not include this newly added UID yet.
-      const quoteRecord = await strapi.entityService.create('api::quote.quote' as any, {
-        data: {
-          quote_number: `Q-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-          items: quote.items,
-          selected_options: quote.items.map((item: any) => item.selectedOptions),
-          quote_breakdown: quote.breakdown,
-          subtotal: quote.breakdown.subtotal,
-          shipping: quote.breakdown.delivery.total,
-          total: quote.breakdown.total,
-          pricing_version: quote.pricingVersion,
-          ...(ctx.state.user?.id ? { user: ctx.state.user.id } : {}),
-        },
-      })
-      return ctx.send({ data: { quoteId: quoteRecord.documentId || quoteRecord.id, ...quote } })
+      // Persisting the quote is best-effort: the storefront still needs the
+      // calculated payload even if the quote content type is unavailable.
+      let quoteRecord: any = null
+      try {
+        quoteRecord = await strapi.entityService.create('api::quote.quote' as any, {
+          data: {
+            quote_number: `Q-${Date.now()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
+            items: quote.items,
+            selected_options: quote.items.map((item: any) => item.selectedOptions),
+            quote_breakdown: quote.breakdown,
+            subtotal: quote.breakdown.subtotal,
+            shipping: quote.breakdown.delivery.total,
+            total: quote.breakdown.total,
+            pricing_version: quote.pricingVersion,
+            ...(ctx.state.user?.id ? { user: ctx.state.user.id } : {}),
+          },
+        })
+      } catch (persistError: any) {
+        strapi.log.warn('Quote record could not be persisted', persistError)
+      }
+      return ctx.send({ data: { quoteId: quoteRecord?.documentId || quoteRecord?.id || null, ...quote } })
     } catch (error: any) {
       if (error instanceof MadeToMeasureValidationError) return ctx.badRequest({ error: error.message, details: error.issues })
       strapi.log.error('Made-to-measure quote calculation failed', error)
