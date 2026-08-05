@@ -116,9 +116,10 @@ async function findByIdentifier(strapi: any, uid: string, identifier: any, popul
   } else if (!numeric) {
     ors.push({ documentId: value }, { key: value })
   }
-  // Only apply extra filters (e.g. active / is_configurator_option) when the
-  // content type actually defines those attributes. Deployed schemas may
-  // predate them (e.g. curtain-type) and filtering on unknown fields throws.
+  // Extra filters (e.g. active / is_configurator_option) are validated on the
+  // returned record below instead of in the query: combining them with $or in
+  // a $and crashes on the deployed Postgres instance, and deployed schemas may
+  // not even define them (e.g. curtain-type).
   const safeFilters = attributes
     ? Object.fromEntries(Object.entries(filters || {}).filter(([field]) => Boolean(attributes[field])))
     : (filters || {})
@@ -126,14 +127,16 @@ async function findByIdentifier(strapi: any, uid: string, identifier: any, popul
     publicationState: 'live',
     filters: {
       $and: [
-        safeFilters,
+        {},
         { $or: ors },
       ],
     },
     populate,
     limit: 1,
   })
-  return Array.isArray(results) ? results[0] || null : null
+  const record = Array.isArray(results) ? results[0] || null : null
+  if (!record) return null
+  return Object.entries(safeFilters).every(([field, expected]) => record[field] === expected) ? record : null
 }
 
 async function activeOption(strapi: any, name: keyof typeof OPTION_UIDS, identifier: any, populate: any = undefined) {
@@ -149,13 +152,15 @@ async function activeBlackoutOption(strapi: any) {
     publicationState: 'live',
     filters: {
       $and: [
-        { active: true },
+        {},
         { $or: [{ key: 'blackout' }, { key: 'blackout-lining' }, { blackout: true }] },
       ],
     },
     limit: 1,
   })
-  return Array.isArray(results) ? results[0] || null : null
+  const record = Array.isArray(results) ? results[0] || null : null
+  if (!record || record.active === false) return null
+  return record
 }
 
 async function activeConfiguration(strapi: any, key: string) {
