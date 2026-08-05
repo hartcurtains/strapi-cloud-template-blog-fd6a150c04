@@ -238,7 +238,7 @@ async function validateLining(strapi: any, line: any, productType: string, issue
     return { type: null, colour: null }
   }
 
-  const type = await activeOption(strapi, 'liningType', typeSelection, undefined)
+  const type = await activeOption(strapi, 'liningType', typeSelection, { pricing_rule: true })
   const colour = await activeOption(strapi, 'liningColour', colourSelection, { compatible_lining_types: true })
   if (!type) issue(issues, 'liningType', 'The selected lining type is unavailable or inactive.')
   if (!colour) issue(issues, 'liningColour', 'The selected lining colour/finish is unavailable or inactive.')
@@ -360,6 +360,62 @@ const fabricMetres = (fabric: any, productType: string, widthCm: number, heightC
 
 async function findFabric(strapi: any, identifier: any) {
   return findByIdentifier(strapi, 'api::fabric.fabric', identifier, undefined, {})
+}
+
+function evaluateLiningPricingRule(rule: any, data: Record<string, any>): number {
+  if (!rule?.formula?.steps || !Array.isArray(rule.formula.steps)) return 0
+  const store: Record<string, any> = { ...data }
+  const resolve = (input: any): any => {
+    if (typeof input === 'number') return input
+    if (typeof input !== 'string') return input ?? 0
+    const trimmed = input.trim()
+    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"')))
+      return trimmed.slice(1, -1)
+    return input.split('.').reduce((obj: any, k) => (obj != null ? obj[k] : undefined), store) ?? 0
+  }
+  const customRound = (v: number, t: number) => { const d = v % 1; return d > t ? Math.ceil(v) : Math.floor(v) }
+  const evalStep = (step: any): number => {
+    if (step.operation === 'if_else') {
+      const cond = step.condition || ''
+      const ops = ['>=', '<=', '!=', '===', '!==', '==', '>', '<']
+      let op = '', left = '', right = ''
+      for (const o of ops) { if (cond.includes(o)) { op = o; const p = cond.split(o); left = p[0].trim(); right = p.slice(1).join(o).trim(); break } }
+      const lv = resolve(left), rv = resolve(right)
+      let result = 0
+      const check = op === '>' ? lv > rv : op === '<' ? lv < rv : op === '>=' ? lv >= rv : op === '<=' ? lv <= rv : op === '!=' || op === '!==' ? lv != rv : lv == rv
+      if (check) {
+        if (step.on_true?.sub_steps && Array.isArray(step.on_true.sub_steps)) { for (const s of step.on_true.sub_steps) result = evalStep(s) }
+        else if (step.on_true?.operation) result = evalStep(step.on_true)
+      } else {
+        if (step.on_false?.operation === 'set') {
+          result = step.on_false.input !== undefined ? resolve(step.on_false.input) : (step.on_false.inputs?.[0] !== undefined ? resolve(step.on_false.inputs[0]) : 0)
+          if (step.on_false.output) store[step.on_false.output] = result
+        } else if (step.on_false?.operation) result = evalStep(step.on_false)
+      }
+      if (step.output) store[step.output] = result
+      return result
+    }
+    const inputs = (step.inputs && step.inputs.length > 0)
+      ? step.inputs.map((i: any) => resolve(i))
+      : (step.input !== undefined ? [resolve(step.input)] : [])
+    let result = 0
+    switch (step.operation) {
+      case 'multiply': result = (inputs[0] || 0) * (inputs[1] || 0); break
+      case 'divide': result = inputs[1] ? (inputs[0] || 0) / inputs[1] : (inputs[0] || 0); break
+      case 'add': result = inputs.reduce((s: number, v: any) => s + (v || 0), 0); break
+      case 'subtract': result = (inputs[0] || 0) - (inputs[1] || 0); break
+      case 'customRound': result = customRound(Number(inputs[0]) || 0, Number(inputs[1]) || 0.5); break
+      case 'set': case 'constant': case 'assign': result = inputs[0] || 0; break
+      default: result = 0
+    }
+    if (step.output) store[step.output] = result
+    return result
+  }
+  for (const step of rule.formula.steps) evalStep(step)
+  const finalOutput = rule.formula.finalOutput
+  let val = finalOutput ? (store[finalOutput] ?? 0) : 0
+  if (!val) { for (const k of ['totalPrice', 'finalPrice', 'total', 'price', 'cost', 'totalInterliningPrice']) { if (store[k] > 0) { val = store[k]; break } } }
+  return typeof val === 'number' && !isNaN(val) ? val : 0
 }
 
 async function pricingRule(strapi: any, productType: string) {
@@ -555,8 +611,26 @@ async function calculateLine(strapi: any, line: any, index: number) {
   }
   const liningMetres = productType === 'cushion' ? 0 : materialMetres
   if (validated.selectedOptions.liningType) {
-    const unit = validated.selectedOptions.liningType.unitPricePence || 0
-    const total = multiplyPence(unit, liningMetres * quantity)
+    const liningTypeRecord = validated.lining?.type
+    let liningTotalPence: number
+    const liningPricingRule = liningTypeRecord?.pricing_rule
+    if (liningPricingRule && liningPricingRule.formula && liningPricingRule.formula.steps) {
+      const ruleData: Record<string, any> = {
+        width_cm: widthCm,
+        height_cm: heightCm,
+        curtain_type: { fullness_multiplier: fullnessMultiplier },
+        fabric: { usableWidth_cm: numberValue(fabric?.usableWidth_cm || fabric?.usable_width_cm, 137), patternRepeat_cm: numberValue(fabric?.patternRepeat_cm || fabric?.pattern_repeat_cm), hemAllowance_cm: numberValue(fabric?.hemAllowance_cm, 30) },
+        interlining: { price_per_metre: numberValue(liningTypeRecord.price_per_metre) },
+        quantity,
+      }
+      const ruleTotal = evaluateLiningPricingRule(liningPricingRule, ruleData)
+      liningTotalPence = toPence(ruleTotal / quantity || 0)
+      liningTotalPence = multiplyPence(liningTotalPence, quantity)
+    } else {
+      const unit = validated.selectedOptions.liningType.unitPricePence || 0
+      liningTotalPence = multiplyPence(unit, liningMetres * quantity)
+    }
+    const unit = liningTotalPence > 0 ? Math.round(liningTotalPence / (liningMetres * quantity || 1)) : 0
     accessories.push({
       type: 'lining',
       label: `${validated.selectedOptions.liningType.label} — ${validated.selectedOptions.liningColour.label}`,
@@ -564,8 +638,8 @@ async function calculateLine(strapi: any, line: any, index: number) {
       unit: 'metre',
       unitPrice: fromPence(unit),
       unitPricePence: unit,
-      total: fromPence(total),
-      totalPence: total,
+      total: fromPence(liningTotalPence),
+      totalPence: liningTotalPence,
     })
   }
   if (validated.selectedOptions.blackoutLining) {
