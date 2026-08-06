@@ -89,6 +89,22 @@ test('anonymous and customer callers cannot use public Order CRUD', async () => 
 
   const customerFind = await jsonRequest('/api/orders', 'GET', `Bearer ${server.customerToken}`);
   assert.ok([401, 403].includes(customerFind.status), `customer GET returned ${customerFind.status}`);
+
+  const customerCreate = await jsonRequest('/api/orders', 'POST', `Bearer ${server.customerToken}`, {
+    data: {
+      orderNumber: 'ORD-CUSTOMER-DIRECT',
+      customerName: 'Direct Customer',
+      customerEmail: 'direct-customer@example.test',
+      shippingAddress: '{}',
+      postcode: 'TEST',
+      billingAddress: '{}',
+      subtotal: 1,
+      shipping: 0,
+      total: 1,
+      orderItems: [],
+    },
+  });
+  assert.ok([401, 403].includes(customerCreate.status), `customer POST returned ${customerCreate.status}`);
 });
 
 test('public callers cannot change payment status or Stripe identifiers', async () => {

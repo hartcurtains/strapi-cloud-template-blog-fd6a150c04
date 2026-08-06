@@ -89,6 +89,7 @@ const selected = (line: any, names: string[]): any => {
   for (const name of names) {
     if (line?.options?.[name] !== undefined) return line.options[name]
     if (line?.[name] !== undefined) return line[name]
+    if (line?.configuration?.[name] !== undefined) return line.configuration[name]
   }
   return null
 }
@@ -480,10 +481,17 @@ export async function calculateSampleQuote(strapi: any, input: any) {
   return { configuration, quantity, remainingQuantity: configuration.maximumQuantity - quantity, subtotalPence, subtotal: fromPence(subtotalPence), lines }
 }
 
-export const isAuthoritativeMadeToMeasureLine = (item: any): boolean => Boolean(
-  item?.madeToMeasureV2 === true || item?.authoritativeQuote === true || item?.selectedOptions ||
-  item?.liningTypeKey || item?.cushionPadKey || item?.mechanismFinishKey
-)
+export const isAuthoritativeMadeToMeasureLine = (item: any): boolean => {
+  const configuration = item?.configuration && typeof item.configuration === 'object' ? item.configuration : {}
+  return Boolean(
+    item?.madeToMeasureV2 === true || item?.authoritativeQuote === true || item?.selectedOptions ||
+    item?.liningTypeKey || item?.cushionPadKey || item?.mechanismFinishKey ||
+    configuration.madeToMeasureV2 === true || configuration.authoritativeQuote ||
+    configuration.selectedOptions || configuration.liningTypeKey ||
+    configuration.liningColourKey || configuration.cushionPadKey ||
+    configuration.mechanismFinishKey
+  )
+}
 
 async function calculateStandardFabricQuote(strapi: any, items: any[]) {
   const issues: ValidationIssue[] = []

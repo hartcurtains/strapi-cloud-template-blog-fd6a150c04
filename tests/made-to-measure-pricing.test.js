@@ -68,6 +68,31 @@ test('blackout lining adds its own metre-based accessory cost while keeping the 
   assert.equal(blackout.total, '26.88')
 })
 
+test('server re-quote reads visual lining options from the validated configuration snapshot', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::curtain-type.curtain-type': [record('pencil', { fullness_multiplier: 2 })],
+    'api::lining.lining': [record('lined', { liningType: 'Lined', price_per_metre: 7, applies_to_curtains: true })],
+    'api::lining-colour.lining-colour': [record('white', { display_name: 'White', applies_to_curtains: true, compatible_lining_types: [record('lined')] })],
+    'api::pricing-rule.pricing-rule': [record('curtain-rule', { product_type: 'curtain', formula: { workmanshipFee: 0 } })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    productType: 'curtain', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 200, height: 200 }, curtainTypeId: 'pencil',
+    configuration: { liningTypeKey: 'lined', liningColourKey: 'white' },
+  }], shipping: '0.00' })
+
+  assert.ok(quote.breakdown.accessories.some(item => item.type === 'lining'))
+  assert.equal(quote.items[0].selectedOptions.liningType.key, 'lined')
+})
+
 test('blackout lining requires a selected lining type and colour', async () => {
   const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
   const records = {

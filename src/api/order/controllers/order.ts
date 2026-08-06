@@ -26,7 +26,17 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
 
   async create(ctx) {
     try {
-      if (!ctx.state.user?.id) return ctx.unauthorized('Sign-in is required before checkout.');
+      // Vercel creates orders with a full-access/custom Strapi API token. API
+      // token auth intentionally does not populate ctx.state.user, so checking
+      // only that field rejects every server-to-server checkout. Keep public
+      // callers blocked: customer JWTs have a user credential but no API-token
+      // credential, while Strapi still verifies the token's route permission.
+      const auth = ctx.state.auth || {};
+      const isApiTokenRequest = auth.strategy?.name === 'api-token' ||
+        ['full-access', 'read-only', 'custom'].includes(auth.credentials?.type);
+      if (!ctx.state.user?.id && !isApiTokenRequest) {
+        return ctx.unauthorized('Sign-in is required before checkout.');
+      }
       const { body } = ctx.request;
       const submitted = body?.data || body;
       if (!submitted || typeof submitted !== 'object' || Array.isArray(submitted)) {
@@ -53,7 +63,8 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       );
       orderData.statusOrder = 'pending';
       orderData.paymentStatus = 'pending';
-      orderData.user = ctx.state.user.id;
+      if (ctx.state.user?.id) orderData.user = ctx.state.user.id;
+      else delete orderData.user;
 
       const orderItems = Array.isArray(orderData.orderItems) ? orderData.orderItems : [];
       const sampleItems = orderItems.filter(isSampleLine);
