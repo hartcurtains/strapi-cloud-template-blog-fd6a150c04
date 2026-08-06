@@ -279,22 +279,26 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
   })
 
   const blackoutRequested = line?.blackoutLining === true || line?.selectedBlackoutLining === true
-  if (blackoutRequested && productType !== 'cushion' && lining.type && lining.type.blackout !== true) {
-    const blackout = await activeBlackoutOption(strapi)
-    if (!blackout) {
-      issue(issues, 'blackoutLining', 'The blackout lining option is unavailable or inactive.')
-    } else if (productType === 'curtain' && blackout.applies_to_curtains !== true) {
-      issue(issues, 'blackoutLining', 'The blackout lining option is not available for curtains.')
-    } else if (productType === 'blind' && blackout.applies_to_blinds !== true) {
-      issue(issues, 'blackoutLining', 'The blackout lining option is not available for blinds.')
-    } else if (numberValue(blackout.price_per_metre) <= 0) {
-      issue(issues, 'blackoutLining', 'The blackout lining price is not configured.')
-    } else {
-      selectedOptions.blackoutLining = optionSnapshot(blackout, {
-        unitPrice: numberValue(blackout.price_per_metre),
-        unitPricePence: toPence(blackout.price_per_metre),
-        blackout: true,
-      })
+  if (blackoutRequested && productType !== 'cushion') {
+    if (!lining.type || !lining.colour) {
+      issue(issues, 'blackoutLining', 'A valid lining type and colour are required before adding blackout lining.')
+    } else if (lining.type.blackout !== true) {
+      const blackout = await activeBlackoutOption(strapi)
+      if (!blackout) {
+        issue(issues, 'blackoutLining', 'The blackout lining option is unavailable or inactive.')
+      } else if (productType === 'curtain' && blackout.applies_to_curtains !== true) {
+        issue(issues, 'blackoutLining', 'The blackout lining option is not available for curtains.')
+      } else if (productType === 'blind' && blackout.applies_to_blinds !== true) {
+        issue(issues, 'blackoutLining', 'The blackout lining option is not available for blinds.')
+      } else if (numberValue(blackout.price_per_metre) <= 0) {
+        issue(issues, 'blackoutLining', 'The blackout lining price is not configured.')
+      } else {
+        selectedOptions.blackoutLining = optionSnapshot(blackout, {
+          unitPrice: numberValue(blackout.price_per_metre),
+          unitPricePence: toPence(blackout.price_per_metre),
+          blackout: true,
+        })
+      }
     }
   }
 
