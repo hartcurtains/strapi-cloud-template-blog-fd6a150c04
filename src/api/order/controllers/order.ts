@@ -68,7 +68,12 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
 
       const orderItems = Array.isArray(orderData.orderItems) ? orderData.orderItems : [];
       const sampleItems = orderItems.filter(isSampleLine);
-      if (sampleItems.length) {
+      const madeToMeasureItems = orderItems.filter(isAuthoritativeMadeToMeasureLine);
+      const standardItems = orderItems.filter((item: any) =>
+        !isSampleLine(item) && !isAuthoritativeMadeToMeasureLine(item)
+      );
+      const requiresCombinedQuote = sampleItems.length > 0 || standardItems.length > 0;
+      if (requiresCombinedQuote) {
         // A mixed checkout is a single server quote: configured made-to-measure
         // products, ordinary fabric and samples are each re-priced from their
         // live records before the combined subtotal and total are persisted.
@@ -86,9 +91,8 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       // New made-to-measure payloads opt into the authoritative calculator. Old
       // catalogue orders retain their existing orderItems/price shape and remain
       // readable without a backfill.
-      const requiresAuthoritativeQuote = orderItems.some(isAuthoritativeMadeToMeasureLine);
-      if (requiresAuthoritativeQuote && !sampleItems.length) {
-        const quote = await calculateMadeToMeasureQuote(strapi, { items: orderItems, shipping: submitted.shipping });
+      if (madeToMeasureItems.length > 0 && !requiresCombinedQuote) {
+        const quote = await calculateMadeToMeasureQuote(strapi, { items: madeToMeasureItems, shipping: submitted.shipping });
         orderData.subtotal = quote.breakdown.subtotal;
         orderData.shipping = quote.breakdown.delivery.total;
         orderData.total = quote.breakdown.total;

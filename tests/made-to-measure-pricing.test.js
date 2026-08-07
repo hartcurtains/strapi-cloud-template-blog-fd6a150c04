@@ -2,7 +2,7 @@ require('../../node_modules/ts-node/register')
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { calculateMadeToMeasureQuote } = require('../src/api/storefront/services/made-to-measure')
+const { calculateMadeToMeasureQuote, calculateOrderQuote } = require('../src/api/storefront/services/made-to-measure')
 
 const record = (key, data = {}) => ({ id: key, documentId: key, key, active: true, is_configurator_option: true, ...data })
 
@@ -324,4 +324,50 @@ test('duck feather pad pricing follows the selected size surcharge', async () =>
     }], shipping: '0.00' })
     assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_pad').totalPence, expectedPence)
   }
+})
+
+test('mixed blind and cushion order quotes re-resolve persisted canonical selections', async () => {
+  const records = {
+    'api::fabric.fabric': [record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })],
+    'api::blind-type.blind-type': [record('blind-1', { name: 'Stacked', applies_to_blinds: true })],
+    'api::mechanisation.mechanisation': [record('mech-1', { name: 'Corded left', price: 20 })],
+    'api::cushion-size.cushion-size': [record('size-1', { name: 'Square 38cm', width_cm: 38, height_cm: 38, shape: 'square', workmanship_cost: 25 })],
+    'api::cushion-piping.cushion-piping': [record('piping-1', { name: 'Piped', type: 'piped', price: 3 })],
+    'api::cushion-pad.cushion-pad': [record('pad-1', { name: 'Cover only', type: 'cover_only', price: 0 })],
+    'api::pricing-rule.pricing-rule': [
+      record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } }),
+      record('cushion-rule', { product_type: 'cushion', formula: { workmanshipFee: 25 } }),
+    ],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const productType = params.filters?.product_type
+    if (productType) return values.filter(item => item.product_type === productType)
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateOrderQuote(strapi, {
+    items: [
+      {
+        madeToMeasureV2: true, productType: 'blinds', fabricId: 'fabric-1', quantity: 1,
+        measurements: { width: 123, height: 121 }, blindTypeId: 'blind-1', mechanismKey: 'mech-1',
+        configuration: { madeToMeasureV2: true, blindTypeId: 'blind-1', mechanismKey: 'mech-1' },
+      },
+      {
+        madeToMeasureV2: true, productType: 'cushions', fabricId: 'fabric-1', quantity: 1,
+        measurements: { width: 38, height: 38 }, cushionSizeKey: 'size-1', cushionFinishKey: 'piping-1', cushionPadKey: 'pad-1',
+        configuration: { madeToMeasureV2: true, cushionSizeKey: 'size-1', cushionFinishKey: 'piping-1', cushionPadKey: 'pad-1' },
+      },
+    ],
+    shipping: '10.00',
+  })
+
+  assert.equal(quote.items.length, 2)
+  assert.equal(quote.items[0].selectedOptions.mechanism.key, 'mech-1')
+  assert.equal(quote.items[1].selectedOptions.cushionSize.key, 'size-1')
+  assert.equal(quote.items[1].selectedOptions.cushionFinish.key, 'piping-1')
+  assert.equal(quote.items[1].selectedOptions.cushionPad.key, 'pad-1')
+  assert.equal(quote.breakdown.totalPence, quote.breakdown.subtotalPence + quote.breakdown.shippingPence)
+  assert.equal(quote.breakdown.subtotalPence, quote.breakdown.madeToMeasure.lines.reduce((sum, line) => sum + line.totalPence, 0))
 })

@@ -307,7 +307,8 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
   if (lining.colour) selectedOptions.liningColour = optionSnapshot(lining.colour, {
   })
 
-  const blackoutRequested = line?.blackoutLining === true || line?.selectedBlackoutLining === true
+  const blackoutRequested = line?.blackoutLining === true || line?.selectedBlackoutLining === true ||
+    line?.configuration?.blackoutLining === true || line?.configuration?.selectedBlackoutLining === true
   if (blackoutRequested && productType !== 'cushion') {
     if (!lining.type || !lining.colour) {
       issue(issues, 'blackoutLining', 'A valid lining type and colour are required before adding blackout lining.')
