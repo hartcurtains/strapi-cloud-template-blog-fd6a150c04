@@ -189,3 +189,54 @@ test('fabric lookup does not filter on a key attribute the fabric schema lacks',
   assert.equal(quote.items[0].fabric.documentId, 'fabric-1')
   assert.ok(quote.breakdown.accessories.some(item => item.type === 'lining'))
 })
+
+test('blind quote accepts legacy mechanisms without mechanism_family metadata', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
+    'api::mechanisation.mechanisation': [record('corded-left', { name: 'Corded left', price: 20 })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'blind', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 123, height: 121 }, blindTypeId: 'stacked', mechanismKey: 'corded-left',
+  }], shipping: '0.00' })
+
+  assert.equal(quote.items[0].selectedOptions.mechanism.key, 'corded-left')
+  const mechanism = quote.breakdown.accessories.find(item => item.type === 'mechanism')
+  assert.equal(mechanism.unitPricePence, 2000)
+  assert.equal(mechanism.totalPence, 2000)
+})
+
+test('cushion quote resolves size, piping and pad from the server catalogue', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::cushion-size.cushion-size': [record('square', { name: 'Square', width_cm: 38, height_cm: 38, shape: 'square' })],
+    'api::cushion-piping.cushion-piping': [record('piped', { name: 'Piped', type: 'piped', price: 3 })],
+    'api::cushion-pad.cushion-pad': [record('cover-only', { name: 'Cover only', type: 'cover_only', price: 0 })],
+    'api::pricing-rule.pricing-rule': [record('cushion-rule', { product_type: 'cushion', formula: { workmanshipFee: 0 } })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'cushion', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 38, height: 38 }, cushionSizeKey: 'square', cushionFinishKey: 'piped', cushionPadKey: 'cover-only',
+  }], shipping: '0.00' })
+
+  assert.equal(quote.items[0].selectedOptions.cushionSize.width_cm, 38)
+  assert.equal(quote.items[0].selectedOptions.cushionFinish.unitPricePence, 300)
+  assert.equal(quote.items[0].selectedOptions.cushionPad.type, 'cover_only')
+  assert.ok(quote.breakdown.accessories.some(item => item.type === 'cushion_finish' && item.totalPence === 300))
+})

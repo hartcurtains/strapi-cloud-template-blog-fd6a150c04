@@ -5,8 +5,25 @@ import {
 } from '../services/made-to-measure'
 
 const firstMediaUrl = (media: any): string | null => {
-  const value = media?.data?.attributes ?? media?.data ?? media?.attributes ?? media
-  return typeof value?.url === 'string' ? value.url : null
+  const visit = (value: any): string | null => {
+    if (!value) return null
+    if (typeof value === 'string') return value
+    if (Array.isArray(value)) {
+      for (const entry of value) {
+        const url = visit(entry)
+        if (url) return url
+      }
+      return null
+    }
+    if (typeof value !== 'object') return null
+    if (typeof value.url === 'string') return value.url
+    for (const nested of [value.data, value.attributes, value.formats]) {
+      const url = visit(nested)
+      if (url) return url
+    }
+    return null
+  }
+  return visit(media)
 }
 
 const identity = (item: any) => ({
@@ -204,7 +221,7 @@ export default {
       },
       blind: {
         blindTypes: blindTypes.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail) })),
-        mechanisms: mechanisations.map((item: any) => publicOption(item, { mechanismFamily: item.mechanism_family || null, price: Number(item.price) || 0, compatibleFinishKeys: Array.isArray(item.mechanism_finishes) ? item.mechanism_finishes.map((finish: any) => finish.key || finish.documentId || finish.id).filter(Boolean) : [] })),
+        mechanisms: mechanisations.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), mechanismFamily: item.mechanism_family || null, price: Number(item.price) || 0, compatibleFinishKeys: Array.isArray(item.mechanism_finishes) ? item.mechanism_finishes.map((finish: any) => finish.key || finish.documentId || finish.id).filter(Boolean) : [] })),
         mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), compatibleMechanismKeys: Array.isArray(item.compatible_mechanisations) ? item.compatible_mechanisations.map((mechanism: any) => mechanism.key || mechanism.documentId || mechanism.id).filter(Boolean) : [] })),
         liningTypes: blindLiningTypes,
         liningColours: blindLiningColours,
@@ -235,7 +252,7 @@ export default {
       trimmings: [],
       linings: curtainLiningTypes,
       liningColours: curtainLiningColours,
-      mechanisations: mechanisations.map((item: any) => publicOption(item, { price: Number(item.price) || 0 })),
+      mechanisations: mechanisations.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), price: Number(item.price) || 0 })),
       mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), compatibleMechanismKeys: Array.isArray(item.compatible_mechanisations) ? item.compatible_mechanisations.map((mechanism: any) => mechanism.key || mechanism.documentId || mechanism.id).filter(Boolean) : [] })),
       cushionPipingTypes: activeCushionFinishes.map((item: any) => publicOption(item, { type: item.type, price: Number(item.price) || 0 })),
       cushionPads: cushionPads.map((item: any) => publicOption(item, { type: item.type, price: item.type === 'cover_only' ? 0 : null })),

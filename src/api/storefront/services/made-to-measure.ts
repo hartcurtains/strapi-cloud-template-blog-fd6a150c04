@@ -122,18 +122,41 @@ async function findByIdentifier(strapi: any, uid: string, identifier: any, popul
   const safeFilters = attributes
     ? Object.fromEntries(Object.entries(filters || {}).filter(([field]) => Boolean(attributes[field])))
     : (filters || {})
-  const results = await strapi.entityService.findMany(uid, {
-    publicationState: 'live',
-    filters: {
-      $and: [
-        {},
-        { $or: ors },
-      ],
-    },
-    populate,
-    limit: 1,
-  })
-  const record = Array.isArray(results) ? results[0] || null : null
+  let record: any = null
+
+  // Strapi 5's document service is more reliable for documentId lookups than
+  // the legacy entity service on the deployed Postgres schema. In particular,
+  // the latter can throw a null-reference error for the legacy fabric model.
+  // Keep the entity-service path as a fallback for numeric IDs and tests.
+  if (!numeric && typeof strapi.documents === 'function') {
+    try {
+      const documentService = strapi.documents(uid)
+      if (documentService && typeof documentService.findOne === 'function') {
+        record = await documentService.findOne({ documentId: String(value), populate })
+      }
+      if (!record && attributes?.key && documentService && typeof documentService.findMany === 'function') {
+        const keyed = await documentService.findMany({ filters: { key: String(value) }, populate, limit: 1 })
+        record = Array.isArray(keyed) ? keyed[0] || null : null
+      }
+    } catch {
+      // Fall through to entityService for older Strapi runtimes.
+    }
+  }
+
+  if (!record) {
+    const results = await strapi.entityService.findMany(uid, {
+      publicationState: 'live',
+      filters: {
+        $and: [
+          {},
+          { $or: ors },
+        ],
+      },
+      populate,
+      limit: 1,
+    })
+    record = Array.isArray(results) ? results[0] || null : null
+  }
   if (!record) return null
   return Object.entries(safeFilters).every(([field, expected]) => record[field] === expected) ? record : null
 }
@@ -326,7 +349,11 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
     const finish = hasSelection(finishSelection) ? await activeOption(strapi, 'mechanismFinish', finishSelection, { compatible_mechanisations: true }) : null
     if (hasSelection(mechanismSelection) && !mechanism) issue(issues, 'mechanism', 'The selected mechanism is unavailable or inactive.')
     if (hasSelection(finishSelection) && !finish) issue(issues, 'mechanismFinish', 'The selected mechanism finish is unavailable or inactive.')
-    if (mechanism && mechanism.mechanism_family !== 'corded') issue(issues, 'mechanism', 'Mechanism finishes are only valid for corded mechanisms.')
+    // The deployed legacy mechanisation schema does not define
+    // `mechanism_family`. A mechanism with no family metadata is still a
+    // valid selectable mechanism; only reject an explicitly non-corded one
+    // when a finish is being validated.
+    if (mechanism && mechanism.mechanism_family && mechanism.mechanism_family !== 'corded') issue(issues, 'mechanism', 'Mechanism finishes are only valid for corded mechanisms.')
     if (mechanism && finish && !(Array.isArray(finish.compatible_mechanisations) && finish.compatible_mechanisations.some((candidate: any) => optionMatches(candidate, mechanism)))) issue(issues, 'mechanismFinish', 'The selected mechanism finish is not compatible with the selected mechanism.')
     if (mechanism) selectedOptions.mechanism = optionSnapshot(mechanism, { unitPrice: numberValue(mechanism.price), unitPricePence: toPence(mechanism.price) })
     if (finish) selectedOptions.mechanismFinish = optionSnapshot(finish)
@@ -343,9 +370,9 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
     if (hasSelection(sizeSelection) && !size) issue(issues, 'cushionSize', 'The selected cushion size is unavailable or inactive.')
     if (hasSelection(padSelection) && !pad) issue(issues, 'cushionPad', 'The selected cushion pad is unavailable or inactive.')
     if (pad?.type === 'duck_feather' && !size) issue(issues, 'cushionSize', 'A valid cushion size is required for Duck Feather Pad.')
-    if (finish) selectedOptions.cushionFinish = optionSnapshot(finish, { unitPrice: numberValue(finish.price), unitPricePence: toPence(finish.price) })
+    if (finish) selectedOptions.cushionFinish = optionSnapshot(finish, { type: finish.type || null, unitPrice: numberValue(finish.price), unitPricePence: toPence(finish.price) })
     if (size) selectedOptions.cushionSize = optionSnapshot(size, { width_cm: numberValue(size.width_cm), height_cm: numberValue(size.height_cm), shape: size.shape || '', duckFeatherSurcharge: numberValue(size.duck_feather_surcharge), duckFeatherSurchargePence: toPence(size.duck_feather_surcharge) })
-    if (pad) selectedOptions.cushionPad = optionSnapshot(pad, { unitPrice: pad.type === 'cover_only' ? 0 : null, unitPricePence: pad.type === 'cover_only' ? 0 : null })
+    if (pad) selectedOptions.cushionPad = optionSnapshot(pad, { type: pad.type || null, unitPrice: pad.type === 'cover_only' ? 0 : null, unitPricePence: pad.type === 'cover_only' ? 0 : null })
   }
 
   if (issues.length) throw new MadeToMeasureValidationError(issues)
