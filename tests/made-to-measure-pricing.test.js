@@ -221,7 +221,8 @@ test('cushion quote resolves size, piping and pad from the server catalogue', as
     'api::fabric.fabric': [fabric],
     'api::cushion-size.cushion-size': [record('square', { name: 'Square', width_cm: 38, height_cm: 38, shape: 'square' })],
     'api::cushion-piping.cushion-piping': [record('piped', { name: 'Piped', type: 'piped', price: 3 })],
-    'api::cushion-pad.cushion-pad': [record('cover-only', { name: 'Cover only', type: 'cover_only', price: 0 })],
+    // A legacy generic value must not make Cover Only a paid add-on.
+    'api::cushion-pad.cushion-pad': [record('cover-only', { name: 'Cover only', type: 'cover_only', price: 15 })],
     'api::pricing-rule.pricing-rule': [record('cushion-rule', { product_type: 'cushion', formula: { workmanshipFee: 0 } })],
   }
   const strapi = { entityService: { findMany: async (uid, params = {}) => {
@@ -239,6 +240,7 @@ test('cushion quote resolves size, piping and pad from the server catalogue', as
   assert.equal(quote.items[0].selectedOptions.cushionFinish.unitPricePence, 300)
   assert.equal(quote.items[0].selectedOptions.cushionPad.type, 'cover_only')
   assert.ok(quote.breakdown.accessories.some(item => item.type === 'cushion_finish' && item.totalPence === 300))
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_pad').totalPence, 0)
 })
 
 test('cushion quote evaluates the database rule for fabric, piping, pad and workmanship', async () => {

@@ -240,9 +240,13 @@ export default {
         })),
         pads: cushionPads.map((item: any) => publicOption(item, {
           type: item.type,
-          // Do not hide the DB price. The cushion pricing rule explicitly
-          // consumes cushion_pad.price; null is only a legacy-row fallback.
-          price: item.price == null ? null : Number(item.price),
+          // Duck Feather is priced by the selected size surcharge. Cover Only
+          // is the zero-cost base option; neither uses the legacy generic pad
+          // price stored on the pad row.
+          price: item.type === 'duck_feather' || item.type === 'cover_only'
+            ? 0
+            : item.price == null ? null : Number(item.price),
+          priceMode: item.type === 'duck_feather' ? 'size_surcharge' : 'fixed',
         })),
         delivery: configMetadata(configurationByType.cushion, 'cushion'),
       },
@@ -266,7 +270,13 @@ export default {
       mechanisations: mechanisations.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), price: Number(item.price) || 0 })),
       mechanismFinishes: mechanismFinishes.map((item: any) => publicOption(item, { thumbnail: firstMediaUrl(item.thumbnail), compatibleMechanismKeys: Array.isArray(item.compatible_mechanisations) ? item.compatible_mechanisations.map((mechanism: any) => mechanism.key || mechanism.documentId || mechanism.id).filter(Boolean) : [] })),
       cushionPipingTypes: activeCushionFinishes.map((item: any) => publicOption(item, { type: item.type, price: Number(item.price) || 0 })),
-      cushionPads: cushionPads.map((item: any) => publicOption(item, { type: item.type, price: item.price == null ? null : Number(item.price) })),
+      cushionPads: cushionPads.map((item: any) => publicOption(item, {
+        type: item.type,
+        price: item.type === 'duck_feather' || item.type === 'cover_only'
+          ? 0
+          : item.price == null ? null : Number(item.price),
+        priceMode: item.type === 'duck_feather' ? 'size_surcharge' : 'fixed',
+      })),
       cushionSizes: cushionSizes.map((item: any) => publicOption(item, { shape: item.shape, width_cm: Number(item.width_cm), height_cm: Number(item.height_cm), workmanshipCost: item.workmanship_cost == null ? 25 : Number(item.workmanship_cost), duckFeatherSurcharge: Number(item.duck_feather_surcharge) || 0 })),
       pricingRules: pricingRules.map((item: any) => ({ ...identity(item), name: item.name || '', product_type: item.product_type || '', formula: item.formula })),
       disabledLegacyOptions: { trimmings: legacyTrimmings.length === 0, curtainPoles: true, curtainTracks: true },

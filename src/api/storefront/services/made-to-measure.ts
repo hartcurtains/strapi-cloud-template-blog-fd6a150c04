@@ -376,6 +376,9 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
     if (hasSelection(sizeSelection) && !size) issue(issues, 'cushionSize', 'The selected cushion size is unavailable or inactive.')
     if (hasSelection(padSelection) && !pad) issue(issues, 'cushionPad', 'The selected cushion pad is unavailable or inactive.')
     if (pad?.type === 'duck_feather' && !size) issue(issues, 'cushionSize', 'A valid cushion size is required for Duck Feather Pad.')
+    if (pad?.type === 'duck_feather' && size && (size.duck_feather_surcharge === null || size.duck_feather_surcharge === undefined)) {
+      issue(issues, 'cushionPad', 'Duck Feather pricing is not configured for the selected cushion size.')
+    }
     if (finish) selectedOptions.cushionFinish = optionSnapshot(finish, { type: finish.type || null, unitPrice: numberValue(finish.price), unitPricePence: toPence(finish.price) })
     if (size) {
       const workmanshipCost = size.workmanship_cost == null ? null : numberValue(size.workmanship_cost)
@@ -385,17 +388,20 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
         shape: size.shape || '',
         workmanshipCost,
         workmanshipCostPence: workmanshipCost == null ? null : toPence(workmanshipCost),
-        duckFeatherSurcharge: numberValue(size.duck_feather_surcharge),
-        duckFeatherSurchargePence: toPence(size.duck_feather_surcharge),
+        duckFeatherSurcharge: size.duck_feather_surcharge == null ? null : numberValue(size.duck_feather_surcharge),
+        duckFeatherSurchargePence: size.duck_feather_surcharge == null ? null : toPence(size.duck_feather_surcharge),
       })
     }
     if (pad) {
       // Duck Feather is size-priced: its catalogue record intentionally has
       // a generic £0 price, while each cushion size stores the £10/£12/£14…
       // surcharge consumed by the Cushion Pricing Rule. Cover Only continues
-      // to use cushion_pad.price directly.
+      // Cover Only is the zero-cost base option; other future pad types may
+      // continue to use their own fixed catalogue price.
       const configuredPrice = pad.type === 'duck_feather'
-        ? numberValue(size?.duck_feather_surcharge, numberValue(pad.price))
+        ? numberValue(size?.duck_feather_surcharge)
+        : pad.type === 'cover_only'
+          ? 0
         : numberValue(pad.price)
       selectedOptions.cushionPad = optionSnapshot(pad, {
         type: pad.type || null,

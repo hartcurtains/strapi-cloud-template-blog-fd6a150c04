@@ -122,6 +122,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
   // Seed pricing rules in all environments (runs before production-only import)
   await seedCushionPricingRule(strapi);
   await repairCushionSizePricingFields(strapi);
+  await repairCushionPadPricingFields(strapi);
 
   // Only run in production (Strapi Cloud)
   if (process.env.NODE_ENV !== 'production') {
@@ -395,16 +396,36 @@ async function seedCushionPricingRule(strapi: Core.Strapi): Promise<void> {
 async function repairCushionSizePricingFields(strapi: Core.Strapi): Promise<void> {
   try {
     const sizes = await strapi.entityService.findMany('api::cushion-size.cushion-size', { limit: 200 });
-    for (const size of Array.isArray(sizes) ? sizes : []) {
+    const orderedSizes = (Array.isArray(sizes) ? sizes : []).slice().sort((left: any, right: any) => {
+      const leftArea = Number(left.width_cm || 0) * Number(left.height_cm || 0);
+      const rightArea = Number(right.width_cm || 0) * Number(right.height_cm || 0);
+      return leftArea - rightArea || Number(left.id || 0) - Number(right.id || 0);
+    });
+    for (const [index, size] of orderedSizes.entries()) {
       const legacySize = size as any;
-      if (legacySize.workmanship_cost !== null && legacySize.workmanship_cost !== undefined) continue;
-      await strapi.entityService.update('api::cushion-size.cushion-size', size.id, {
-        data: { workmanship_cost: 25 } as any,
-      });
+      const repair: Record<string, number> = {};
+      if (legacySize.workmanship_cost === null || legacySize.workmanship_cost === undefined) repair.workmanship_cost = 25;
+      if (legacySize.duck_feather_surcharge === null || legacySize.duck_feather_surcharge === undefined) repair.duck_feather_surcharge = 10 + index * 2;
+      if (Object.keys(repair).length > 0) {
+        await strapi.entityService.update('api::cushion-size.cushion-size', size.id, { data: repair as any });
+      }
     }
   } catch (error: any) {
     // A failed repair must not prevent Strapi from starting; the API exposes
     // the same legacy value until the row can be edited in the admin.
     console.warn('⚠️  Error repairing cushion workmanship fields:', error.message);
+  }
+}
+
+async function repairCushionPadPricingFields(strapi: Core.Strapi): Promise<void> {
+  try {
+    const pads = await strapi.entityService.findMany('api::cushion-pad.cushion-pad', { limit: 100 });
+    for (const pad of Array.isArray(pads) ? pads : []) {
+      if (pad.type !== 'duck_feather' && pad.type !== 'cover_only') continue;
+      if (Number(pad.price) === 0) continue;
+      await strapi.entityService.update('api::cushion-pad.cushion-pad', pad.id, { data: { price: 0 } as any });
+    }
+  } catch (error: any) {
+    console.warn('âš ï¸  Error repairing cushion pad pricing fields:', error.message);
   }
 }
