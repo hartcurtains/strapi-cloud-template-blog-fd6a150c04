@@ -240,3 +240,49 @@ test('cushion quote resolves size, piping and pad from the server catalogue', as
   assert.equal(quote.items[0].selectedOptions.cushionPad.type, 'cover_only')
   assert.ok(quote.breakdown.accessories.some(item => item.type === 'cushion_finish' && item.totalPence === 300))
 })
+
+test('cushion quote evaluates the database rule for fabric, piping, pad and workmanship', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 34, usable_width_cm: 140 })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::cushion-size.cushion-size': [record('square', {
+      name: 'Square 38cm', width_cm: 38, height_cm: 38, shape: 'square', workmanship_cost: 25, duck_feather_surcharge: 10,
+    })],
+    'api::cushion-piping.cushion-piping': [record('piped', { name: 'Piped', type: 'piped', price: 3 })],
+    // Null is the legacy shape: the server must use the size surcharge while
+    // still accepting a real cushion_pad.price when one is configured.
+    'api::cushion-pad.cushion-pad': [record('duck', { name: 'Duck feather pad', type: 'duck_feather', price: null })],
+    'api::pricing-rule.pricing-rule': [record('cushion-rule', {
+      product_type: 'cushion',
+      formula: {
+        steps: [
+          { inputs: ['size.fabric_metres', 'fabric.price_per_metre'], output: 'fabricCost', operation: 'multiply' },
+          { inputs: ['cushion_piping_type.price'], output: 'pipingCost', operation: 'set' },
+          { inputs: ['cushion_pad.price'], output: 'padCost', operation: 'set' },
+          { inputs: ['size.workmanship_cost'], output: 'workmanshipCost', operation: 'set' },
+          { inputs: ['fabricCost', 'pipingCost', 'padCost', 'workmanshipCost'], output: 'totalPrice', operation: 'add' },
+        ],
+        finalOutput: 'totalPrice',
+      },
+    })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'cushion', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 38, height: 38 }, cushionSizeKey: 'square', cushionFinishKey: 'piped', cushionPadKey: 'duck',
+  }], shipping: '0.00' })
+
+  // 0.1444m² × £34 = £4.91, + £3 piping, + £10 legacy duck surcharge,
+  // + £25 workmanship = £42.91.
+  assert.equal(quote.breakdown.fabric[0].totalPence, 491)
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_finish').totalPence, 300)
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_pad').totalPence, 1000)
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 2500)
+  assert.equal(quote.breakdown.totalPence, 4291)
+  assert.equal(quote.breakdown.total, '42.91')
+})

@@ -59,6 +59,11 @@ const toPence = (amount: any): number => {
 
 const fromPence = (pence: number): string => (Math.max(0, Math.round(pence)) / 100).toFixed(2)
 
+// Older cushion-size rows were created before the workmanship field was added
+// to the catalogue. Keep the historical £25 per-cushion charge while those
+// rows are repaired by bootstrap; new/edited rows always win.
+const LEGACY_CUSHION_WORKMANSHIP = 25
+
 export const penceFromDecimal = (value: any): number | null => {
   const text = String(value ?? '').trim()
   if (!/^\d+(?:\.\d{1,2})?$/.test(text)) return null
@@ -371,8 +376,31 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
     if (hasSelection(padSelection) && !pad) issue(issues, 'cushionPad', 'The selected cushion pad is unavailable or inactive.')
     if (pad?.type === 'duck_feather' && !size) issue(issues, 'cushionSize', 'A valid cushion size is required for Duck Feather Pad.')
     if (finish) selectedOptions.cushionFinish = optionSnapshot(finish, { type: finish.type || null, unitPrice: numberValue(finish.price), unitPricePence: toPence(finish.price) })
-    if (size) selectedOptions.cushionSize = optionSnapshot(size, { width_cm: numberValue(size.width_cm), height_cm: numberValue(size.height_cm), shape: size.shape || '', duckFeatherSurcharge: numberValue(size.duck_feather_surcharge), duckFeatherSurchargePence: toPence(size.duck_feather_surcharge) })
-    if (pad) selectedOptions.cushionPad = optionSnapshot(pad, { type: pad.type || null, unitPrice: pad.type === 'cover_only' ? 0 : null, unitPricePence: pad.type === 'cover_only' ? 0 : null })
+    if (size) {
+      const workmanshipCost = size.workmanship_cost == null ? null : numberValue(size.workmanship_cost)
+      selectedOptions.cushionSize = optionSnapshot(size, {
+        width_cm: numberValue(size.width_cm),
+        height_cm: numberValue(size.height_cm),
+        shape: size.shape || '',
+        workmanshipCost,
+        workmanshipCostPence: workmanshipCost == null ? null : toPence(workmanshipCost),
+        duckFeatherSurcharge: numberValue(size.duck_feather_surcharge),
+        duckFeatherSurchargePence: toPence(size.duck_feather_surcharge),
+      })
+    }
+    if (pad) {
+      // The deployed pricing rule uses cushion_pad.price. Some legacy duck
+      // pad rows have that field null and store the size surcharge instead;
+      // retain that data until the row is corrected in Strapi.
+      const configuredPrice = pad.price == null
+        ? (pad.type === 'duck_feather' ? numberValue(size?.duck_feather_surcharge) : 0)
+        : numberValue(pad.price)
+      selectedOptions.cushionPad = optionSnapshot(pad, {
+        type: pad.type || null,
+        unitPrice: configuredPrice,
+        unitPricePence: toPence(configuredPrice),
+      })
+    }
   }
 
   if (issues.length) throw new MadeToMeasureValidationError(issues)
@@ -520,6 +548,39 @@ export const isAuthoritativeMadeToMeasureLine = (item: any): boolean => {
   )
 }
 
+function evaluatePricingRuleOutputs(rule: any, data: Record<string, any>): Record<string, any> {
+  if (!rule?.formula?.steps || !Array.isArray(rule.formula.steps)) return {}
+  const store: Record<string, any> = { ...data }
+  const resolve = (input: any): any => {
+    if (typeof input === 'number') return input
+    if (typeof input !== 'string') return input ?? 0
+    const trimmed = input.trim()
+    if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed.slice(1, -1)
+    return input.split('.').reduce((obj: any, key) => (obj != null ? obj[key] : undefined), store) ?? 0
+  }
+  const evaluate = (step: any): any => {
+    if (!step || typeof step !== 'object') return 0
+    const inputs = Array.isArray(step.inputs) && step.inputs.length
+      ? step.inputs.map(resolve)
+      : step.input !== undefined ? [resolve(step.input)] : []
+    let result = 0
+    switch (step.operation) {
+      case 'multiply': result = inputs.reduce((total: number, value: any) => total * numberValue(value), 1); break
+      case 'divide': result = inputs[1] ? numberValue(inputs[0]) / numberValue(inputs[1]) : numberValue(inputs[0]); break
+      case 'add': result = inputs.reduce((total: number, value: any) => total + numberValue(value), 0); break
+      case 'subtract': result = numberValue(inputs[0]) - numberValue(inputs[1]); break
+      case 'set':
+      case 'constant':
+      case 'assign': result = inputs[0] ?? 0; break
+      default: result = 0
+    }
+    if (step.output) store[step.output] = result
+    return result
+  }
+  for (const step of rule.formula.steps) evaluate(step)
+  return store
+}
+
 async function calculateStandardFabricQuote(strapi: any, items: any[]) {
   const issues: ValidationIssue[] = []
   const lines: any[] = []
@@ -626,13 +687,33 @@ async function calculateLine(strapi: any, line: any, index: number) {
   if (issues.length) throw new MadeToMeasureValidationError(issues)
 
   const rule = await pricingRule(strapi, productType)
-  const workmanshipPence = toPence(rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? 0)
   const fullnessMultiplier = numberValue(validated.selectedOptions.curtainType?.fullnessMultiplier, 1)
   const materialMetres = productType === 'cushion'
     ? (widthCm * heightCm) / 10000
     : fabricMetres(fabric, productType, widthCm, heightCm, fullnessMultiplier)
   const fabricUnitPence = toPence(fabric?.price_per_metre)
-  const fabricPence = multiplyPence(fabricUnitPence, materialMetres)
+  const cushionRuleData = productType === 'cushion' ? {
+    size: {
+      fabric_metres: materialMetres,
+      workmanship_cost: validated.selectedOptions.cushionSize?.workmanshipCost == null
+        ? LEGACY_CUSHION_WORKMANSHIP
+        : numberValue(validated.selectedOptions.cushionSize.workmanshipCost),
+    },
+    fabric: { price_per_metre: numberValue(fabric?.price_per_metre) },
+    cushion_piping_type: { price: numberValue(validated.selectedOptions.cushionFinish?.unitPrice) },
+    cushion_pad: { price: numberValue(validated.selectedOptions.cushionPad?.unitPrice) },
+  } : null
+  const ruleOutputs = cushionRuleData ? evaluatePricingRuleOutputs(rule, cushionRuleData) : {}
+  const workmanshipAmount = productType === 'cushion'
+    ? (ruleOutputs.workmanshipCost ?? rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? validated.selectedOptions.cushionSize?.workmanshipCost ?? LEGACY_CUSHION_WORKMANSHIP)
+    : (rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? 0)
+  const workmanshipPence = toPence(workmanshipAmount)
+  const fabricAmount = productType === 'cushion' && ruleOutputs.fabricCost !== undefined
+    ? numberValue(ruleOutputs.fabricCost)
+    : numberValue(fabric?.price_per_metre) * materialMetres
+  const fabricPence = productType === 'cushion'
+    ? toPence(fabricAmount)
+    : multiplyPence(fabricUnitPence, materialMetres)
   const baseProductPence = fabricPence + workmanshipPence
   const accessories: any[] = []
 
@@ -641,11 +722,13 @@ async function calculateLine(strapi: any, line: any, index: number) {
     accessories.push({ type: 'mechanism', label: validated.selectedOptions.mechanism.label, quantity: 1, unit: 'item', unitPrice: fromPence(unit), unitPricePence: unit, total: fromPence(multiplyPence(unit, quantity)), totalPence: multiplyPence(unit, quantity) })
   }
   if (validated.selectedOptions.cushionFinish) {
-    const unit = validated.selectedOptions.cushionFinish.unitPricePence || 0
+    const rulePrice = productType === 'cushion' && ruleOutputs.pipingCost !== undefined ? numberValue(ruleOutputs.pipingCost) : null
+    const unit = rulePrice === null ? (validated.selectedOptions.cushionFinish.unitPricePence || 0) : toPence(rulePrice)
     accessories.push({ type: 'cushion_finish', label: validated.selectedOptions.cushionFinish.label, quantity, unit: 'item', unitPrice: fromPence(unit), unitPricePence: unit, total: fromPence(multiplyPence(unit, quantity)), totalPence: multiplyPence(unit, quantity) })
   }
-  if (validated.selectedOptions.cushionPad?.type === 'duck_feather') {
-    const unit = validated.selectedOptions.cushionSize?.duckFeatherSurchargePence || 0
+  if (validated.selectedOptions.cushionPad) {
+    const rulePrice = productType === 'cushion' && ruleOutputs.padCost !== undefined ? numberValue(ruleOutputs.padCost) : null
+    const unit = rulePrice === null ? (validated.selectedOptions.cushionPad.unitPricePence || 0) : toPence(rulePrice)
     accessories.push({ type: 'cushion_pad', label: validated.selectedOptions.cushionPad.label, quantity, unit: 'item', unitPrice: fromPence(unit), unitPricePence: unit, total: fromPence(multiplyPence(unit, quantity)), totalPence: multiplyPence(unit, quantity) })
   }
   const liningMetres = productType === 'cushion' ? 0 : materialMetres

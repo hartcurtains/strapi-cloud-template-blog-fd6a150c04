@@ -34,7 +34,7 @@ const records = [
     ['square-60cm', 'Square 60cm', 'square', 60, 60, 18, 50],
     ['rectangle-30x45cm', 'Rectangle 30cm × 45cm', 'rectangular', 30, 45, 20, 60],
     ['rectangle-38x50cm', 'Rectangle 38cm × 50cm', 'rectangular', 38, 50, 22, 70],
-  ].map(([key, name, shape, width_cm, height_cm, duck_feather_surcharge, sort_order]) => ({ uid: 'api::cushion-size.cushion-size', key, data: { key, name, shape, width_cm, height_cm, duck_feather_surcharge, active: true, sort_order } })),
+  ].map(([key, name, shape, width_cm, height_cm, duck_feather_surcharge, sort_order]) => ({ uid: 'api::cushion-size.cushion-size', key, data: { key, name, shape, width_cm, height_cm, duck_feather_surcharge, workmanship_cost: 25, active: true, sort_order } })),
   { uid: 'api::cushion-pad.cushion-pad', key: 'duck-feather-pad', data: { key: 'duck-feather-pad', name: 'Duck Feather Pad', type: 'duck_feather', price: 0, active: true, sort_order: 10 } },
   { uid: 'api::cushion-pad.cushion-pad', key: 'cover-only', data: { key: 'cover-only', name: 'Cover Only', type: 'cover_only', price: 0, active: true, sort_order: 20 } },
   { uid: 'api::made-to-measure-configuration.made-to-measure-configuration', key: 'curtain', data: { key: 'curtain', product_type: 'curtain', display_name: 'Made-to-measure curtains', active: true, delivery_lead_time: '4-6 weeks', delivery_message: 'Delivery for made to measure curtains: 4-6 weeks.', disabled_option_categories: ['trimmings', 'curtain_poles', 'curtain_tracks'], pricing_version: 'mtm-2026-08-03-v1' } },

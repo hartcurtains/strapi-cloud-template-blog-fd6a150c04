@@ -121,6 +121,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
 
   // Seed pricing rules in all environments (runs before production-only import)
   await seedCushionPricingRule(strapi);
+  await repairCushionSizePricingFields(strapi);
 
   // Only run in production (Strapi Cloud)
   if (process.env.NODE_ENV !== 'production') {
@@ -391,3 +392,19 @@ async function seedCushionPricingRule(strapi: Core.Strapi): Promise<void> {
   }
 }
 
+async function repairCushionSizePricingFields(strapi: Core.Strapi): Promise<void> {
+  try {
+    const sizes = await strapi.entityService.findMany('api::cushion-size.cushion-size', { limit: 200 });
+    for (const size of Array.isArray(sizes) ? sizes : []) {
+      const legacySize = size as any;
+      if (legacySize.workmanship_cost !== null && legacySize.workmanship_cost !== undefined) continue;
+      await strapi.entityService.update('api::cushion-size.cushion-size', size.id, {
+        data: { workmanship_cost: 25 } as any,
+      });
+    }
+  } catch (error: any) {
+    // A failed repair must not prevent Strapi from starting; the API exposes
+    // the same legacy value until the row can be edited in the admin.
+    console.warn('⚠️  Error repairing cushion workmanship fields:', error.message);
+  }
+}

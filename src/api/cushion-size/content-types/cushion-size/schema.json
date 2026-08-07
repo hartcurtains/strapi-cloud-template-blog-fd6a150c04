@@ -16,6 +16,16 @@
       "enum": ["square", "rectangular", "bolster", "round", "oval"],
       "required": true
     },
+    "workmanship_cost": {
+      "type": "decimal",
+      "default": 25,
+      "description": "Per-cushion workmanship charge used by the cushion pricing rule"
+    },
+    "duck_feather_surcharge": {
+      "type": "decimal",
+      "default": 0,
+      "description": "Legacy fallback for duck-feather pad rows whose pad price is null"
+    },
     "thumbnail": {
       "type": "media",
       "multiple": false,
