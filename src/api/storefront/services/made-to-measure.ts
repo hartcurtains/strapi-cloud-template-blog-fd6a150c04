@@ -389,11 +389,12 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
       })
     }
     if (pad) {
-      // The deployed pricing rule uses cushion_pad.price. Some legacy duck
-      // pad rows have that field null and store the size surcharge instead;
-      // retain that data until the row is corrected in Strapi.
-      const configuredPrice = pad.price == null
-        ? (pad.type === 'duck_feather' ? numberValue(size?.duck_feather_surcharge) : 0)
+      // Duck Feather is size-priced: its catalogue record intentionally has
+      // a generic £0 price, while each cushion size stores the £10/£12/£14…
+      // surcharge consumed by the Cushion Pricing Rule. Cover Only continues
+      // to use cushion_pad.price directly.
+      const configuredPrice = pad.type === 'duck_feather'
+        ? numberValue(size?.duck_feather_surcharge, numberValue(pad.price))
         : numberValue(pad.price)
       selectedOptions.cushionPad = optionSnapshot(pad, {
         type: pad.type || null,
