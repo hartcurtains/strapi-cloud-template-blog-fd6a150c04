@@ -122,10 +122,53 @@ test('interlining rule workmanship replaces the standard curtain making charge',
     measurements: { width: 150, height: 100 }, curtainTypeId: 'eyelet', liningTypeKey: 'interlined', liningColourKey: 'white',
   }], shipping: '0.00' })
 
-  const lining = quote.breakdown.accessories.find(item => item.type === 'lining')
-  assert.equal(lining.totalPence, 26600)
-  assert.equal(quote.breakdown.makingCharge[0].totalPence, 0)
-  assert.equal(quote.breakdown.totalPence, quote.breakdown.fabric[0].totalPence + lining.totalPence)
+  const lining = quote.breakdown.accessories.find(item => item.type === 'lining_material')
+  assert.equal(lining.totalPence, 0)
+  assert.equal(quote.breakdown.makingCharge[0].label, 'Interlining workmanship')
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 26600)
+  assert.equal(quote.breakdown.totalPence, quote.breakdown.fabric[0].totalPence + lining.totalPence + 26600)
+})
+
+test('blind interlining shows its workmanship separately without adding blind making twice', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 29, usable_width_cm: 140 })
+  const interliningPricingRule = {
+    formula: {
+      steps: [
+        { name: 'Cut Length with Allowance', inputs: ['height_cm', 30], output: 'cutLength_cm', operation: 'add' },
+        { name: 'Total Interlining Needed (cm)', inputs: [1, 'cutLength_cm'], output: 'totalInterlining_cm', operation: 'multiply' },
+        { name: 'Convert cm to metres', inputs: ['totalInterlining_cm', 100], output: 'totalInterlining_m', operation: 'divide' },
+        { name: 'Interlining Material Cost', inputs: ['totalInterlining_m', 'interlining.price_per_metre'], output: 'interliningMaterialCost', operation: 'multiply' },
+        { name: 'Interlining Workmanship - Width Base', inputs: [1, 120], output: 'interliningWorkmanshipWidth', operation: 'multiply' },
+        { name: 'Interlining Workmanship - Length Base', inputs: ['totalInterlining_m', 10], output: 'interliningWorkmanshipLength', operation: 'multiply' },
+        { name: 'Total Interlining Workmanship', inputs: ['interliningWorkmanshipWidth', 'interliningWorkmanshipLength'], output: 'interliningWorkmanshipTotal', operation: 'add' },
+        { name: 'Total Interlining Price', inputs: ['interliningMaterialCost', 'interliningWorkmanshipTotal'], output: 'totalInterliningPrice', operation: 'add' },
+      ],
+      finalOutput: 'totalInterliningPrice',
+    },
+  }
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
+    'api::lining.lining': [record('interlined', { liningType: 'Interlining', price_per_metre: null, pricing_rule: interliningPricingRule, applies_to_blinds: true })],
+    'api::lining-colour.lining-colour': [record('white', { display_name: 'White', applies_to_blinds: true, compatible_lining_types: [record('interlined')] })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'blind', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 100, height: 123 }, blindTypeId: 'stacked', liningTypeKey: 'interlined', liningColourKey: 'white',
+  }], shipping: '0.00' })
+
+  const material = quote.breakdown.accessories.find(item => item.type === 'lining_material')
+  assert.equal(material.totalPence, 0)
+  assert.equal(quote.breakdown.makingCharge[0].label, 'Interlining workmanship')
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 13530)
+  assert.equal(quote.breakdown.totalPence, 17967)
 })
 
 test('blackout lining adds its own metre-based accessory cost while keeping the selected lining', async () => {

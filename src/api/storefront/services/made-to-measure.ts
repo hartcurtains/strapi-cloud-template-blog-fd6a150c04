@@ -434,7 +434,7 @@ async function findFabric(strapi: any, identifier: any) {
   return findByIdentifier(strapi, 'api::fabric.fabric', identifier, undefined, {})
 }
 
-function evaluateLiningPricingRule(rule: any, data: Record<string, any>): number {
+function evaluateLiningPricingRule(rule: any, data: Record<string, any>, outputStore?: Record<string, any>): number {
   if (!rule?.formula?.steps || !Array.isArray(rule.formula.steps)) return 0
   const store: Record<string, any> = { ...data }
   const resolve = (input: any): any => {
@@ -484,10 +484,48 @@ function evaluateLiningPricingRule(rule: any, data: Record<string, any>): number
     return result
   }
   for (const step of rule.formula.steps) evalStep(step)
+  if (outputStore) Object.assign(outputStore, store)
   const finalOutput = rule.formula.finalOutput
   let val = finalOutput ? (store[finalOutput] ?? 0) : 0
   if (!val) { for (const k of ['totalPrice', 'finalPrice', 'total', 'price', 'cost', 'totalInterliningPrice']) { if (store[k] > 0) { val = store[k]; break } } }
   return typeof val === 'number' && !isNaN(val) ? val : 0
+}
+
+function splitLiningRuleAmounts(outputs: Record<string, any>, totalAmount: number) {
+  const outputKeys = Object.keys(outputs).filter(key => Number.isFinite(Number(outputs[key])))
+  const hasWorkmanship = outputKeys.some(key => /workmanship/i.test(key) && !/multiplier/i.test(key))
+
+  const directWorkmanshipKey = outputKeys.find(key => /workmanship.*total|total.*workmanship/i.test(key))
+    || outputKeys.find(key => /workmanshipcost/i.test(key))
+  const workmanshipAmount = directWorkmanshipKey
+    ? numberValue(outputs[directWorkmanshipKey])
+    : outputKeys
+      .filter(key => /workmanship/i.test(key) && !/multiplier|total/i.test(key))
+      .reduce((sum, key) => sum + numberValue(outputs[key]), 0)
+
+  const materialKey = outputKeys.find(key => /^interliningMaterialCost$/i.test(key))
+    || outputKeys.find(key => /(?:interlining|lining).*material.*cost/i.test(key))
+    || outputKeys.find(key => /^materialCost$/i.test(key))
+    || outputKeys.find(key => /materialCost/i.test(key))
+  const materialAmount = materialKey ? numberValue(outputs[materialKey]) : 0
+  if (!hasWorkmanship) {
+    return {
+      hasWorkmanship: false,
+      // Legacy lining rules may contain additional charges without naming
+      // them as workmanship. Keep those rules as one lining charge.
+      materialAmount: numberValue(totalAmount),
+      workmanshipAmount: 0,
+    }
+  }
+  const additionalAmount = hasWorkmanship
+    ? Math.max(0, numberValue(totalAmount) - materialAmount - workmanshipAmount)
+    : 0
+
+  return {
+    hasWorkmanship,
+    materialAmount: materialAmount + additionalAmount,
+    workmanshipAmount,
+  }
 }
 
 async function pricingRule(strapi: any, productType: string) {
@@ -787,14 +825,27 @@ async function calculateLine(strapi: any, line: any, index: number) {
     trimmings: [],
   })
   const liningPricingRule = productType === 'cushion' ? null : validated.lining?.type?.pricing_rule
-  // An all-in lining rule such as Interlining already contains its own making
-  // labour, so it replaces the standard curtain making charge below.
-  const liningRuleIncludesWorkmanship = Array.isArray(liningPricingRule?.formula?.steps)
-    && liningPricingRule.formula.steps.some((step: any) => /workmanship/i.test(`${step?.name || ''} ${step?.output || ''}`))
+  const liningRuleOutputs: Record<string, any> = {}
+  const liningRuleData = liningPricingRule?.formula?.steps ? {
+    width_cm: widthCm,
+    height_cm: heightCm,
+    curtain_type: { fullness_multiplier: fullnessMultiplier },
+    fabric: { usableWidth_cm: numberValue(fabric?.usableWidth_cm || fabric?.usable_width_cm, 137), patternRepeat_cm: numberValue(fabric?.patternRepeat_cm || fabric?.pattern_repeat_cm), hemAllowance_cm: numberValue(fabric?.hemAllowance_cm, 30) },
+    interlining: { price_per_metre: numberValue(validated.lining?.type?.price_per_metre) },
+    quantity: 1,
+  } : null
+  const liningRuleTotalAmount = liningPricingRule && liningRuleData
+    ? evaluateLiningPricingRule(liningPricingRule, liningRuleData, liningRuleOutputs)
+    : 0
+  const liningRuleAmounts = splitLiningRuleAmounts(liningRuleOutputs, liningRuleTotalAmount)
+  // An all-in lining rule such as Interlining contains its own making labour.
+  // It replaces the standard blind/curtain making charge, while the response
+  // still exposes that labour as a separate workmanship line.
+  const liningRuleIncludesWorkmanship = Boolean(liningPricingRule && liningRuleAmounts.hasWorkmanship)
   const workmanshipAmount = productType === 'cushion'
     ? (ruleOutputs.workmanshipCost ?? rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? validated.selectedOptions.cushionSize?.workmanshipCost ?? LEGACY_CUSHION_WORKMANSHIP)
     : liningRuleIncludesWorkmanship
-      ? 0
+      ? liningRuleAmounts.workmanshipAmount
     : (rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? nonCushionRuleOutputs.workmanshipCost ?? 0)
   const workmanshipPence = toPence(workmanshipAmount)
   const fabricAmount = productType === 'cushion' && ruleOutputs.fabricCost !== undefined
@@ -822,30 +873,18 @@ async function calculateLine(strapi: any, line: any, index: number) {
   }
   const liningMetres = productType === 'cushion' ? 0 : materialMetres
   if (validated.selectedOptions.liningType) {
-    const liningTypeRecord = validated.lining?.type
     let liningTotalPence: number
     if (liningPricingRule && liningPricingRule.formula && liningPricingRule.formula.steps) {
-      const ruleData: Record<string, any> = {
-        width_cm: widthCm,
-        height_cm: heightCm,
-        curtain_type: { fullness_multiplier: fullnessMultiplier },
-        fabric: { usableWidth_cm: numberValue(fabric?.usableWidth_cm || fabric?.usable_width_cm, 137), patternRepeat_cm: numberValue(fabric?.patternRepeat_cm || fabric?.pattern_repeat_cm), hemAllowance_cm: numberValue(fabric?.hemAllowance_cm, 30) },
-        interlining: { price_per_metre: numberValue(liningTypeRecord.price_per_metre) },
-        quantity,
-      }
-      // Lining pricing rules describe the cost of one made-to-measure item.
-      // Evaluate them once per blind/curtain, then scale the resulting pence
-      // amount with quantity so fixed workmanship inside the rule is not
-      // accidentally charged only once for a multi-item line.
-      const ruleTotal = evaluateLiningPricingRule(liningPricingRule, { ...ruleData, quantity: 1 })
-      liningTotalPence = multiplyPence(toPence(ruleTotal || 0), quantity)
+      // Keep the rule's material and labour components separate so the
+      // summary does not present workmanship as a per-metre fabric price.
+      liningTotalPence = multiplyPence(toPence(liningRuleAmounts.materialAmount), quantity)
     } else {
       const unit = validated.selectedOptions.liningType.unitPricePence || 0
       liningTotalPence = multiplyPence(unit, liningMetres * quantity)
     }
     const unit = liningTotalPence > 0 ? Math.round(liningTotalPence / (liningMetres * quantity || 1)) : 0
     accessories.push({
-      type: 'lining',
+      type: liningRuleIncludesWorkmanship ? 'lining_material' : 'lining',
       label: `${validated.selectedOptions.liningType.label} — ${validated.selectedOptions.liningColour.label}`,
       quantity: liningMetres * quantity,
       unit: 'metre',
@@ -882,7 +921,7 @@ async function calculateLine(strapi: any, line: any, index: number) {
     breakdown: {
       baseProduct: { label: 'Base product', total: fromPence(baseTotalPence), totalPence: baseTotalPence },
       fabric: { label: 'Fabric', quantity: materialMetres * quantity, unit: 'metre', unitPrice: fromPence(fabricUnitPence), unitPricePence: fabricUnitPence, total: fromPence(multiplyPence(fabricUnitPence, materialMetres * quantity)), totalPence: multiplyPence(fabricUnitPence, materialMetres * quantity) },
-      makingCharge: { label: 'Making charge', quantity, unit: 'item', unitPrice: fromPence(workmanshipPence), unitPricePence: workmanshipPence, total: fromPence(multiplyPence(workmanshipPence, quantity)), totalPence: multiplyPence(workmanshipPence, quantity) },
+      makingCharge: { label: liningRuleIncludesWorkmanship ? `${validated.selectedOptions.liningType?.label || 'Lining'} workmanship` : productType === 'blind' ? 'Blind making' : 'Making charge', quantity, unit: 'item', unitPrice: fromPence(workmanshipPence), unitPricePence: workmanshipPence, total: fromPence(multiplyPence(workmanshipPence, quantity)), totalPence: multiplyPence(workmanshipPence, quantity) },
       accessories,
       discounts: [],
       delivery: { total: '0.00', totalPence: 0 },
