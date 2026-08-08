@@ -36,6 +36,54 @@ test('lining price uses unformatted calculated fabric metres at 700 pence per me
   assert.equal(lining.total, '53.76')
 })
 
+test('curtain quote evaluates heading-based workmanship from the database rule', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 29, usable_width_cm: 140 })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::curtain-type.curtain-type': [record('eyelet', { name: 'Eyelet', fullness_multiplier: 2 })],
+    'api::lining.lining': [record('lined', { liningType: 'Full Lining', price_per_metre: 7, applies_to_curtains: true })],
+    'api::lining-colour.lining-colour': [record('white', { display_name: 'White', applies_to_curtains: true, compatible_lining_types: [record('lined')] })],
+    'api::pricing-rule.pricing-rule': [record('curtain-rule', {
+      product_type: 'curtain',
+      formula: {
+        steps: [
+          { name: 'Calculate Fullness Width', inputs: ['width_cm', 'curtain_type.fullness_multiplier'], output: 'fullnessWidth_cm', operation: 'multiply' },
+          { name: 'Number of Fabric Widths', inputs: ['fullnessWidth_cm', 'fabric.usableWidth_cm'], output: 'widthsNeeded', operation: 'divide' },
+          { name: 'Round Fabric Widths with Threshold', inputs: ['widthsNeeded', 0.2], output: 'roundedWidths', operation: 'customRound' },
+          {
+            name: 'Determine Workmanship Multiplier',
+            condition: "curtain_heading.name == 'Pencil Pleat'",
+            operation: 'if_else',
+            on_true: { input: 75, output: 'workmanshipMultiplier', operation: 'set' },
+            on_false: {
+              condition: "curtain_heading.name == 'Wave'",
+              operation: 'if_else',
+              on_true: { input: 80, output: 'workmanshipMultiplier', operation: 'set' },
+              on_false: { input: 85, output: 'workmanshipMultiplier', operation: 'set' },
+            },
+          },
+          { name: 'Workmanship Cost', inputs: ['roundedWidths', 'workmanshipMultiplier'], output: 'workmanshipCost', operation: 'multiply' },
+        ],
+      },
+    })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'curtain', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 150, height: 100 }, curtainTypeId: 'eyelet', liningTypeKey: 'lined', liningColourKey: 'white',
+  }], shipping: '0.00' })
+
+  // 150cm x 2 fullness / 140cm = 2.14 widths; the 0.2 threshold rounds to 2.
+  // Eyelet uses the fallback £85 multiplier, so workmanship is £170.
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 17000)
+  assert.equal(quote.breakdown.totalPence, quote.breakdown.fabric[0].totalPence + quote.breakdown.accessories[0].totalPence + 17000)
+})
+
 test('blackout lining adds its own metre-based accessory cost while keeping the selected lining', async () => {
   const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140, pattern_repeat_cm: 64 })
   const records = {

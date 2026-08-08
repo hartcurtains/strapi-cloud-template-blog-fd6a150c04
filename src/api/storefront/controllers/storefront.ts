@@ -16,11 +16,18 @@ const firstMediaUrl = (media: any): string | null => {
       return null
     }
     if (typeof value !== 'object') return null
-    if (typeof value.url === 'string') return value.url
-    for (const nested of [value.data, value.attributes, value.formats]) {
+
+    // Option cards only need a tiny derivative. Returning the original media
+    // here makes a 1–3 MB image download for every drawer card.
+    for (const derivative of ['thumbnail', 'small', 'medium', 'large']) {
+      const url = visit(value.formats?.[derivative])
+      if (url) return url
+    }
+    for (const nested of [value.data, value.attributes]) {
       const url = visit(nested)
       if (url) return url
     }
+    if (typeof value.url === 'string') return value.url
     return null
   }
   return visit(media)

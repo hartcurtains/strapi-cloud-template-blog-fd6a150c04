@@ -568,10 +568,53 @@ function evaluatePricingRuleOutputs(rule: any, data: Record<string, any>): Recor
     if (typeof input !== 'string') return input ?? 0
     const trimmed = input.trim()
     if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed.slice(1, -1)
-    return input.split('.').reduce((obj: any, key) => (obj != null ? obj[key] : undefined), store) ?? 0
+    return input.split('.').reduce((obj: any, key) => {
+      if (key.endsWith('[]')) {
+        const array = obj?.[key.slice(0, -2)]
+        return Array.isArray(array) ? array : []
+      }
+      if (Array.isArray(obj)) return obj.map(item => item?.[key])
+      return obj != null ? obj[key] : undefined
+    }, store) ?? 0
+  }
+  const evaluateCondition = (condition: any): boolean => {
+    if (typeof condition !== 'string') return false
+    const operators = ['>=', '<=', '===', '!==', '==', '!=', '>', '<']
+    const operator = operators.find(candidate => condition.includes(candidate))
+    if (!operator) return false
+    const parts = condition.split(operator)
+    const left = resolve(parts[0].trim())
+    const right = resolve(parts.slice(1).join(operator).trim())
+    switch (operator) {
+      case '>': return left > right
+      case '<': return left < right
+      case '>=': return left >= right
+      case '<=': return left <= right
+      case '!=':
+      case '!==': return left != right
+      case '==':
+      case '===': return left == right
+      default: return false
+    }
+  }
+  const sumValue = (value: any): number => {
+    if (Array.isArray(value)) return value.reduce((total, item) => total + sumValue(item), 0)
+    if (value && typeof value === 'object') return numberValue(value.price)
+    return numberValue(value)
   }
   const evaluate = (step: any): any => {
     if (!step || typeof step !== 'object') return 0
+    if (step.operation === 'if_else') {
+      let result = 0
+      const branch = evaluateCondition(step.condition) ? step.on_true : step.on_false
+      if (branch?.sub_steps && Array.isArray(branch.sub_steps)) {
+        for (const subStep of branch.sub_steps) result = evaluate(subStep)
+      } else if (branch?.operation) {
+        result = evaluate(branch)
+      }
+      if (step.output) store[step.output] = result
+      return result
+    }
     const inputs = Array.isArray(step.inputs) && step.inputs.length
       ? step.inputs.map(resolve)
       : step.input !== undefined ? [resolve(step.input)] : []
@@ -581,6 +624,16 @@ function evaluatePricingRuleOutputs(rule: any, data: Record<string, any>): Recor
       case 'divide': result = inputs[1] ? numberValue(inputs[0]) / numberValue(inputs[1]) : numberValue(inputs[0]); break
       case 'add': result = inputs.reduce((total: number, value: any) => total + numberValue(value), 0); break
       case 'subtract': result = numberValue(inputs[0]) - numberValue(inputs[1]); break
+      case 'customRound': {
+        const value = numberValue(inputs[0])
+        const threshold = numberValue(inputs[1], 0.5)
+        const decimal = value % 1
+        result = decimal > threshold ? Math.ceil(value) : Math.floor(value)
+        break
+      }
+      case 'ceil': result = Math.ceil(numberValue(inputs[0])); break
+      case 'ceilDivide': result = numberValue(inputs[1]) ? Math.ceil(numberValue(inputs[0]) / numberValue(inputs[1])) : numberValue(inputs[0]); break
+      case 'sum': result = inputs.reduce((total: number, value: any) => total + sumValue(value), 0); break
       case 'set':
       case 'constant':
       case 'assign': result = inputs[0] ?? 0; break
@@ -722,6 +775,7 @@ async function calculateLine(strapi: any, line: any, index: number) {
     quantity,
     fullness_multiplier: fullnessMultiplier,
     curtain_type: { fullness_multiplier: fullnessMultiplier },
+    curtain_heading: { name: validated.selectedOptions.curtainType?.label || validated.selectedOptions.curtainType?.name || '' },
     blind_type: validated.selectedOptions.blindType || {},
     mechanism: validated.selectedOptions.mechanism || {},
     fabric: {
