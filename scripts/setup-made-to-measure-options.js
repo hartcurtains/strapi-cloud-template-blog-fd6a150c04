@@ -12,6 +12,7 @@ const { createStrapi } = require('@strapi/strapi');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const records = [
+  { uid: 'api::lining.lining', key: 'no-lining', data: { key: 'no-lining', liningType: 'No lining', display_name: 'No lining', price_per_metre: 0, active: true, sort_order: 0, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
   { uid: 'api::lining.lining', key: 'lined', data: { key: 'lined', liningType: 'Full lining', display_name: 'Full lining', active: true, sort_order: 10, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
   { uid: 'api::lining.lining', key: 'interlined', data: { key: 'interlined', liningType: 'Interlined', display_name: 'Interlined', active: true, sort_order: 20, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
   { uid: 'api::lining.lining', key: 'blackout', data: { key: 'blackout', liningType: 'Blackout Lining', display_name: 'Blackout Lining', blackout: true, active: true, sort_order: 30, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
@@ -43,7 +44,19 @@ const records = [
   { uid: 'api::made-to-measure-configuration.made-to-measure-configuration', key: 'fabric-sample', data: { key: 'fabric-sample', product_type: 'fabric_sample', display_name: 'Fabric samples', active: true, delivery_message: 'UK delivery in 3–5 working days.', delivery_returns_copy: null, disabled_option_categories: [], sample_max_quantity: 5, pricing_version: 'sample-cap-2026-08-03-v1' } },
 ];
 
+function modelAttributes(strapi, uid) {
+  return typeof strapi.getModel === 'function' ? (strapi.getModel(uid)?.attributes || {}) : null;
+}
+
+function supportedData(strapi, uid, data) {
+  const attributes = modelAttributes(strapi, uid);
+  if (!attributes) return { ...data };
+  return Object.fromEntries(Object.entries(data).filter(([field]) => Boolean(attributes[field])));
+}
+
 async function findByKey(strapi, uid, key) {
+  const attributes = modelAttributes(strapi, uid);
+  if (attributes && !attributes.key) return null;
   const found = await strapi.entityService.findMany(uid, { filters: { key }, limit: 1 });
   return Array.isArray(found) ? found[0] || null : null;
 }
@@ -70,6 +83,16 @@ async function findExisting(strapi, record) {
   const keyed = await findByKey(strapi, record.uid, record.key);
   if (keyed) return keyed;
   if (record.uid === 'api::lining.lining') return findLegacyLining(strapi, record.key);
+  const attributes = modelAttributes(strapi, record.uid);
+  const identityFields = ['name', 'display_name', 'liningType', 'type'];
+  const identityField = identityFields.find(field => attributes?.[field] && record.data[field] !== undefined);
+  if (identityField) {
+    const found = await strapi.entityService.findMany(record.uid, {
+      filters: { [identityField]: record.data[identityField] },
+      limit: 1,
+    });
+    if (Array.isArray(found) && found[0]) return found[0];
+  }
   return null;
 }
 
@@ -101,7 +124,7 @@ async function retireLegacyBlackoutColour(strapi, apply) {
 async function upsert(strapi, record, apply) {
   const existing = await findExisting(strapi, record);
   if (existing) {
-    const updateData = Object.fromEntries(Object.entries(record.data).filter(([field]) => field !== 'thumbnail'));
+    const updateData = supportedData(strapi, record.uid, Object.fromEntries(Object.entries(record.data).filter(([field]) => field !== 'thumbnail')));
     const hasChanges = Object.entries(updateData).some(([field, value]) => JSON.stringify(existing[field] ?? null) !== JSON.stringify(value ?? null));
     if (!hasChanges) return { ...record, action: 'exists', id: existing.id, documentId: existing.documentId || null };
     if (!apply) return { ...record, action: 'would-update', id: existing.id, documentId: existing.documentId || null };
@@ -109,7 +132,7 @@ async function upsert(strapi, record, apply) {
     return { ...record, action: 'updated', id: updated.id, documentId: updated.documentId || null };
   }
   if (!apply) return { ...record, action: 'would-create' };
-  const created = await strapi.entityService.create(record.uid, { data: { ...record.data, publishedAt: new Date().toISOString() } });
+  const created = await strapi.entityService.create(record.uid, { data: { ...supportedData(strapi, record.uid, record.data), publishedAt: new Date().toISOString() } });
   return { ...record, action: 'created', id: created.id, documentId: created.documentId || null };
 }
 
@@ -140,11 +163,12 @@ async function main(argv = process.argv.slice(2)) {
     const results = [];
     for (const record of records) results.push(await upsert(app, record, apply));
     const byKey = new Map(results.filter(item => item.id).map(item => [item.key, item]));
-    const liningTypes = ['lined', 'interlined', 'blackout'].map(key => byKey.get(key)).filter(Boolean);
+    const liningTypes = ['no-lining', 'lined', 'interlined', 'blackout'].map(key => byKey.get(key)).filter(Boolean);
+    const liningTypesWithColours = ['lined', 'interlined', 'blackout'].map(key => byKey.get(key)).filter(Boolean);
     const cordedMechanisms = ['corded-left', 'corded-right'].map(key => byKey.get(key)).filter(Boolean);
-    for (const key of ['white', 'pale-ivory', 'ivory', 'cream']) await connectRelation(app, 'api::lining-colour.lining-colour', key, 'compatible_lining_types', liningTypes, apply);
+    for (const key of ['white', 'pale-ivory', 'ivory', 'cream']) await connectRelation(app, 'api::lining-colour.lining-colour', key, 'compatible_lining_types', liningTypesWithColours, apply);
     for (const key of ['chrome', 'brass']) await connectRelation(app, 'api::mechanism-finish.mechanism-finish', key, 'compatible_mechanisations', cordedMechanisms, apply);
-    console.log(JSON.stringify({ mode: apply ? 'apply' : 'dry-run', migrations, created: results.filter(item => item.action === 'created').map(item => `${item.uid}:${item.key}`), updated: results.filter(item => item.action === 'updated').map(item => `${item.uid}:${item.key}`), wouldUpdate: results.filter(item => item.action === 'would-update').map(item => `${item.uid}:${item.key}`), existing: results.filter(item => item.action === 'exists').map(item => `${item.uid}:${item.key}`), records: records.length }, null, 2));
+    console.log(JSON.stringify({ mode: apply ? 'apply' : 'dry-run', migrations, created: results.filter(item => item.action === 'created').map(item => `${item.uid}:${item.key}`), wouldCreate: results.filter(item => item.action === 'would-create').map(item => `${item.uid}:${item.key}`), updated: results.filter(item => item.action === 'updated').map(item => `${item.uid}:${item.key}`), wouldUpdate: results.filter(item => item.action === 'would-update').map(item => `${item.uid}:${item.key}`), existing: results.filter(item => item.action === 'exists').map(item => `${item.uid}:${item.key}`), records: records.length }, null, 2));
     return results;
   } finally {
     await app.destroy();

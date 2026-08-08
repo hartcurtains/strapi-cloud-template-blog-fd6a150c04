@@ -215,6 +215,108 @@ test('blind quote accepts legacy mechanisms without mechanism_family metadata', 
   assert.equal(mechanism.totalPence, 2000)
 })
 
+test('blind quote includes workmanship emitted by the database pricing-rule steps', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', {
+      product_type: 'blind',
+      formula: {
+        steps: [
+          { name: 'Workmanship Cost', operation: 'constant', inputs: [85], output: 'workmanshipCost' },
+          { name: 'Total Cost', operation: 'add', inputs: ['fabricCost', 'workmanshipCost'], output: 'totalPrice' },
+        ],
+        finalOutput: 'totalPrice',
+      },
+    })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'blind', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 100, height: 100 }, blindTypeId: 'stacked',
+  }], shipping: '0.00' })
+
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 8500)
+  assert.equal(quote.breakdown.totalPence, quote.breakdown.fabric[0].totalPence + 8500)
+})
+
+test('no lining is a valid zero-cost option without a lining colour', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
+    'api::lining.lining': [record('no-lining', {
+      liningType: 'No lining', display_name: 'No lining', price_per_metre: 0,
+      applies_to_blinds: true, applies_to_curtains: true,
+    })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'blind', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 100, height: 100 }, blindTypeId: 'stacked', liningTypeKey: 'no-lining',
+  }], shipping: '0.00' })
+
+  assert.equal(quote.items[0].selectedOptions.liningType, undefined)
+  assert.equal(quote.breakdown.accessories.some(item => item.type === 'lining'), false)
+  assert.equal(quote.breakdown.totalPence, quote.breakdown.fabric[0].totalPence + 8500)
+})
+
+test('blind quote scales lining pricing-rule costs per unit with quantity', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
+  const liningPricingRule = {
+    formula: {
+      steps: [
+        { inputs: ['interlining.price_per_metre', 2], output: 'materialCost', operation: 'multiply' },
+        { inputs: ['materialCost', 5], output: 'totalInterliningPrice', operation: 'add' },
+      ],
+      finalOutput: 'totalInterliningPrice',
+    },
+  }
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
+    'api::mechanisation.mechanisation': [record('corded-left', { name: 'Corded left', price: 20 })],
+    'api::lining.lining': [record('interlined', {
+      liningType: 'Interlining', price_per_metre: 7, pricing_rule: liningPricingRule, applies_to_blinds: true,
+    })],
+    'api::lining-colour.lining-colour': [record('cream', {
+      display_name: 'Cream', applies_to_blinds: true, compatible_lining_types: [record('interlined')],
+    })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+  const baseItem = {
+    madeToMeasureV2: true, productType: 'blind', fabricId: 'fabric-1',
+    measurements: { width: 100, height: 100 }, blindTypeId: 'stacked', mechanismKey: 'corded-left',
+    liningTypeKey: 'interlined', liningColourKey: 'cream',
+  }
+
+  const quoteOne = await calculateMadeToMeasureQuote(strapi, { items: [{ ...baseItem, quantity: 1 }], shipping: '0.00' })
+  const quoteTwo = await calculateMadeToMeasureQuote(strapi, { items: [{ ...baseItem, quantity: 2 }], shipping: '0.00' })
+  const liningOne = quoteOne.breakdown.accessories.find(item => item.type === 'lining')
+  const liningTwo = quoteTwo.breakdown.accessories.find(item => item.type === 'lining')
+
+  assert.equal(liningOne.totalPence, 1900)
+  assert.equal(liningTwo.totalPence, liningOne.totalPence * 2)
+  assert.equal(quoteTwo.breakdown.totalPence, quoteOne.breakdown.totalPence * 2)
+})
+
 test('cushion quote resolves size, piping and pad from the server catalogue', async () => {
   const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
   const records = {

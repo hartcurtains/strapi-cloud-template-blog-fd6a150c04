@@ -10,6 +10,8 @@ const PRODUCT_ALIASES: Record<string, string> = {
   cushion: 'cushion',
 }
 
+const NO_LINING_KEYS = new Set(['no-lining', 'no_lining', 'none', 'unlined'])
+
 const OPTION_UIDS: Record<string, string> = {
   liningType: 'api::lining.lining',
   liningColour: 'api::lining-colour.lining-colour',
@@ -257,6 +259,8 @@ function optionSnapshot(record: any, extra: Record<string, any> = {}) {
 async function validateLining(strapi: any, line: any, productType: string, issues: ValidationIssue[]) {
   const typeSelection = selected(line, ['liningTypeKey', 'liningTypeId', 'selectedLiningType', 'liningType'])
   const colourSelection = selected(line, ['liningColourKey', 'liningColourId', 'selectedLiningColour', 'liningColour', 'liningFinish'])
+  const typeKey = String(optionIdentifier(typeSelection) ?? '').trim().toLowerCase()
+  if (NO_LINING_KEYS.has(typeKey)) return { type: null, colour: null }
   if (!hasSelection(typeSelection) && !hasSelection(colourSelection)) return { type: null, colour: null }
   if (!hasSelection(typeSelection)) {
     issue(issues, 'liningType', 'A lining type is required when a lining colour/finish is selected.')
@@ -712,9 +716,25 @@ async function calculateLine(strapi: any, line: any, index: number) {
     cushion_pad: { price: numberValue(validated.selectedOptions.cushionPad?.unitPrice) },
   } : null
   const ruleOutputs = cushionRuleData ? evaluatePricingRuleOutputs(rule, cushionRuleData) : {}
+  const nonCushionRuleOutputs = productType === 'cushion' ? {} : evaluatePricingRuleOutputs(rule, {
+    width_cm: widthCm,
+    height_cm: heightCm,
+    quantity,
+    fullness_multiplier: fullnessMultiplier,
+    curtain_type: { fullness_multiplier: fullnessMultiplier },
+    blind_type: validated.selectedOptions.blindType || {},
+    mechanism: validated.selectedOptions.mechanism || {},
+    fabric: {
+      price_per_metre: numberValue(fabric?.price_per_metre),
+      usableWidth_cm: numberValue(fabric?.usable_width_cm || fabric?.usableWidth_cm, 137),
+      patternRepeat_cm: numberValue(fabric?.pattern_repeat_cm || fabric?.patternRepeat_cm),
+    },
+    lining: { price_per_metre: numberValue(validated.selectedOptions.liningType?.unitPrice) },
+    trimmings: [],
+  })
   const workmanshipAmount = productType === 'cushion'
     ? (ruleOutputs.workmanshipCost ?? rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? validated.selectedOptions.cushionSize?.workmanshipCost ?? LEGACY_CUSHION_WORKMANSHIP)
-    : (rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? 0)
+    : (rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? nonCushionRuleOutputs.workmanshipCost ?? 0)
   const workmanshipPence = toPence(workmanshipAmount)
   const fabricAmount = productType === 'cushion' && ruleOutputs.fabricCost !== undefined
     ? numberValue(ruleOutputs.fabricCost)
@@ -753,9 +773,12 @@ async function calculateLine(strapi: any, line: any, index: number) {
         interlining: { price_per_metre: numberValue(liningTypeRecord.price_per_metre) },
         quantity,
       }
-      const ruleTotal = evaluateLiningPricingRule(liningPricingRule, ruleData)
-      liningTotalPence = toPence(ruleTotal / quantity || 0)
-      liningTotalPence = multiplyPence(liningTotalPence, quantity)
+      // Lining pricing rules describe the cost of one made-to-measure item.
+      // Evaluate them once per blind/curtain, then scale the resulting pence
+      // amount with quantity so fixed workmanship inside the rule is not
+      // accidentally charged only once for a multi-item line.
+      const ruleTotal = evaluateLiningPricingRule(liningPricingRule, { ...ruleData, quantity: 1 })
+      liningTotalPence = multiplyPence(toPence(ruleTotal || 0), quantity)
     } else {
       const unit = validated.selectedOptions.liningType.unitPricePence || 0
       liningTotalPence = multiplyPence(unit, liningMetres * quantity)
