@@ -140,6 +140,18 @@ module.exports = [
     },
     {
       method: 'POST',
+      path: relativePath(adminCatalogRoutes.colourNormalizationPreview),
+      handler: 'import-export.previewColourNormalization',
+      config: { auth: false, policies: ['global::ashley-wilde-admin'], middlewares: [] },
+    },
+    {
+      method: 'POST',
+      path: relativePath(adminCatalogRoutes.colourNormalizationApply),
+      handler: 'import-export.applyColourNormalization',
+      config: { auth: false, policies: ['global::ashley-wilde-admin'], middlewares: [] },
+    },
+    {
+      method: 'POST',
       path: relativePath(adminCatalogRoutes.supplierMappingsUpload),
       handler: 'import-export.uploadSupplierMapping',
       config: { auth: false, policies: ['global::supplier-mapping-admin'], middlewares: [] },

@@ -1612,6 +1612,34 @@ module.exports = {
     }
   },
 
+  async previewColourNormalization(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const normalization = require('../services/colour-normalization');
+      ctx.body = { success: true, preview: true, data: await normalization.previewNormalization(strapi) };
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = { success: false, error: { status: 400, message: error.message || 'Colour normalization preview could not be completed safely.' } };
+    }
+  },
+
+  async applyColourNormalization(ctx) {
+    if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
+    try {
+      const body = ctx.request.body || {};
+      if (!(body.confirm === true || body.confirm === 'true')) {
+        ctx.status = 400;
+        ctx.body = { success: false, error: { status: 400, message: 'Explicit confirmation is required to normalize Colour records.' } };
+        return;
+      }
+      const normalization = require('../services/colour-normalization');
+      ctx.body = { success: true, preview: false, data: await normalization.applyNormalization(strapi, { ...body, confirm: true }) };
+    } catch (error) {
+      ctx.status = error.status === 403 ? 403 : 409;
+      ctx.body = { success: false, error: { status: ctx.status, message: error.message || 'Colour normalization could not be applied safely.' } };
+    }
+  },
+
   async uploadSupplierMapping(ctx) {
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
     try {

@@ -137,6 +137,11 @@ export default function ProductManagementPage() {
   const [legacyCleanupError, setLegacyCleanupError] = useState('');
   const [legacyCleanupSuccess, setLegacyCleanupSuccess] = useState('');
   const [legacyCleanupConfirmOpen, setLegacyCleanupConfirmOpen] = useState(false);
+  const [colourNormalizationPreview, setColourNormalizationPreview] = useState(null);
+  const [colourNormalizationBusy, setColourNormalizationBusy] = useState(false);
+  const [colourNormalizationError, setColourNormalizationError] = useState('');
+  const [colourNormalizationSuccess, setColourNormalizationSuccess] = useState('');
+  const [colourNormalizationConfirmOpen, setColourNormalizationConfirmOpen] = useState(false);
   const promotionDiagnosticRequestRef = useRef(null);
 
   // Product types configuration
@@ -1866,6 +1871,43 @@ export default function ProductManagementPage() {
     }
   };
 
+  const previewColourNormalization = async () => {
+    setColourNormalizationBusy(true);
+    setColourNormalizationError('');
+    setColourNormalizationSuccess('');
+    setColourNormalizationPreview(null);
+    try {
+      const response = await adminPost(adminCatalogRoutes.colourNormalizationPreview, {});
+      setColourNormalizationPreview(response.data?.data || response.data);
+    } catch (error) {
+      setColourNormalizationError(promotionErrorMessage(error));
+    } finally {
+      setColourNormalizationBusy(false);
+    }
+  };
+
+  const applyColourNormalization = async () => {
+    if (!colourNormalizationPreview) return;
+    setColourNormalizationBusy(true);
+    setColourNormalizationError('');
+    setColourNormalizationSuccess('');
+    try {
+      const response = await adminPost(adminCatalogRoutes.colourNormalizationApply, {
+        confirm: true,
+        planFingerprint: colourNormalizationPreview.planFingerprint,
+        planExpiresAt: colourNormalizationPreview.planExpiresAt,
+      });
+      const result = response.data?.data || response.data;
+      setColourNormalizationConfirmOpen(false);
+      setColourNormalizationPreview(null);
+      setColourNormalizationSuccess(`Normalization complete: ${result.summary?.updated || 0} Colour record(s) updated. Original Colour names and Fabric relationships were preserved.`);
+    } catch (error) {
+      setColourNormalizationError(promotionErrorMessage(error));
+    } finally {
+      setColourNormalizationBusy(false);
+    }
+  };
+
   const promotionStages = [
     { key: 'preview', label: 'Preview' },
     { key: 'verified', label: 'Verified' },
@@ -2030,6 +2072,34 @@ export default function ProductManagementPage() {
           </div>
           {legacyCleanupError && <div style={{ marginTop: '10px', color: '#b91c1c', fontSize: '13px' }}>{legacyCleanupError}</div>}
           {legacyCleanupSuccess && <div style={{ marginTop: '10px', color: '#047857', fontSize: '13px', fontWeight: 700 }}>{legacyCleanupSuccess}</div>}
+          <div style={{ marginTop: '22px', paddingTop: '18px', borderTop: '1px solid #bbf7d0' }}>
+            <div className="pm-cleanup-header">
+              <div>
+                <h3 style={{ margin: '0 0 5px', color: '#166534', fontSize: '16px' }}>Normalize existing Colours</h3>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '12px', maxWidth: '680px' }}>Preview every Colour record against the stable WIBGYOR-style families, then write the family into <code>normalizedColour</code>. Original names, spellings, media, and Fabric relationships are preserved; this does not change the customer-facing frontend.</p>
+              </div>
+              <div className="pm-cleanup-actions">
+                <button type="button" onClick={previewColourNormalization} disabled={colourNormalizationBusy} style={{ background: '#fff', color: '#166534', border: '1px solid #16a34a', borderRadius: '8px', padding: '9px 13px', fontWeight: 700, cursor: colourNormalizationBusy ? 'wait' : 'pointer', opacity: colourNormalizationBusy ? 0.55 : 1 }}>Preview normalization</button>
+                <button type="button" onClick={() => setColourNormalizationConfirmOpen(true)} disabled={colourNormalizationBusy || !colourNormalizationPreview || !colourNormalizationPreview.summary?.changes} style={{ background: '#15803d', color: '#fff', border: 0, borderRadius: '8px', padding: '9px 13px', fontWeight: 700, cursor: colourNormalizationPreview?.summary?.changes ? 'pointer' : 'not-allowed', opacity: colourNormalizationBusy || !colourNormalizationPreview || !colourNormalizationPreview.summary?.changes ? 0.55 : 1 }}>Normalize reviewed Colours</button>
+              </div>
+            </div>
+            {colourNormalizationError && <div style={{ marginTop: '10px', color: '#b91c1c', fontSize: '13px' }}>{colourNormalizationError}</div>}
+            {colourNormalizationSuccess && <div style={{ marginTop: '10px', color: '#047857', fontSize: '13px', fontWeight: 700 }}>{colourNormalizationSuccess}</div>}
+            {colourNormalizationPreview && <div style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: '#f0fdf4', border: '1px solid #bbf7d0', color: '#166534' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(145px, 1fr))', gap: '8px', fontSize: '13px' }}>
+                <span>Colour records: <strong>{colourNormalizationPreview.summary?.total ?? 0}</strong></span>
+                <span>Distinct names: <strong>{colourNormalizationPreview.summary?.distinctNames ?? 0}</strong></span>
+                <span>Records to update: <strong>{colourNormalizationPreview.summary?.changes ?? 0}</strong></span>
+                <span>Already normalized: <strong>{colourNormalizationPreview.summary?.alreadyNormalized ?? 0}</strong></span>
+                <span>Unrecognised names → Neutral: <strong>{colourNormalizationPreview.summary?.unknownNames ?? 0}</strong></span>
+              </div>
+              <div style={{ marginTop: '10px', fontSize: '11px', color: '#166534' }}>Preview fingerprint: {colourNormalizationPreview.planFingerprint}</div>
+              <div style={{ display: 'grid', gap: '7px', marginTop: '12px' }}>
+                {colourNormalizationPreview.groups?.map((group) => <details key={group.family} style={{ borderTop: '1px solid #bbf7d0', paddingTop: '7px' }}><summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>{group.family}: {group.count} record(s)</summary><div style={{ marginTop: '5px', color: '#365314', fontSize: '12px', lineHeight: 1.5 }}>{group.names?.join(', ')}</div></details>)}
+              </div>
+              {colourNormalizationPreview.unknownNames?.length > 0 && <div style={{ marginTop: '12px', padding: '9px', borderRadius: '7px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '12px' }}><strong>Unrecognised names will use Neutral for review:</strong> {colourNormalizationPreview.unknownNames.join(', ')}</div>}
+            </div>}
+          </div>
           {legacyCleanupPreview && <div className="pm-cleanup-preview" style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: '#fff7ed', border: '1px solid #fed7aa' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '8px', fontSize: '13px', color: '#7c2d12' }}>
               <span>Fabrics scanned: <strong>{legacyCleanupPreview.summary?.fabricsScanned ?? 0}</strong></span>
@@ -2067,6 +2137,15 @@ export default function ProductManagementPage() {
           <p style={{ color: '#475569', fontSize: '14px' }}>Remove {legacyCleanupPreview.summary?.unlinkedAssociationsToRemove || 0} reviewed legacy Colour association(s) from {promotionScope.fabricName ? `Ashley Wilde Fabric “${promotionScope.fabricName}”` : 'all Ashley Wilde Fabrics'}? This preserves {legacyCleanupPreview.summary?.identityLinkedAssociationsPreserved || 0} identity-linked association(s), every staged/promoted identity, and every uploaded Media record. Empty unlinked Colour rows will be permanently deleted.</p>
           <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#fef2f2', color: '#991b1b', fontSize: '12px', fontWeight: 700 }}>After cleanup, run Preview promotion again and then Promote verified to rebuild the Colours from staged data.</div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}><button type="button" onClick={() => setLegacyCleanupConfirmOpen(false)} style={{ padding: '9px 13px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>Cancel</button><button type="button" onClick={applyAshleyWildeLegacyCleanup} disabled={legacyCleanupBusy} style={{ padding: '9px 13px', border: 0, borderRadius: '8px', background: '#b91c1c', color: '#fff', fontWeight: 700 }}>Confirm cleanup</button></div>
+        </div>
+      </div>}
+
+      {colourNormalizationConfirmOpen && colourNormalizationPreview && <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.72)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1200, padding: '20px' }}>
+        <div style={{ background: '#fff', borderRadius: '14px', padding: '24px', maxWidth: '560px', width: '100%', border: '2px solid #16a34a' }}>
+          <h3 style={{ marginTop: 0, color: '#166534' }}>Confirm Colour normalization</h3>
+          <p style={{ color: '#475569', fontSize: '14px' }}>Write normalized family values for {colourNormalizationPreview.summary?.changes || 0} of {colourNormalizationPreview.summary?.total || 0} Colour record(s)? This only adds/updates <code>normalizedColour</code>; original Colour names, spelling variants, media, and Fabric relationships remain unchanged.</p>
+          <div style={{ padding: '10px 12px', borderRadius: '8px', background: '#f0fdf4', color: '#166534', fontSize: '12px', fontWeight: 700 }}>The reviewed preview expires after 10 minutes and is rechecked before anything is written.</div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '18px' }}><button type="button" onClick={() => setColourNormalizationConfirmOpen(false)} style={{ padding: '9px 13px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#fff' }}>Cancel</button><button type="button" onClick={applyColourNormalization} disabled={colourNormalizationBusy} style={{ padding: '9px 13px', border: 0, borderRadius: '8px', background: '#15803d', color: '#fff', fontWeight: 700 }}>Confirm normalization</button></div>
         </div>
       </div>}
 
