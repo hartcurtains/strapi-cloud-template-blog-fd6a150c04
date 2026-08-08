@@ -4,7 +4,26 @@ const { ApplicationError } = utils.errors;
 module.exports = (plugin) => {
   // Override register controller to force authenticated role and GDPR compliance
   plugin.controllers.auth.register = async (ctx) => {
-    const { email, password, username, role } = ctx.request.body;
+    const {
+      email,
+      password,
+      username,
+      role,
+      title,
+      firstname,
+      lastname,
+      first_name,
+      last_name,
+    } = ctx.request.body;
+
+    // These are the profile fields defined by the user schema. Keep the
+    // canonical Strapi names while accepting the legacy snake_case aliases.
+    const firstName = typeof (firstname || first_name) === 'string'
+      ? (firstname || first_name).trim()
+      : '';
+    const lastName = typeof (lastname || last_name) === 'string'
+      ? (lastname || last_name).trim()
+      : '';
 
     // SECURITY: Block any attempt to set admin role during registration
     if (role) {
@@ -54,6 +73,9 @@ module.exports = (plugin) => {
         confirmed: true,
         provider: "local",
         role: authenticatedRole.id, // FORCED - no way to override
+        ...(firstName ? { firstname: firstName } : {}),
+        ...(lastName ? { lastname: lastName } : {}),
+        ...(title ? { title } : {}),
         // GDPR compliance fields
         gdprConsent: true,
         gdprConsentDate: new Date().toISOString(),
