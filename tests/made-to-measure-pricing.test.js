@@ -84,6 +84,50 @@ test('curtain quote evaluates heading-based workmanship from the database rule',
   assert.equal(quote.breakdown.totalPence, quote.breakdown.fabric[0].totalPence + quote.breakdown.accessories[0].totalPence + 17000)
 })
 
+test('interlining rule workmanship replaces the standard curtain making charge', async () => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140 })
+  const interliningPricingRule = {
+    formula: {
+      steps: [
+        { name: 'Calculate Fullness Width', inputs: ['width_cm', 'curtain_type.fullness_multiplier'], output: 'fullnessWidth_cm', operation: 'multiply' },
+        { name: 'Number of Fabric Widths', inputs: ['fullnessWidth_cm', 'fabric.usableWidth_cm'], output: 'widthsNeeded', operation: 'divide' },
+        { name: 'Round Fabric Widths with Threshold', inputs: ['widthsNeeded', 0.2], output: 'roundedWidths', operation: 'customRound' },
+        { name: 'Cut Length with Allowance', inputs: ['height_cm', 30], output: 'cutLength_cm', operation: 'add' },
+        { name: 'Total Interlining Needed (cm)', inputs: ['roundedWidths', 'cutLength_cm'], output: 'totalInterlining_cm', operation: 'multiply' },
+        { name: 'Convert cm to metres', inputs: ['totalInterlining_cm', 100], output: 'totalInterlining_m', operation: 'divide' },
+        { name: 'Interlining Material Cost', inputs: ['totalInterlining_m', 'interlining.price_per_metre'], output: 'interliningMaterialCost', operation: 'multiply' },
+        { name: 'Interlining Workmanship - Width Base', inputs: ['roundedWidths', 120], output: 'interliningWorkmanshipWidth', operation: 'multiply' },
+        { name: 'Interlining Workmanship - Length Base', inputs: ['totalInterlining_m', 10], output: 'interliningWorkmanshipLength', operation: 'multiply' },
+        { name: 'Total Interlining Workmanship', inputs: ['interliningWorkmanshipWidth', 'interliningWorkmanshipLength'], output: 'interliningWorkmanshipTotal', operation: 'add' },
+        { name: 'Total Interlining Price', inputs: ['interliningMaterialCost', 'interliningWorkmanshipTotal'], output: 'totalInterliningPrice', operation: 'add' },
+      ],
+      finalOutput: 'totalInterliningPrice',
+    },
+  }
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::curtain-type.curtain-type': [record('eyelet', { name: 'Eyelet', fullness_multiplier: 2 })],
+    'api::lining.lining': [record('interlined', { liningType: 'Interlining', price_per_metre: null, pricing_rule: interliningPricingRule, applies_to_curtains: true })],
+    'api::lining-colour.lining-colour': [record('white', { display_name: 'White', applies_to_curtains: true, compatible_lining_types: [record('interlined')] })],
+    'api::pricing-rule.pricing-rule': [record('curtain-rule', { product_type: 'curtain', formula: { workmanshipFee: 170 } })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'curtain', fabricId: 'fabric-1', quantity: 1,
+    measurements: { width: 150, height: 100 }, curtainTypeId: 'eyelet', liningTypeKey: 'interlined', liningColourKey: 'white',
+  }], shipping: '0.00' })
+
+  const lining = quote.breakdown.accessories.find(item => item.type === 'lining')
+  assert.equal(lining.totalPence, 26600)
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 0)
+  assert.equal(quote.breakdown.totalPence, quote.breakdown.fabric[0].totalPence + lining.totalPence)
+})
+
 test('blackout lining adds its own metre-based accessory cost while keeping the selected lining', async () => {
   const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140, pattern_repeat_cm: 64 })
   const records = {

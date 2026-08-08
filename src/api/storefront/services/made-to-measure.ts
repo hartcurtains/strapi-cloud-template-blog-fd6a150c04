@@ -786,8 +786,15 @@ async function calculateLine(strapi: any, line: any, index: number) {
     lining: { price_per_metre: numberValue(validated.selectedOptions.liningType?.unitPrice) },
     trimmings: [],
   })
+  const liningPricingRule = productType === 'cushion' ? null : validated.lining?.type?.pricing_rule
+  // An all-in lining rule such as Interlining already contains its own making
+  // labour, so it replaces the standard curtain making charge below.
+  const liningRuleIncludesWorkmanship = Array.isArray(liningPricingRule?.formula?.steps)
+    && liningPricingRule.formula.steps.some((step: any) => /workmanship/i.test(`${step?.name || ''} ${step?.output || ''}`))
   const workmanshipAmount = productType === 'cushion'
     ? (ruleOutputs.workmanshipCost ?? rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? validated.selectedOptions.cushionSize?.workmanshipCost ?? LEGACY_CUSHION_WORKMANSHIP)
+    : liningRuleIncludesWorkmanship
+      ? 0
     : (rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? nonCushionRuleOutputs.workmanshipCost ?? 0)
   const workmanshipPence = toPence(workmanshipAmount)
   const fabricAmount = productType === 'cushion' && ruleOutputs.fabricCost !== undefined
@@ -817,7 +824,6 @@ async function calculateLine(strapi: any, line: any, index: number) {
   if (validated.selectedOptions.liningType) {
     const liningTypeRecord = validated.lining?.type
     let liningTotalPence: number
-    const liningPricingRule = liningTypeRecord?.pricing_rule
     if (liningPricingRule && liningPricingRule.formula && liningPricingRule.formula.steps) {
       const ruleData: Record<string, any> = {
         width_cm: widthCm,
