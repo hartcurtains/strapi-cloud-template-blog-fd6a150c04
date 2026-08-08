@@ -123,6 +123,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
   await seedCushionPricingRule(strapi);
   await repairCushionSizePricingFields(strapi);
   await repairCushionPadPricingFields(strapi);
+  await ensureNoLiningOption(strapi);
 
   // Only run in production (Strapi Cloud)
   if (process.env.NODE_ENV !== 'production') {
@@ -427,5 +428,63 @@ async function repairCushionPadPricingFields(strapi: Core.Strapi): Promise<void>
     }
   } catch (error: any) {
     console.warn('âš ï¸  Error repairing cushion pad pricing fields:', error.message);
+  }
+}
+
+async function ensureNoLiningOption(strapi: Core.Strapi): Promise<void> {
+  try {
+    const existing = await strapi.entityService.findMany('api::lining.lining', {
+      filters: {
+        $or: [
+          { key: 'no-lining' },
+          { display_name: 'No lining' },
+          { liningType: 'No lining' },
+        ],
+      },
+      limit: 1,
+    });
+
+    const record: any = Array.isArray(existing) ? existing[0] : null;
+    if (record) {
+      if (record.active === false || record.is_configurator_option !== true || record.applies_to_curtains !== true || record.applies_to_blinds !== true) {
+        await strapi.entityService.update('api::lining.lining', record.id, {
+          data: {
+            key: 'no-lining',
+            liningType: 'No lining',
+            display_name: 'No lining',
+            price_per_metre: 0,
+            active: true,
+            sort_order: 0,
+            is_configurator_option: true,
+            applies_to_curtains: true,
+            applies_to_blinds: true,
+            blackout: false,
+          } as any,
+        });
+      }
+      console.log('✅ No Lining option already exists');
+      return;
+    }
+
+    await strapi.entityService.create('api::lining.lining', {
+      data: {
+        key: 'no-lining',
+        liningType: 'No lining',
+        display_name: 'No lining',
+        price_per_metre: 0,
+        active: true,
+        sort_order: 0,
+        is_configurator_option: true,
+        applies_to_curtains: true,
+        applies_to_blinds: true,
+        blackout: false,
+        publishedAt: new Date().toISOString(),
+      } as any,
+    });
+    console.log('✅ Created No Lining option');
+  } catch (error: any) {
+    // A missing seed must not prevent Strapi from starting; the setup script
+    // remains available for an explicit administrative reconciliation.
+    console.warn('⚠️  Error ensuring No Lining option:', error.message);
   }
 }
