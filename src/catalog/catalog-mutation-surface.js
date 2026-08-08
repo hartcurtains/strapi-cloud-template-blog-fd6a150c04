@@ -4,7 +4,7 @@ const MUTATION_METHODS = Object.freeze(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 const CATALOG_ENTITIES = Object.freeze([
   { uid: 'api::fabric.fabric', collection: 'fabrics', fields: ['name', 'collection', 'images', 'patternRepeat_cm', 'usableWidth_cm', 'martindale', 'composition', 'availability', 'price_per_metre', 'is_featured', 'featured_until', 'productId', 'slug', 'pattern', 'cushions', 'care_instructions', 'brand', 'colours', 'is_curtain', 'pricing_rules', 'description', 'is_blind', 'is_cushion'] },
-  { uid: 'api::colour.colour', collection: 'colours', fields: ['name', 'thumbnail', 'fabrics'] },
+  { uid: 'api::colour.colour', collection: 'colours', fields: ['name', 'normalizedColour', 'thumbnail', 'fabrics'] },
   { uid: 'api::cushion.cushion', collection: 'cushions', fields: ['name', 'fabrics', 'cushion_type', 'available_sizes', 'available_pads', 'available_piping_types'] },
   { uid: 'api::pricing-rule.pricing-rule', collection: 'pricing-rules', fields: ['name', 'formula', 'product_type', 'fabrics'] },
   { uid: 'api::lining.lining', collection: 'linings', fields: ['liningType', 'price_per_metre', 'colour', 'thumbnail', 'pricing_rule', 'key', 'display_name', 'blackout', 'active', 'sort_order', 'is_configurator_option', 'applies_to_curtains', 'applies_to_blinds', 'lining_colour_options'] },
