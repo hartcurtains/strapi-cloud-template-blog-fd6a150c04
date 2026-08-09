@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
-const { FAMILY_NAMES } = require('./plugins/order-management/shared/colour-normalization');
+const { FAMILY_NAMES } = require('./utils/colour-normalization');
 
 const NORMALIZED_COLOUR_UID = 'api::normalized-colour.normalized-colour';
 const DEFAULT_NORMALIZED_COLOURS = [
@@ -521,7 +521,7 @@ async function ensureNormalizedColourCatalogue(strapi: Core.Strapi): Promise<voi
       const existingRows = await strapi.entityService.findMany(NORMALIZED_COLOUR_UID as any, {
         filters: { slug: colour.slug },
         limit: 1,
-      });
+      } as any);
       const existing: any = Array.isArray(existingRows) ? existingRows[0] : null;
 
       if (!existing) {
@@ -532,7 +532,7 @@ async function ensureNormalizedColourCatalogue(strapi: Core.Strapi): Promise<voi
             sortOrder,
             active: true,
           },
-        });
+        } as any);
         created += 1;
         continue;
       }
@@ -541,7 +541,7 @@ async function ensureNormalizedColourCatalogue(strapi: Core.Strapi): Promise<voi
       if (currentSourceNames !== JSON.stringify(sourceNames) || existing.sortOrder !== sortOrder || existing.active === false) {
         await strapi.entityService.update(NORMALIZED_COLOUR_UID as any, existing.id, {
           data: { sourceNames, sortOrder, active: true },
-        });
+        } as any);
         updatedAliases += 1;
       }
     }

@@ -8,15 +8,15 @@ const {
   buildPlan,
   normalizeColourName,
   NORMALIZED_COLOUR_FAMILIES,
-} = require('../src/plugins/order-management/shared/colour-normalization');
+} = require('../src/utils/colour-normalization');
 
 const importExportControllerSource = fs.readFileSync(
   path.join(__dirname, '../src/plugins/order-management/server/controllers/import-export.js'),
   'utf8',
 );
 
-test('normalization controller resolves the shared service in the deployed Strapi layout', () => {
-  assert.match(importExportControllerSource, /require\('\.\.\/\.\.\/shared\/colour-normalization'\)/);
+test('normalization controller resolves the emitted shared service in the deployed Strapi layout', () => {
+  assert.match(importExportControllerSource, /require\('\.\.\/\.\.\/\.\.\/utils\/colour-normalization'\)/);
   assert.doesNotMatch(importExportControllerSource, /require\('\.\.\/services\/colour-normalization'\)/);
 });
 

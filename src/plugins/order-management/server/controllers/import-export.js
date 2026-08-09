@@ -1615,7 +1615,7 @@ module.exports = {
   async previewColourNormalization(ctx) {
     if (!hasAuthenticatedAdmin(ctx)) return rejectAshleyWildeUnauthorized(ctx);
     try {
-      const normalization = require('../../shared/colour-normalization');
+      const normalization = require('../../../utils/colour-normalization');
       ctx.body = { success: true, preview: true, data: await normalization.previewNormalization(strapi) };
     } catch (error) {
       ctx.status = 400;
@@ -1632,7 +1632,7 @@ module.exports = {
         ctx.body = { success: false, error: { status: 400, message: 'Explicit confirmation is required to normalize Colour records.' } };
         return;
       }
-      const normalization = require('../../shared/colour-normalization');
+      const normalization = require('../../../utils/colour-normalization');
       ctx.body = { success: true, preview: false, data: await normalization.applyNormalization(strapi, { ...body, confirm: true }) };
     } catch (error) {
       ctx.status = error.status === 403 ? 403 : 409;
