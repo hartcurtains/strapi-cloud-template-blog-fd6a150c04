@@ -2,10 +2,22 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   buildPlan,
   normalizeColourName,
 } = require('../src/plugins/order-management/shared/colour-normalization');
+
+const importExportControllerSource = fs.readFileSync(
+  path.join(__dirname, '../src/plugins/order-management/server/controllers/import-export.js'),
+  'utf8',
+);
+
+test('normalization controller resolves the shared service in the deployed Strapi layout', () => {
+  assert.match(importExportControllerSource, /require\('\.\.\/\.\.\/shared\/colour-normalization'\)/);
+  assert.doesNotMatch(importExportControllerSource, /require\('\.\.\/services\/colour-normalization'\)/);
+});
 
 test('colour normalization preserves spelling variants while assigning stable families', () => {
   assert.equal(normalizeColourName('Fuschia'), 'Violet');
