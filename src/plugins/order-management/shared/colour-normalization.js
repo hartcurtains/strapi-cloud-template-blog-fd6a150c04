@@ -4,71 +4,77 @@ const crypto = require('crypto');
 
 const NORMALIZED_COLOUR_FIELD = 'normalizedColour';
 const NORMALIZED_COLOUR_FAMILIES = [
-  'Red',
-  'Orange',
-  'Yellow',
-  'Green',
   'Blue',
-  'Indigo',
-  'Violet',
-  'Neutral',
+  'White',
+  'Green',
+  'Grey',
+  'Purple',
   'Brown',
-  'Metallic',
-  'Multicolour',
+  'Red',
+  'Beige',
+  'Pink',
+  'Yellow',
+  'Orange',
+  'Cream',
+  'Black',
+  'Gold',
+  'Rainbow',
 ];
 
 const FAMILY_NAMES = {
-  Red: [
-    'Berry', 'Blossom', 'Blush', 'Boudoir', 'Calamine', 'Candy', 'Candyfloss',
-    'Carnation', 'Cassis', 'Cherry', 'Claret', 'Cranberry', 'Crimson', 'Damson',
-    'Duskypink', 'Merlot', 'Petal', 'Raspberry', 'Rose', 'Rouge', 'Scarlet',
-    'Sorbet', 'Strawberry', 'Sunset', 'Wine',
+  Blue: [
+    'Aegean', 'Air Force Blue', 'Aqua', 'Aquamarine', 'Azure', 'Blue', 'Danube',
+    'Denim', 'Duckegg', 'French Navy', 'Glacier', 'Hydro', 'Ice', 'Kingfisher',
+    'Indigo', 'Ink', 'Lagoon', 'Lapis', 'Marine', 'Midnight', 'Navy', 'Ocean',
+    'Peacock', 'Powder Blue', 'River', 'Seaspray', 'Sky', 'Spa', 'Teal', 'Wedgewood',
   ],
-  Orange: [
-    'Cantaloupe', 'Caramel', 'Cinnamon', 'Clementine', 'Coral', 'Ginger',
-    'Nectarine', 'Paprika', 'Rust', 'Tangerine', 'Terracotta',
-  ],
-  Yellow: [
-    'Buttercup', 'Citrus', 'Lemon', 'Maize', 'Mustard', 'Ochre', 'Pollen',
-    'Saffron', 'Sunflower', 'Topaz', 'Yellow Ochre', 'Zest',
-  ],
+  White: ['Alabaster', 'Chalk', 'Frost', 'Opal', 'Pearl', 'Porcelain', 'Snow'],
   Green: [
     'Aloe', 'Alpine', 'Amazon', 'Apple', 'Celadon', 'Emerald', 'Fern', 'Forest',
     'Garden', 'Grass', 'Jade', 'Khaki', 'Kiwi', 'Leaf', 'Lime', 'Mint', 'Moss',
     'Olive', 'Pine', 'Pistachi', 'Pistachio', 'Sage', 'Seafoam', 'Spruce',
     'Thyme', 'Verdigris', 'Willow',
   ],
-  Blue: [
-    'Aegean', 'Air Force Blue', 'Aqua', 'Aquamarine', 'Azure', 'Blue', 'Danube',
-    'Denim', 'Duckegg', 'French Navy', 'Glacier', 'Hydro', 'Ice', 'Kingfisher',
-    'Lagoon', 'Lapis', 'Marine', 'Navy', 'Nordic', 'Ocean', 'Peacock',
-    'Powder Blue', 'River', 'Seaspray', 'SEaspray', 'Sky', 'Spa', 'Teal',
-    'Wedgewood',
+  Grey: [
+    'Aluminium', 'Ash', 'Charcoal', 'Dove', 'Flint', 'Fog', 'Graphite', 'Grey',
+    'Gunmetal', 'Haze', 'Mercury', 'Mineral', 'Mist', 'Mole', 'Mouse', 'Nordic',
+    'Pebble', 'Pewter', 'Platinum', 'Shadow', 'Silver', 'Slate', 'Sliver', 'Smoke',
+    'Steel',
   ],
-  Indigo: ['Indigo', 'Ink', 'Midnight'],
-  Violet: [
-    'Amethyst', 'Aubergine', 'Fuchsia', 'Fuschia', 'Grape', 'Heather',
-    'Hollyhock', 'Iris', 'Lavender', 'Magenta', 'Mauve', 'Mulberry', 'Orchid',
-    'Pansy', 'Plum', 'Thistle', 'Violet',
-  ],
-  Neutral: [
-    'Alabaster', 'Ash', 'Birch', 'Champagne', 'Chalk', 'Charcoal', 'Coal',
-    'Cream', 'Dove', 'Ebony', 'Ecru', 'Flax', 'Flint', 'Fog', 'Frost', 'Grey',
-    'Haze', 'Ivory', 'Linen', 'Mineral', 'Mist', 'Mouse', 'Natural', 'Noir',
-    'Onyx', 'Opal', 'Oyster', 'Parchment', 'Pearl', 'Pebble', 'Plaster',
-    'Porcelain', 'Putty', 'Raven', 'Shadow', 'Shell', 'Slate', 'Smoke', 'Snow',
-    'Stone', 'Vanilla', 'Vintage',
+  Purple: [
+    'Amethyst', 'Aubergine', 'Cassis', 'Damson', 'Grape', 'Heather', 'Iris',
+    'Lavender', 'Mauve', 'Mulberry', 'Orchid', 'Pansy', 'Plum', 'Thistle', 'Violet',
   ],
   Brown: [
-    'Bark', 'Clay', 'Cocoa', 'Driftwood', 'Espresso', 'Fawn', 'Fudge', 'Hessian',
-    'Latte', 'Mocha', 'Mole', 'Mushroom', 'Nougat', 'Oatmeal', 'Otter', 'Praline',
-    'Sand', 'Sesame', 'Taupe', 'Toffee', 'Walnut', 'Wheat',
+    'Bark', 'Bronze', 'Caramel', 'Cinnamon', 'Cocoa', 'Copper', 'Espresso', 'Fudge',
+    'Mocha', 'Otter', 'Praline', 'Toffee', 'Walnut',
   ],
-  Metallic: [
-    'Aluminium', 'Bronze', 'Copper', 'Gold', 'Graphite', 'Gunmetal', 'Mercury',
-    'Pewter', 'Platinum', 'Rose Gold', 'Silver', 'Sliver', 'Steel',
+  Red: [
+    'Berry', 'Cherry', 'Claret', 'Cranberry', 'Crimson', 'Merlot', 'Paprika',
+    'Raspberry', 'Rouge', 'Scarlet', 'Strawberry', 'Wine',
   ],
-  Multicolour: ['Rainbow'],
+  Beige: [
+    'Birch', 'Clay', 'Driftwood', 'Fawn', 'Flax', 'Hessian', 'Latte', 'Linen',
+    'Mushroom', 'Natural', 'Nougat', 'Oatmeal', 'Oyster', 'Parchment', 'Putty',
+    'Sand', 'Sesame', 'Stone', 'Taupe', 'Vintage', 'Wheat',
+  ],
+  Pink: [
+    'Blossom', 'Blush', 'Boudoir', 'Calamine', 'Candy', 'Candyfloss', 'Carnation',
+    'Duskypink', 'Fuchsia', 'Fuschia', 'Hollyhock', 'Magenta', 'Petal', 'Plaster',
+    'Rose', 'Sorbet',
+  ],
+  Yellow: [
+    'Buttercup', 'Citrus', 'Lemon', 'Maize', 'Mustard', 'Ochre', 'Pollen', 'Saffron',
+    'Sunflower', 'Yellow Ochre', 'Zest',
+  ],
+  Orange: [
+    'Cantaloupe', 'Clementine', 'Coral', 'Ginger', 'Nectarine', 'Rust', 'Sunset',
+    'Tangerine', 'Terracotta',
+  ],
+  Cream: ['Champagne', 'Cream', 'Ecru', 'Ivory', 'Shell', 'Vanilla'],
+  Black: ['Coal', 'Ebony', 'Noir', 'Onyx', 'Raven'],
+  Gold: ['Gold', 'Rose Gold', 'Topaz'],
+  Rainbow: ['Rainbow'],
 };
 
 const keyFor = (value) => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
@@ -78,14 +84,14 @@ const FAMILY_BY_NAME = Object.entries(FAMILY_NAMES).reduce((lookup, [family, nam
 }, {});
 
 const COLOUR_UID = 'api::colour.colour';
-const PLAN_VERSION = 'wibgyor-v1';
+const PLAN_VERSION = 'colour-map-v2';
 const PLAN_TTL_MS = 10 * 60 * 1000;
 const QUERY_LIMIT = 5000;
 
 const stableFingerprint = (value) => crypto.createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
 
 function normalizeColourName(name) {
-  return FAMILY_BY_NAME[keyFor(name)] || 'Neutral';
+  return FAMILY_BY_NAME[keyFor(name)] || null;
 }
 
 function readColour(colour) {
@@ -139,7 +145,7 @@ function buildPlan(colours) {
     summary: {
       total: items.length,
       changes: changes.length,
-      alreadyNormalized: items.length - changes.length,
+      alreadyNormalized: items.filter((item) => item.knownName && item.currentNormalizedColour === item.normalizedColour).length,
       distinctNames: new Set(items.map((item) => item.name)).size,
       unknownNames: unknownNames.length,
     },
@@ -165,7 +171,7 @@ async function applyNormalization(strapi, options = {}) {
   if (current.planFingerprint !== options.planFingerprint) {
     throw new Error('The Colour normalization preview is stale because Colour records changed. Run the preview again.');
   }
-  const changes = current.items.filter((item) => item.currentNormalizedColour !== item.normalizedColour);
+  const changes = current.items.filter((item) => item.knownName && item.currentNormalizedColour !== item.normalizedColour);
   if (!strapi.db?.transaction) throw new Error('Colour normalization requires the Strapi database transaction service.');
 
   await strapi.db.transaction(async ({ trx }) => {

@@ -2076,7 +2076,7 @@ export default function ProductManagementPage() {
             <div className="pm-cleanup-header">
               <div>
                 <h3 style={{ margin: '0 0 5px', color: '#166534', fontSize: '16px' }}>Normalize existing Colours</h3>
-                <p style={{ margin: 0, color: '#64748b', fontSize: '12px', maxWidth: '680px' }}>Preview every Colour record against the stable WIBGYOR-style families, then write the family into <code>normalizedColour</code>. Original names, spellings, media, and Fabric relationships are preserved; this does not change the customer-facing frontend.</p>
+                <p style={{ margin: 0, color: '#64748b', fontSize: '12px', maxWidth: '680px' }}>Preview every Colour record against the approved explicit colour map, then write the mapped value into <code>normalizedColour</code>. Original names, spellings, media, and Fabric relationships are preserved; this does not change the customer-facing frontend.</p>
               </div>
               <div className="pm-cleanup-actions">
                 <button type="button" onClick={previewColourNormalization} disabled={colourNormalizationBusy} style={{ background: '#fff', color: '#166534', border: '1px solid #16a34a', borderRadius: '8px', padding: '9px 13px', fontWeight: 700, cursor: colourNormalizationBusy ? 'wait' : 'pointer', opacity: colourNormalizationBusy ? 0.55 : 1 }}>Preview normalization</button>
@@ -2091,13 +2091,13 @@ export default function ProductManagementPage() {
                 <span>Distinct names: <strong>{colourNormalizationPreview.summary?.distinctNames ?? 0}</strong></span>
                 <span>Records to update: <strong>{colourNormalizationPreview.summary?.changes ?? 0}</strong></span>
                 <span>Already normalized: <strong>{colourNormalizationPreview.summary?.alreadyNormalized ?? 0}</strong></span>
-                <span>Unrecognised names → Neutral: <strong>{colourNormalizationPreview.summary?.unknownNames ?? 0}</strong></span>
+                <span>Unrecognised names: <strong>{colourNormalizationPreview.summary?.unknownNames ?? 0}</strong></span>
               </div>
               <div style={{ marginTop: '10px', fontSize: '11px', color: '#166534' }}>Preview fingerprint: {colourNormalizationPreview.planFingerprint}</div>
               <div style={{ display: 'grid', gap: '7px', marginTop: '12px' }}>
                 {colourNormalizationPreview.groups?.map((group) => <details key={group.family} style={{ borderTop: '1px solid #bbf7d0', paddingTop: '7px' }}><summary style={{ cursor: 'pointer', fontSize: '12px', fontWeight: 700 }}>{group.family}: {group.count} record(s)</summary><div style={{ marginTop: '5px', color: '#365314', fontSize: '12px', lineHeight: 1.5 }}>{group.names?.join(', ')}</div></details>)}
               </div>
-              {colourNormalizationPreview.unknownNames?.length > 0 && <div style={{ marginTop: '12px', padding: '9px', borderRadius: '7px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '12px' }}><strong>Unrecognised names will use Neutral for review:</strong> {colourNormalizationPreview.unknownNames.join(', ')}</div>}
+              {colourNormalizationPreview.unknownNames?.length > 0 && <div style={{ marginTop: '12px', padding: '9px', borderRadius: '7px', background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', fontSize: '12px' }}><strong>Unrecognised names remain unassigned for review:</strong> {colourNormalizationPreview.unknownNames.join(', ')}</div>}
             </div>}
           </div>
           {legacyCleanupPreview && <div className="pm-cleanup-preview" style={{ marginTop: '14px', padding: '14px', borderRadius: '10px', background: '#fff7ed', border: '1px solid #fed7aa' }}>
