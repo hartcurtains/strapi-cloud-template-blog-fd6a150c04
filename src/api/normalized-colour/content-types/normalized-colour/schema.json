@@ -1,0 +1,43 @@
+{
+  "kind": "collectionType",
+  "collectionName": "normalized_colours",
+  "info": {
+    "singularName": "normalized-colour",
+    "pluralName": "normalized-colours",
+    "displayName": "Normalized colour"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "name": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "slug": {
+      "type": "uid",
+      "targetField": "name",
+      "required": true,
+      "unique": true
+    },
+    "swatch": {
+      "type": "string",
+      "required": true,
+      "description": "A CSS colour value or gradient used by storefront swatches."
+    },
+    "sourceNames": {
+      "type": "json",
+      "description": "Supplier colour names that resolve to this canonical colour."
+    },
+    "sortOrder": {
+      "type": "integer",
+      "default": 0
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}

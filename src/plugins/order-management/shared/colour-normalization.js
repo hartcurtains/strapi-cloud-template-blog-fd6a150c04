@@ -194,6 +194,7 @@ async function applyNormalization(strapi, options = {}) {
 }
 
 module.exports = {
+  FAMILY_NAMES,
   NORMALIZED_COLOUR_FAMILIES,
   buildPlan,
   normalizeColourName,

@@ -10,6 +10,27 @@ import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
 
+const { FAMILY_NAMES } = require('./plugins/order-management/shared/colour-normalization');
+
+const NORMALIZED_COLOUR_UID = 'api::normalized-colour.normalized-colour';
+const DEFAULT_NORMALIZED_COLOURS = [
+  { name: 'Blue', slug: 'blue', swatch: '#2563EB' },
+  { name: 'White', slug: 'white', swatch: '#FFFFFF' },
+  { name: 'Green', slug: 'green', swatch: '#16A34A' },
+  { name: 'Grey', slug: 'grey', swatch: '#6B7280' },
+  { name: 'Purple', slug: 'purple', swatch: '#9333EA' },
+  { name: 'Brown', slug: 'brown', swatch: '#92400E' },
+  { name: 'Red', slug: 'red', swatch: '#DC2626' },
+  { name: 'Beige', slug: 'beige', swatch: '#D6C2A1' },
+  { name: 'Pink', slug: 'pink', swatch: '#EC4899' },
+  { name: 'Yellow', slug: 'yellow', swatch: '#EAB308' },
+  { name: 'Orange', slug: 'orange', swatch: '#EA580C' },
+  { name: 'Cream', slug: 'cream', swatch: '#FFF4D6' },
+  { name: 'Black', slug: 'black', swatch: '#111827' },
+  { name: 'Gold', slug: 'gold', swatch: '#D4AF37' },
+  { name: 'Rainbow', slug: 'rainbow', swatch: 'linear-gradient(135deg, #EF4444 0%, #F59E0B 20%, #EAB308 40%, #22C55E 60%, #3B82F6 80%, #9333EA 100%)' },
+];
+
 // Helper function to check if import has already been completed (database flag)
 async function checkImportFlag(strapi: Core.Strapi): Promise<boolean> {
   try {
@@ -124,6 +145,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
   await repairCushionSizePricingFields(strapi);
   await repairCushionPadPricingFields(strapi);
   await ensureNoLiningOption(strapi);
+  await ensureNormalizedColourCatalogue(strapi);
 
   // Only run in production (Strapi Cloud)
   if (process.env.NODE_ENV !== 'production') {
@@ -486,5 +508,52 @@ async function ensureNoLiningOption(strapi: Core.Strapi): Promise<void> {
     // A missing seed must not prevent Strapi from starting; the setup script
     // remains available for an explicit administrative reconciliation.
     console.warn('⚠️  Error ensuring No Lining option:', error.message);
+  }
+}
+
+async function ensureNormalizedColourCatalogue(strapi: Core.Strapi): Promise<void> {
+  try {
+    let created = 0;
+    let updatedAliases = 0;
+
+    for (const [sortOrder, colour] of DEFAULT_NORMALIZED_COLOURS.entries()) {
+      const sourceNames = Array.isArray(FAMILY_NAMES?.[colour.name]) ? FAMILY_NAMES[colour.name] : [];
+      const existingRows = await strapi.entityService.findMany(NORMALIZED_COLOUR_UID as any, {
+        filters: { slug: colour.slug },
+        limit: 1,
+      });
+      const existing: any = Array.isArray(existingRows) ? existingRows[0] : null;
+
+      if (!existing) {
+        await strapi.entityService.create(NORMALIZED_COLOUR_UID as any, {
+          data: {
+            ...colour,
+            sourceNames,
+            sortOrder,
+            active: true,
+          },
+        });
+        created += 1;
+        continue;
+      }
+
+      const currentSourceNames = JSON.stringify(existing.sourceNames || []);
+      if (currentSourceNames !== JSON.stringify(sourceNames) || existing.sortOrder !== sortOrder || existing.active === false) {
+        await strapi.entityService.update(NORMALIZED_COLOUR_UID as any, existing.id, {
+          data: { sourceNames, sortOrder, active: true },
+        });
+        updatedAliases += 1;
+      }
+    }
+
+    if (created || updatedAliases) {
+      console.log(`✅ Normalized colour catalogue ready (${created} created, ${updatedAliases} aliases/order updated)`);
+    } else {
+      console.log('✅ Normalized colour catalogue already exists');
+    }
+  } catch (error: any) {
+    // The catalogue is additive and must not prevent Strapi from starting if a
+    // deployment is still waiting for the new content-type schema to migrate.
+    console.warn('⚠️ Error ensuring normalized colour catalogue:', error.message);
   }
 }
