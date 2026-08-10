@@ -2,8 +2,17 @@ const utils = require('@strapi/utils');
 const { ApplicationError } = utils.errors;
 
 module.exports = (plugin) => {
-  // Override register controller to force authenticated role and GDPR compliance
-  plugin.controllers.auth.register = async (ctx) => {
+  // The auth controller is a factory in Strapi v5. Wrap the factory so the
+  // registration override is actually installed on the instantiated
+  // controller rather than on the factory function itself.
+  const originalAuthController = plugin.controllers.auth;
+  plugin.controllers.auth = ({ strapi: strapiInstance }) => {
+    const controller = originalAuthController({ strapi: strapiInstance });
+
+    return {
+      ...controller,
+      register: async (ctx) => {
+        const strapi = strapiInstance;
     const {
       email,
       password,
@@ -95,7 +104,9 @@ module.exports = (plugin) => {
     // Log registration for audit purposes (GDPR compliance)
     strapi.log.info(`New user registered: ${email} at ${new Date().toISOString()}`);
 
-    return { jwt, user: newUser };
+        return { jwt, user: newUser };
+      },
+    };
   };
 
   // Override update controller to prevent role manipulation
