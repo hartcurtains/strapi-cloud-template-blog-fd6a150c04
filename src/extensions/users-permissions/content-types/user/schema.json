@@ -58,9 +58,27 @@
                                      },
                        "blocked":  {
                                        "type":  "boolean",
-                                       "default":  false,
-                                       "configurable":  false
-                                   },
+                                        "default":  false,
+                                        "configurable":  false
+                                    },
+                       "gdprConsent":  {
+                                           "type":  "boolean",
+                                           "default":  false,
+                                           "configurable":  false
+                                       },
+                       "gdprConsentDate":  {
+                                               "type":  "datetime",
+                                               "configurable":  false
+                                           },
+                       "termsAccepted":  {
+                                             "type":  "boolean",
+                                             "default":  false,
+                                             "configurable":  false
+                                         },
+                       "termsAcceptedDate":  {
+                                                 "type":  "datetime",
+                                                 "configurable":  false
+                                             },
                        "role":  {
                                     "type":  "relation",
                                     "relation":  "manyToOne",
