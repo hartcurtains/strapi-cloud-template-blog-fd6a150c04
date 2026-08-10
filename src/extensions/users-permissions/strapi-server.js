@@ -64,9 +64,9 @@ module.exports = (plugin) => {
       throw new ApplicationError("Authenticated role not found");
     }
 
-    // Create the user with fields supported by the currently loaded schema.
-    // This keeps registration working while a deployment is still refreshing
-    // the user schema, while retaining consent data once those fields exist.
+    // The startup migration guarantees these consent columns exist before the
+    // registration controller is available, so persist the submitted consent
+    // values on every newly created account.
     const userData = {
       email,
       password,
@@ -77,24 +77,11 @@ module.exports = (plugin) => {
       ...(firstName ? { firstname: firstName } : {}),
       ...(lastName ? { lastname: lastName } : {}),
       ...(title ? { title } : {}),
+      gdprConsent: true,
+      gdprConsentDate: new Date().toISOString(),
+      termsAccepted: true,
+      termsAcceptedDate: new Date().toISOString(),
     };
-
-    const userModel =
-      typeof strapi.getModel === "function"
-        ? strapi.getModel("plugin::users-permissions.user")
-        : null;
-    const userAttributes = userModel?.attributes || {};
-    const consentDate = new Date().toISOString();
-
-    if (userAttributes.gdprConsent) {
-      userData.gdprConsent = true;
-      userData.gdprConsentDate = consentDate;
-    }
-
-    if (userAttributes.termsAccepted) {
-      userData.termsAccepted = true;
-      userData.termsAcceptedDate = consentDate;
-    }
 
     const newUser = await strapi.entityService.create("plugin::users-permissions.user", {
       data: userData,
