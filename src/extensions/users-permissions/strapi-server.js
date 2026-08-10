@@ -79,8 +79,11 @@ module.exports = (plugin) => {
       ...(title ? { title } : {}),
     };
 
-    const userAttributes =
-      strapi.getModel("plugin::users-permissions.user")?.attributes || {};
+    const userModel =
+      typeof strapi.getModel === "function"
+        ? strapi.getModel("plugin::users-permissions.user")
+        : null;
+    const userAttributes = userModel?.attributes || {};
     const consentDate = new Date().toISOString();
 
     if (userAttributes.gdprConsent) {
