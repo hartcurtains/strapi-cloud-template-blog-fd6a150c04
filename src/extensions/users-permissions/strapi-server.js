@@ -2,6 +2,24 @@ const utils = require('@strapi/utils');
 const { ApplicationError } = utils.errors;
 
 module.exports = (plugin) => {
+  // Strapi's built-in registration route strictly validates the request body
+  // before dispatching to the controller. The custom user schema includes
+  // profile fields, so let the controller validate and persist those fields
+  // instead of rejecting them as unknown registration parameters.
+  const contentApiRoutes = plugin.routes['content-api'];
+  plugin.routes['content-api'] = (strapiInstance) => {
+    const routes = contentApiRoutes(strapiInstance);
+
+    return routes.map((route) => {
+      if (route.method !== 'POST' || route.path !== '/auth/local/register') {
+        return route;
+      }
+
+      const { request, ...routeWithoutRequestValidation } = route;
+      return routeWithoutRequestValidation;
+    });
+  };
+
   // Override register controller to force authenticated role and GDPR compliance
   plugin.controllers.auth.register = async (ctx) => {
     const {
