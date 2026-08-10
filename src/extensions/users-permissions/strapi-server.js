@@ -64,24 +64,37 @@ module.exports = (plugin) => {
       throw new ApplicationError("Authenticated role not found");
     }
 
-    // Create user with FORCED authenticated role and GDPR compliance
+    // Create the user with fields supported by the currently loaded schema.
+    // This keeps registration working while a deployment is still refreshing
+    // the user schema, while retaining consent data once those fields exist.
+    const userData = {
+      email,
+      password,
+      username,
+      confirmed: true,
+      provider: "local",
+      role: authenticatedRole.id, // FORCED - no way to override
+      ...(firstName ? { firstname: firstName } : {}),
+      ...(lastName ? { lastname: lastName } : {}),
+      ...(title ? { title } : {}),
+    };
+
+    const userAttributes =
+      strapi.getModel("plugin::users-permissions.user")?.attributes || {};
+    const consentDate = new Date().toISOString();
+
+    if (userAttributes.gdprConsent) {
+      userData.gdprConsent = true;
+      userData.gdprConsentDate = consentDate;
+    }
+
+    if (userAttributes.termsAccepted) {
+      userData.termsAccepted = true;
+      userData.termsAcceptedDate = consentDate;
+    }
+
     const newUser = await strapi.entityService.create("plugin::users-permissions.user", {
-      data: {
-        email,
-        password,
-        username,
-        confirmed: true,
-        provider: "local",
-        role: authenticatedRole.id, // FORCED - no way to override
-        ...(firstName ? { firstname: firstName } : {}),
-        ...(lastName ? { lastname: lastName } : {}),
-        ...(title ? { title } : {}),
-        // GDPR compliance fields
-        gdprConsent: true,
-        gdprConsentDate: new Date().toISOString(),
-        termsAccepted: true,
-        termsAcceptedDate: new Date().toISOString(),
-      },
+      data: userData,
     });
 
     // Issue JWT

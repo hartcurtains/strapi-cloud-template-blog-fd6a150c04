@@ -153,6 +153,13 @@ export default {
     // the composite staging uniqueness is present on the first boot as well.
     const stagingMigration = require('../database/migrations/2026.07.21T00.00.00.fabric-colour-staging.js');
     await stagingMigration.ensureIndexes(strapi.db.connection);
+
+    // Automatic schema migrations are disabled in production. Apply the user
+    // consent columns explicitly so registration can persist the submitted
+    // GDPR and terms consent values.
+    const userConsentMigration = require('../database/migrations/2026.08.10T00.00.00.user-consent-fields.js');
+    await userConsentMigration.ensureColumns(strapi.db.connection);
+
     // Import data from git on first startup
     await importData({ strapi });
   },
