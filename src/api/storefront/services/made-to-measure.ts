@@ -65,6 +65,8 @@ const fromPence = (pence: number): string => (Math.max(0, Math.round(pence)) / 1
 // to the catalogue. Keep the historical £25 per-cushion charge while those
 // rows are repaired by bootstrap; new/edited rows always win.
 const LEGACY_CUSHION_WORKMANSHIP = 25
+const CUSHION_FACE_COUNT = 2
+const CUSHION_SEAM_ALLOWANCE_CM = 1.5
 
 export const penceFromDecimal = (value: any): number | null => {
   const text = String(value ?? '').trim()
@@ -430,6 +432,23 @@ const fabricMetres = (fabric: any, productType: string, widthCm: number, heightC
   return (widths * cutLengthCm) / 100
 }
 
+// Existing cushion-size records describe flat two-dimensional cushion sizes.
+// Price the two cover faces as a real cut layout in linear metres. The
+// cushion-size, piping and pad catalogues remain the source of their own
+// prices; this only fixes the fabric quantity fed into the cushion rule.
+const cushionFabricMetres = (fabric: any, widthCm: number, heightCm: number) => {
+  const usableWidthCm = Math.max(1, numberValue(fabric?.usableWidth_cm || fabric?.usable_width_cm, 137))
+  const cutWidthCm = widthCm + (CUSHION_SEAM_ALLOWANCE_CM * 2)
+  const cutLengthCm = heightCm + (CUSHION_SEAM_ALLOWANCE_CM * 2)
+  const panelsPerRow = usableWidthCm >= cutWidthCm * CUSHION_FACE_COUNT ? CUSHION_FACE_COUNT : 1
+  const rows = Math.ceil(CUSHION_FACE_COUNT / panelsPerRow)
+  const patternRepeatCm = numberValue(fabric?.patternRepeat_cm || fabric?.pattern_repeat_cm)
+  const repeatRoundedLengthCm = patternRepeatCm > 0
+    ? Math.ceil(cutLengthCm / patternRepeatCm) * patternRepeatCm
+    : cutLengthCm
+  return (rows * repeatRoundedLengthCm) / 100
+}
+
 async function findFabric(strapi: any, identifier: any) {
   return findByIdentifier(strapi, 'api::fabric.fabric', identifier, undefined, {})
 }
@@ -791,22 +810,31 @@ async function calculateLine(strapi: any, line: any, index: number) {
 
   const rule = await pricingRule(strapi, productType)
   const fullnessMultiplier = numberValue(validated.selectedOptions.curtainType?.fullnessMultiplier, 1)
-  const materialMetres = productType === 'cushion'
-    ? (widthCm * heightCm) / 10000
+  let materialMetres = productType === 'cushion'
+    ? cushionFabricMetres(fabric, widthCm, heightCm)
     : fabricMetres(fabric, productType, widthCm, heightCm, fullnessMultiplier)
   const fabricUnitPence = toPence(fabric?.price_per_metre)
   const cushionRuleData = productType === 'cushion' ? {
+    width_cm: widthCm,
+    height_cm: heightCm,
     size: {
       fabric_metres: materialMetres,
       workmanship_cost: validated.selectedOptions.cushionSize?.workmanshipCost == null
         ? LEGACY_CUSHION_WORKMANSHIP
         : numberValue(validated.selectedOptions.cushionSize.workmanshipCost),
     },
-    fabric: { price_per_metre: numberValue(fabric?.price_per_metre) },
+    fabric: {
+      price_per_metre: numberValue(fabric?.price_per_metre),
+      usableWidth_cm: numberValue(fabric?.usable_width_cm || fabric?.usableWidth_cm, 137),
+      patternRepeat_cm: numberValue(fabric?.pattern_repeat_cm || fabric?.patternRepeat_cm),
+    },
     cushion_piping_type: { price: numberValue(validated.selectedOptions.cushionFinish?.unitPrice) },
     cushion_pad: { price: numberValue(validated.selectedOptions.cushionPad?.unitPrice) },
   } : null
   const ruleOutputs = cushionRuleData ? evaluatePricingRuleOutputs(rule, cushionRuleData) : {}
+  if (productType === 'cushion' && ruleOutputs.cushionFabricMetres !== undefined) {
+    materialMetres = numberValue(ruleOutputs.cushionFabricMetres, materialMetres)
+  }
   const nonCushionRuleOutputs = productType === 'cushion' ? {} : evaluatePricingRuleOutputs(rule, {
     width_cm: widthCm,
     height_cm: heightCm,

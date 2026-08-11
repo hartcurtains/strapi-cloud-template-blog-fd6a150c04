@@ -358,13 +358,116 @@ async function readJSONL(filePath: string): Promise<any[]> {
 
 async function seedCushionPricingRule(strapi: Core.Strapi): Promise<void> {
   try {
+    const formula = {
+      steps: [
+        {
+          name: 'Cushion Face Cut Width',
+          inputs: ['width_cm', 3],
+          output: 'faceCutWidth_cm',
+          operation: 'add',
+        },
+        {
+          name: 'Cushion Face Cut Length',
+          inputs: ['height_cm', 3],
+          output: 'faceCutLength_cm',
+          operation: 'add',
+        },
+        {
+          name: 'Two Face Panels Width',
+          inputs: ['faceCutWidth_cm', 2],
+          output: 'twoFacePanelsWidth_cm',
+          operation: 'multiply',
+        },
+        {
+          name: 'Face Panel Rows',
+          condition: 'fabric.usableWidth_cm >= twoFacePanelsWidth_cm',
+          operation: 'if_else',
+          on_true: { operation: 'set', inputs: [1], output: 'facePanelRows' },
+          on_false: { operation: 'set', inputs: [2], output: 'facePanelRows' },
+          output: 'facePanelRows',
+        },
+        {
+          name: 'Pattern Repeat Cut Length',
+          condition: 'fabric.patternRepeat_cm > 0',
+          operation: 'if_else',
+          on_true: {
+            sub_steps: [
+              {
+                name: 'Pattern Repeat Count',
+                inputs: ['faceCutLength_cm', 'fabric.patternRepeat_cm'],
+                output: 'patternRepeatCount',
+                operation: 'ceilDivide',
+              },
+              {
+                name: 'Pattern Repeat Rounded Length',
+                inputs: ['patternRepeatCount', 'fabric.patternRepeat_cm'],
+                output: 'cushionCutLength_cm',
+                operation: 'multiply',
+              },
+            ],
+          },
+          on_false: { operation: 'set', inputs: ['faceCutLength_cm'], output: 'cushionCutLength_cm' },
+          output: 'cushionCutLength_cm',
+        },
+        {
+          name: 'Cushion Fabric Cut Length',
+          inputs: ['facePanelRows', 'cushionCutLength_cm'],
+          output: 'cushionFabricCutLength_cm',
+          operation: 'multiply',
+        },
+        {
+          name: 'Cushion Fabric Metres',
+          inputs: ['cushionFabricCutLength_cm', 100],
+          output: 'cushionFabricMetres',
+          operation: 'divide',
+        },
+        {
+          name: 'Fabric Cost',
+          inputs: ['cushionFabricMetres', 'fabric.price_per_metre'],
+          output: 'fabricCost',
+          operation: 'multiply',
+        },
+        {
+          name: 'Piping Cost',
+          inputs: ['cushion_piping_type.price'],
+          output: 'pipingCost',
+          operation: 'set',
+        },
+        {
+          name: 'Pad Cost',
+          inputs: ['cushion_pad.price'],
+          output: 'padCost',
+          operation: 'set',
+        },
+        {
+          name: 'Workmanship Cost',
+          inputs: ['size.workmanship_cost'],
+          output: 'workmanshipCost',
+          operation: 'set',
+        },
+        {
+          name: 'Total Cost',
+          inputs: ['fabricCost', 'pipingCost', 'padCost', 'workmanshipCost'],
+          output: 'totalPrice',
+          operation: 'add',
+        },
+      ],
+      finalOutput: 'totalPrice',
+    };
+
     const existing = await strapi.entityService.findMany('api::pricing-rule.pricing-rule', {
       filters: { name: 'Cushion Pricing Rule' },
       limit: 1,
     });
 
     if (existing && Array.isArray(existing) && existing.length > 0) {
-      console.log('✅ Cushion pricing rule already exists');
+      const current = existing[0] as any;
+      if (JSON.stringify(current.formula) !== JSON.stringify(formula)) {
+        await strapi.entityService.update('api::pricing-rule.pricing-rule', current.id, { data: { formula } as any });
+        console.log('✅ Updated Cushion Pricing Rule formula');
+      } else {
+        console.log('✅ Cushion pricing rule already exists');
+      }
       return;
     }
 
@@ -372,41 +475,7 @@ async function seedCushionPricingRule(strapi: Core.Strapi): Promise<void> {
       data: {
         name: 'Cushion Pricing Rule',
         product_type: 'cushion',
-        formula: {
-          steps: [
-            {
-              name: 'Fabric Cost',
-              inputs: ['size.fabric_metres', 'fabric.price_per_metre'],
-              output: 'fabricCost',
-              operation: 'multiply',
-            },
-            {
-              name: 'Piping Cost',
-              inputs: ['cushion_piping_type.price'],
-              output: 'pipingCost',
-              operation: 'set',
-            },
-            {
-              name: 'Pad Cost',
-              inputs: ['cushion_pad.price'],
-              output: 'padCost',
-              operation: 'set',
-            },
-            {
-              name: 'Workmanship Cost',
-              inputs: ['size.workmanship_cost'],
-              output: 'workmanshipCost',
-              operation: 'set',
-            },
-            {
-              name: 'Total Cost',
-              inputs: ['fabricCost', 'pipingCost', 'padCost', 'workmanshipCost'],
-              output: 'totalPrice',
-              operation: 'add',
-            },
-          ],
-          finalOutput: 'totalPrice',
-        },
+        formula,
       },
     });
 

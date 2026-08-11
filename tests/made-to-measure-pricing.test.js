@@ -6,6 +6,41 @@ const { calculateMadeToMeasureQuote, calculateOrderQuote } = require('../src/api
 
 const record = (key, data = {}) => ({ id: key, documentId: key, key, active: true, is_configurator_option: true, ...data })
 
+const cushionPricingFormula = {
+  steps: [
+    { inputs: ['width_cm', 3], output: 'faceCutWidth_cm', operation: 'add' },
+    { inputs: ['height_cm', 3], output: 'faceCutLength_cm', operation: 'add' },
+    { inputs: ['faceCutWidth_cm', 2], output: 'twoFacePanelsWidth_cm', operation: 'multiply' },
+    {
+      condition: 'fabric.usableWidth_cm >= twoFacePanelsWidth_cm',
+      operation: 'if_else',
+      on_true: { operation: 'set', inputs: [1], output: 'facePanelRows' },
+      on_false: { operation: 'set', inputs: [2], output: 'facePanelRows' },
+      output: 'facePanelRows',
+    },
+    {
+      condition: 'fabric.patternRepeat_cm > 0',
+      operation: 'if_else',
+      on_true: {
+        sub_steps: [
+          { inputs: ['faceCutLength_cm', 'fabric.patternRepeat_cm'], output: 'patternRepeatCount', operation: 'ceilDivide' },
+          { inputs: ['patternRepeatCount', 'fabric.patternRepeat_cm'], output: 'cushionCutLength_cm', operation: 'multiply' },
+        ],
+      },
+      on_false: { operation: 'set', inputs: ['faceCutLength_cm'], output: 'cushionCutLength_cm' },
+      output: 'cushionCutLength_cm',
+    },
+    { inputs: ['facePanelRows', 'cushionCutLength_cm'], output: 'cushionFabricCutLength_cm', operation: 'multiply' },
+    { inputs: ['cushionFabricCutLength_cm', 100], output: 'cushionFabricMetres', operation: 'divide' },
+    { inputs: ['cushionFabricMetres', 'fabric.price_per_metre'], output: 'fabricCost', operation: 'multiply' },
+    { inputs: ['cushion_piping_type.price'], output: 'pipingCost', operation: 'set' },
+    { inputs: ['cushion_pad.price'], output: 'padCost', operation: 'set' },
+    { inputs: ['size.workmanship_cost'], output: 'workmanshipCost', operation: 'set' },
+    { inputs: ['fabricCost', 'pipingCost', 'padCost', 'workmanshipCost'], output: 'totalPrice', operation: 'add' },
+  ],
+  finalOutput: 'totalPrice',
+}
+
 test('lining price uses unformatted calculated fabric metres at 700 pence per metre', async () => {
   const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140, pattern_repeat_cm: 64 })
   const records = {
@@ -516,14 +551,48 @@ test('cushion quote evaluates the database rule for fabric, piping, pad and work
     measurements: { width: 38, height: 38 }, cushionSizeKey: 'square', cushionFinishKey: 'piped', cushionPadKey: 'duck',
   }], shipping: '0.00' })
 
-  // 0.1444m² × £34 = £4.91, + £3 piping, + £10 legacy duck surcharge,
-  // + £25 workmanship = £42.91.
-  assert.equal(quote.breakdown.fabric[0].totalPence, 491)
+  // Two 41cm face panels fit across 140cm fabric after 1.5cm seam
+  // allowances: 0.41m × £34 = £13.94, + £3 piping, + £10 legacy duck
+  // surcharge, + £25 workmanship = £51.94.
+  assert.equal(quote.breakdown.fabric[0].quantity, 0.41)
+  assert.equal(quote.breakdown.fabric[0].totalPence, 1394)
   assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_finish').totalPence, 300)
   assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_pad').totalPence, 1000)
   assert.equal(quote.breakdown.makingCharge[0].totalPence, 2500)
-  assert.equal(quote.breakdown.totalPence, 4291)
-  assert.equal(quote.breakdown.total, '42.91')
+  assert.equal(quote.breakdown.totalPence, 5194)
+  assert.equal(quote.breakdown.total, '51.94')
+})
+
+test('cushion pricing rule rounds fabric to the pattern repeat without changing pad or piping prices', async () => {
+  const records = {
+    'api::fabric.fabric': [record('fabric-1', { price_per_metre: 34, usable_width_cm: 140, pattern_repeat_cm: 32 })],
+    'api::cushion-size.cushion-size': [record('square', {
+      name: 'Square 38cm', width_cm: 38, height_cm: 38, shape: 'square', workmanship_cost: 25, duck_feather_surcharge: 10,
+    })],
+    'api::cushion-piping.cushion-piping': [record('piped', { name: 'Piped', type: 'piped', price: 3 })],
+    'api::cushion-pad.cushion-pad': [record('duck', { name: 'Duck feather pad', type: 'duck_feather', price: 0 })],
+    'api::pricing-rule.pricing-rule': [record('cushion-rule', { product_type: 'cushion', formula: cushionPricingFormula })],
+  }
+  const strapi = { entityService: { findMany: async (uid, params = {}) => {
+    const values = records[uid] || []
+    const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+    return requested.length ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId)) : values
+  } } }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, { items: [{
+    madeToMeasureV2: true, productType: 'cushion', fabricId: 'fabric-1', quantity: 2,
+    measurements: { width: 38, height: 38 }, cushionSizeKey: 'square', cushionFinishKey: 'piped', cushionPadKey: 'duck',
+  }], shipping: '0.00' })
+
+  // 41cm face cut rounded to the 32cm repeat = 64cm; two faces fit across
+  // 140cm fabric, so 0.64m per cushion. The existing catalogue prices are
+  // then applied unchanged per cushion.
+  assert.equal(quote.breakdown.fabric[0].quantity, 1.28)
+  assert.equal(quote.breakdown.fabric[0].totalPence, 4352)
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_finish').totalPence, 600)
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'cushion_pad').totalPence, 2000)
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 5000)
+  assert.equal(quote.breakdown.totalPence, 11952)
 })
 
 test('duck feather pad pricing follows the selected size surcharge', async () => {
