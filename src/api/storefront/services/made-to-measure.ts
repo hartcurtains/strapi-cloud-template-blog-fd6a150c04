@@ -864,6 +864,20 @@ async function calculateLine(strapi: any, line: any, index: number) {
     ? evaluateLiningPricingRule(liningPricingRule, liningRuleData, liningRuleOutputs)
     : 0
   const liningRuleAmounts = splitLiningRuleAmounts(liningRuleOutputs, liningRuleTotalAmount)
+  const interliningPricingRule = productType === 'cushion' ? null : validated.lining?.interlining?.pricing_rule
+  const interliningRuleOutputs: Record<string, any> = {}
+  const interliningRuleData = interliningPricingRule?.formula?.steps ? {
+    width_cm: widthCm,
+    height_cm: heightCm,
+    curtain_type: { fullness_multiplier: fullnessMultiplier },
+    fabric: { usableWidth_cm: numberValue(fabric?.usableWidth_cm || fabric?.usable_width_cm, 137), patternRepeat_cm: numberValue(fabric?.patternRepeat_cm || fabric?.pattern_repeat_cm), hemAllowance_cm: numberValue(fabric?.hemAllowance_cm, 30) },
+    interlining: { price_per_metre: numberValue(validated.lining?.interlining?.price_per_metre) },
+    quantity: 1,
+  } : null
+  const interliningRuleTotalAmount = interliningPricingRule && interliningRuleData
+    ? evaluateLiningPricingRule(interliningPricingRule, interliningRuleData, interliningRuleOutputs)
+    : 0
+  const interliningRuleAmounts = splitLiningRuleAmounts(interliningRuleOutputs, interliningRuleTotalAmount)
   // An all-in lining rule such as Interlining contains its own making labour.
   // It replaces the standard blind/curtain making charge, while the response
   // still exposes that labour as a separate workmanship line.
@@ -924,17 +938,38 @@ async function calculateLine(strapi: any, line: any, index: number) {
   }
   if (validated.selectedOptions.interliningType) {
     const unit = validated.selectedOptions.interliningType.unitPricePence || toPence(validated.selectedOptions.interliningType.unitPrice)
-    const interliningTotalPence = multiplyPence(unit, liningMetres * quantity)
+    const ruleMaterialMetres = numberValue(interliningRuleOutputs.totalInterlining_m)
+    const interliningMetres = interliningPricingRule && ruleMaterialMetres > 0 ? ruleMaterialMetres : liningMetres
+    const interliningTotalPence = interliningPricingRule && interliningRuleData
+      ? multiplyPence(toPence(interliningRuleAmounts.materialAmount), quantity)
+      : multiplyPence(unit, interliningMetres * quantity)
+    const interliningUnitPence = interliningTotalPence > 0
+      ? Math.round(interliningTotalPence / (interliningMetres * quantity || 1))
+      : unit
     accessories.push({
       type: 'interlining',
       label: validated.selectedOptions.interliningType.label || 'Interlining',
-      quantity: liningMetres * quantity,
+      quantity: interliningMetres * quantity,
       unit: 'metre',
-      unitPrice: fromPence(unit),
-      unitPricePence: unit,
+      unitPrice: fromPence(interliningUnitPence),
+      unitPricePence: interliningUnitPence,
       total: fromPence(interliningTotalPence),
       totalPence: interliningTotalPence,
     })
+    if (interliningPricingRule && interliningRuleAmounts.hasWorkmanship && interliningRuleAmounts.workmanshipAmount > 0) {
+      const workmanshipPence = toPence(interliningRuleAmounts.workmanshipAmount)
+      const workmanshipTotalPence = multiplyPence(workmanshipPence, quantity)
+      accessories.push({
+        type: 'interlining_workmanship',
+        label: 'Interlining workmanship',
+        quantity,
+        unit: 'item',
+        unitPrice: fromPence(workmanshipPence),
+        unitPricePence: workmanshipPence,
+        total: fromPence(workmanshipTotalPence),
+        totalPence: workmanshipTotalPence,
+      })
+    }
   }
   if (requiresRomanTrack) {
     const trackBaseMetres = materialMetres

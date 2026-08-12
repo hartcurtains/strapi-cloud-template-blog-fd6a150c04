@@ -63,6 +63,41 @@ test('blind quote accepts standard lining, optional interlining, and mechanism f
   assert.equal(quote.breakdown.accessories.find(item => item.type === 'interlining').unitPricePence, 1000)
 })
 
+test('optional interlining applies its pricing rule on top of the normal lining and making charges', async () => {
+  const records = catalogue()
+  records['api::lining.lining'][1].pricing_rule = {
+    formula: {
+      steps: [
+        { inputs: [2], output: 'totalInterlining_m', operation: 'constant' },
+        { inputs: ['totalInterlining_m', 'interlining.price_per_metre'], output: 'interliningMaterialCost', operation: 'multiply' },
+        { inputs: [15], output: 'interliningWorkmanshipTotal', operation: 'constant' },
+        { inputs: ['interliningMaterialCost', 'interliningWorkmanshipTotal'], output: 'totalInterliningPrice', operation: 'add' },
+      ],
+      finalOutput: 'totalInterliningPrice',
+    },
+  }
+
+  const quote = await calculateMadeToMeasureQuote(fakeStrapi(records), {
+    items: [{
+      madeToMeasureV2: true,
+      productType: 'blind',
+      fabricId: 'fabric-1',
+      quantity: 1,
+      measurements: { width: 100, height: 100 },
+      blindTypeId: 'stacked',
+      liningTypeKey: 'lined',
+      liningColourKey: 'white',
+      interliningTypeKey: 'interlined',
+    }],
+    shipping: '0.00',
+  })
+
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 8500)
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'lining').totalPence, 1620)
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'interlining').totalPence, 2000)
+  assert.equal(quote.breakdown.accessories.find(item => item.type === 'interlining_workmanship').totalPence, 1500)
+})
+
 test('blind quote accepts active legacy mechanisms without configurator flag', async () => {
   const records = catalogue()
   records['api::mechanisation.mechanisation'] = [{

@@ -581,9 +581,19 @@ async function retireNoLiningOptions(strapi: Core.Strapi): Promise<void> {
 
 async function ensureLiningCatalogue(strapi: Core.Strapi): Promise<void> {
   try {
-    const records = await strapi.entityService.findMany('api::lining.lining', { limit: 100 });
+    const records = await strapi.entityService.findMany('api::lining.lining', { sort: ['id:asc'], limit: 100 });
+    const canonicalByDocumentId = new Map<string, number>();
     for (const record of (Array.isArray(records) ? records : []) as any[]) {
+      const documentId = String(record.documentId || '');
+      const duplicate = documentId && canonicalByDocumentId.has(documentId);
+      if (documentId && !canonicalByDocumentId.has(documentId)) canonicalByDocumentId.set(documentId, Number(record.id));
       const identity = String(record.key || record.display_name || record.liningType || '').toLowerCase();
+      if (duplicate) {
+        await strapi.entityService.update('api::lining.lining', record.id, {
+          data: { active: false, is_configurator_option: false } as any,
+        });
+        continue;
+      }
       if (identity.includes('full lining') || identity === 'standard lining') {
         await strapi.entityService.update('api::lining.lining', record.id, {
           data: {
