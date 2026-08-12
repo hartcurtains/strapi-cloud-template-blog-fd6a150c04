@@ -1,0 +1,44 @@
+{
+  "kind": "collectionType",
+  "collectionName": "mechanism_finishes",
+  "info": {
+    "singularName": "mechanism-finish",
+    "pluralName": "mechanism-finishes",
+    "displayName": "Mechanism Finish"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "key": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "display_name": {
+      "type": "string",
+      "required": true
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "sort_order": {
+      "type": "integer",
+      "default": 0
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "required": false,
+      "allowedTypes": ["images"]
+    },
+    "compatible_mechanisations": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::mechanisation.mechanisation",
+      "mappedBy": "mechanism_finishes"
+    }
+  }
+}

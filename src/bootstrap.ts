@@ -144,7 +144,8 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
   await seedCushionPricingRule(strapi);
   await repairCushionSizePricingFields(strapi);
   await repairCushionPadPricingFields(strapi);
-  await ensureNoLiningOption(strapi);
+  await retireNoLiningOptions(strapi);
+  await ensureMechanismFinishOptions(strapi);
   await ensureNormalizedColourCatalogue(strapi);
 
   // Only run in production (Strapi Cloud)
@@ -522,7 +523,7 @@ async function repairCushionPadPricingFields(strapi: Core.Strapi): Promise<void>
   }
 }
 
-async function ensureNoLiningOption(strapi: Core.Strapi): Promise<void> {
+async function retireNoLiningOptions(strapi: Core.Strapi): Promise<void> {
   try {
     const existing = await strapi.entityService.findMany('api::lining.lining', {
       filters: {
@@ -532,30 +533,27 @@ async function ensureNoLiningOption(strapi: Core.Strapi): Promise<void> {
           { liningType: 'No lining' },
         ],
       },
-      limit: 1,
+      limit: 100,
     });
 
-    const record: any = Array.isArray(existing) ? existing[0] : null;
-    if (record) {
-      if (record.active === false || record.is_configurator_option !== true || record.applies_to_curtains !== true || record.applies_to_blinds !== true) {
+    for (const record of (Array.isArray(existing) ? existing : []) as any[]) {
+      if (record.active !== false || record.is_configurator_option !== false) {
         await strapi.entityService.update('api::lining.lining', record.id, {
           data: {
             key: 'no-lining',
             liningType: 'No lining',
             display_name: 'No lining',
             price_per_metre: 0,
-            active: true,
-            sort_order: 0,
-            is_configurator_option: true,
-            applies_to_curtains: true,
-            applies_to_blinds: true,
-            blackout: false,
+            active: false,
+            is_configurator_option: false,
           } as any,
         });
       }
       console.log('✅ No Lining option already exists');
       return;
     }
+
+    return;
 
     await strapi.entityService.create('api::lining.lining', {
       data: {
@@ -577,6 +575,31 @@ async function ensureNoLiningOption(strapi: Core.Strapi): Promise<void> {
     // A missing seed must not prevent Strapi from starting; the setup script
     // remains available for an explicit administrative reconciliation.
     console.warn('⚠️  Error ensuring No Lining option:', error.message);
+  }
+}
+
+async function ensureMechanismFinishOptions(strapi: Core.Strapi): Promise<void> {
+  const uid = 'api::mechanism-finish.mechanism-finish';
+  try {
+    const finishes: any[] = [];
+    for (const [sort_order, value] of [[0, ['chrome', 'Chrome']], [1, ['brass', 'Brass']]] as const) {
+      const existing = await strapi.entityService.findMany(uid as any, { filters: { key: value[0] }, limit: 1 });
+      const current: any = Array.isArray(existing) ? existing[0] : null;
+      const record = current
+        ? await strapi.entityService.update(uid as any, current.id, { data: { key: value[0], display_name: value[1], active: true, sort_order } as any })
+        : await strapi.entityService.create(uid as any, { data: { key: value[0], display_name: value[1], active: true, sort_order, publishedAt: new Date().toISOString() } as any });
+      finishes.push(record);
+    }
+
+    const mechanisms = await strapi.entityService.findMany('api::mechanisation.mechanisation', { limit: 100 });
+    for (const mechanism of Array.isArray(mechanisms) ? mechanisms : []) {
+      await strapi.entityService.update('api::mechanisation.mechanisation', mechanism.id, {
+        data: { mechanism_finishes: { connect: finishes.map(finish => finish.id).filter(Boolean) } } as any,
+      });
+    }
+    console.log('Ensured Chrome and Brass mechanism finishes');
+  } catch (error: any) {
+    console.warn('Error ensuring mechanism finishes:', error.message);
   }
 }
 

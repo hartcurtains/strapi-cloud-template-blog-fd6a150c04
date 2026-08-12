@@ -1,6 +1,8 @@
 export const PRICING_VERSION = 'mtm-2026-08-03-v1'
 export const SAMPLE_CONFIGURATION_ERROR = 'Fabric sample ordering is not configured.'
 
+import { calculateCushionFabricMetres } from './cushion-pricing'
+
 const PRODUCT_ALIASES: Record<string, string> = {
   curtains: 'curtain',
   curtain: 'curtain',
@@ -65,8 +67,6 @@ const fromPence = (pence: number): string => (Math.max(0, Math.round(pence)) / 1
 // to the catalogue. Keep the historical £25 per-cushion charge while those
 // rows are repaired by bootstrap; new/edited rows always win.
 const LEGACY_CUSHION_WORKMANSHIP = 25
-const CUSHION_FACE_COUNT = 2
-const CUSHION_SEAM_ALLOWANCE_CM = 1.5
 
 export const penceFromDecimal = (value: any): number | null => {
   const text = String(value ?? '').trim()
@@ -268,15 +268,19 @@ async function validateLining(strapi: any, line: any, productType: string, issue
     issue(issues, 'liningType', 'A lining type is required when a lining colour/finish is selected.')
     return { type: null, colour: null }
   }
-  if (!hasSelection(colourSelection)) {
-    issue(issues, 'liningColour', 'A lining colour/finish is required when a lining type is selected.')
-    return { type: null, colour: null }
-  }
-
   const type = await activeOption(strapi, 'liningType', typeSelection, { pricing_rule: true })
-  const colour = await activeOption(strapi, 'liningColour', colourSelection, { compatible_lining_types: true })
+  const isInterlining = /interlin/i.test(String(typeSelection?.name ?? typeSelection?.label ?? typeSelection?.key ?? typeSelection ?? ''))
+  const colour = isInterlining || !hasSelection(colourSelection)
+    ? null
+    : await activeOption(strapi, 'liningColour', colourSelection, { compatible_lining_types: true })
   if (!type) issue(issues, 'liningType', 'The selected lining type is unavailable or inactive.')
-  if (!colour) issue(issues, 'liningColour', 'The selected lining colour/finish is unavailable or inactive.')
+  if (type && /interlin/i.test(String(type.key ?? type.display_name ?? type.name ?? type.liningType ?? ''))) {
+    if (hasSelection(colourSelection)) issue(issues, 'liningColour', 'Interlining does not accept a colour selection.')
+  } else if (!hasSelection(colourSelection)) {
+    issue(issues, 'liningColour', 'A lining colour/finish is required when a lining type is selected.')
+  } else if (!colour) {
+    issue(issues, 'liningColour', 'The selected lining colour/finish is unavailable or inactive.')
+  }
   if (type && productType === 'curtain' && type.applies_to_curtains !== true) issue(issues, 'liningType', 'This lining type is not available for curtains.')
   if (type && productType === 'blind' && type.applies_to_blinds !== true) issue(issues, 'liningType', 'This lining type is not available for blinds.')
   if (colour && productType === 'curtain' && colour.applies_to_curtains !== true) issue(issues, 'liningColour', 'This lining colour/finish is not available for curtains.')
@@ -315,27 +319,8 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
 
   const blackoutRequested = line?.blackoutLining === true || line?.selectedBlackoutLining === true ||
     line?.configuration?.blackoutLining === true || line?.configuration?.selectedBlackoutLining === true
-  if (blackoutRequested && productType !== 'cushion') {
-    if (!lining.type || !lining.colour) {
-      issue(issues, 'blackoutLining', 'A valid lining type and colour are required before adding blackout lining.')
-    } else if (lining.type.blackout !== true) {
-      const blackout = await activeBlackoutOption(strapi)
-      if (!blackout) {
-        issue(issues, 'blackoutLining', 'The blackout lining option is unavailable or inactive.')
-      } else if (productType === 'curtain' && blackout.applies_to_curtains !== true) {
-        issue(issues, 'blackoutLining', 'The blackout lining option is not available for curtains.')
-      } else if (productType === 'blind' && blackout.applies_to_blinds !== true) {
-        issue(issues, 'blackoutLining', 'The blackout lining option is not available for blinds.')
-      } else if (numberValue(blackout.price_per_metre) <= 0) {
-        issue(issues, 'blackoutLining', 'The blackout lining price is not configured.')
-      } else {
-        selectedOptions.blackoutLining = optionSnapshot(blackout, {
-          unitPrice: numberValue(blackout.price_per_metre),
-          unitPricePence: toPence(blackout.price_per_metre),
-          blackout: true,
-        })
-      }
-    }
+  if (blackoutRequested && productType !== 'cushion' && lining.type?.blackout !== true) {
+    issue(issues, 'blackoutLining', 'Blackout and standard lining are mutually exclusive. Select Blackout Lining as the lining type.')
   }
 
   if (productType === 'curtain') {
@@ -436,19 +421,6 @@ const fabricMetres = (fabric: any, productType: string, widthCm: number, heightC
 // Price the two cover faces as a real cut layout in linear metres. The
 // cushion-size, piping and pad catalogues remain the source of their own
 // prices; this only fixes the fabric quantity fed into the cushion rule.
-const cushionFabricMetres = (fabric: any, widthCm: number, heightCm: number) => {
-  const usableWidthCm = Math.max(1, numberValue(fabric?.usableWidth_cm || fabric?.usable_width_cm, 137))
-  const cutWidthCm = widthCm + (CUSHION_SEAM_ALLOWANCE_CM * 2)
-  const cutLengthCm = heightCm + (CUSHION_SEAM_ALLOWANCE_CM * 2)
-  const panelsPerRow = usableWidthCm >= cutWidthCm * CUSHION_FACE_COUNT ? CUSHION_FACE_COUNT : 1
-  const rows = Math.ceil(CUSHION_FACE_COUNT / panelsPerRow)
-  const patternRepeatCm = numberValue(fabric?.patternRepeat_cm || fabric?.pattern_repeat_cm)
-  const repeatRoundedLengthCm = patternRepeatCm > 0
-    ? Math.ceil(cutLengthCm / patternRepeatCm) * patternRepeatCm
-    : cutLengthCm
-  return (rows * repeatRoundedLengthCm) / 100
-}
-
 async function findFabric(strapi: any, identifier: any) {
   return findByIdentifier(strapi, 'api::fabric.fabric', identifier, undefined, {})
 }
@@ -811,7 +783,7 @@ async function calculateLine(strapi: any, line: any, index: number) {
   const rule = await pricingRule(strapi, productType)
   const fullnessMultiplier = numberValue(validated.selectedOptions.curtainType?.fullnessMultiplier, 1)
   let materialMetres = productType === 'cushion'
-    ? cushionFabricMetres(fabric, widthCm, heightCm)
+    ? calculateCushionFabricMetres(fabric, widthCm, heightCm, validated.selectedOptions.cushionFinish?.label)
     : fabricMetres(fabric, productType, widthCm, heightCm, fullnessMultiplier)
   const fabricUnitPence = toPence(fabric?.price_per_metre)
   const cushionRuleData = productType === 'cushion' ? {
@@ -832,9 +804,6 @@ async function calculateLine(strapi: any, line: any, index: number) {
     cushion_pad: { price: numberValue(validated.selectedOptions.cushionPad?.unitPrice) },
   } : null
   const ruleOutputs = cushionRuleData ? evaluatePricingRuleOutputs(rule, cushionRuleData) : {}
-  if (productType === 'cushion' && ruleOutputs.cushionFabricMetres !== undefined) {
-    materialMetres = numberValue(ruleOutputs.cushionFabricMetres, materialMetres)
-  }
   const nonCushionRuleOutputs = productType === 'cushion' ? {} : evaluatePricingRuleOutputs(rule, {
     width_cm: widthCm,
     height_cm: heightCm,
@@ -899,7 +868,9 @@ async function calculateLine(strapi: any, line: any, index: number) {
     const unit = rulePrice === null ? (validated.selectedOptions.cushionPad.unitPricePence || 0) : toPence(rulePrice)
     accessories.push({ type: 'cushion_pad', label: validated.selectedOptions.cushionPad.label, quantity, unit: 'item', unitPrice: fromPence(unit), unitPricePence: unit, total: fromPence(multiplyPence(unit, quantity)), totalPence: multiplyPence(unit, quantity) })
   }
-  const liningMetres = productType === 'cushion' ? 0 : materialMetres
+  const blindTypeLabel = String(validated.selectedOptions.blindType?.label || validated.selectedOptions.blindType?.name || '')
+  const requiresRomanTrack = productType === 'blind' && /waterfall|stacked|roman/i.test(blindTypeLabel)
+  const liningMetres = productType === 'cushion' ? 0 : requiresRomanTrack ? materialMetres + 0.5 : materialMetres
   if (validated.selectedOptions.liningType) {
     let liningTotalPence: number
     if (liningPricingRule && liningPricingRule.formula && liningPricingRule.formula.steps) {
@@ -913,7 +884,7 @@ async function calculateLine(strapi: any, line: any, index: number) {
     const unit = liningTotalPence > 0 ? Math.round(liningTotalPence / (liningMetres * quantity || 1)) : 0
     accessories.push({
       type: liningRuleIncludesWorkmanship ? 'lining_material' : 'lining',
-      label: `${validated.selectedOptions.liningType.label} — ${validated.selectedOptions.liningColour.label}`,
+      label: `${validated.selectedOptions.liningType.label}${validated.selectedOptions.liningColour?.label ? ` — ${validated.selectedOptions.liningColour.label}` : ''}`,
       quantity: liningMetres * quantity,
       unit: 'metre',
       unitPrice: fromPence(unit),
@@ -922,18 +893,20 @@ async function calculateLine(strapi: any, line: any, index: number) {
       totalPence: liningTotalPence,
     })
   }
-  if (validated.selectedOptions.blackoutLining) {
-    const unit = validated.selectedOptions.blackoutLining.unitPricePence || 0
-    const total = multiplyPence(unit, liningMetres * quantity)
+  if (requiresRomanTrack) {
+    const trackBaseMetres = materialMetres
+    const trackUnitPence = toPence(trackBaseMetres <= 1 ? 100 : 100 + Math.ceil((trackBaseMetres - 1) / 0.5) * 30)
+    const trackTotalPence = multiplyPence(trackUnitPence, quantity)
     accessories.push({
-      type: 'blackout_lining',
-      label: 'Blackout lining',
-      quantity: liningMetres * quantity,
-      unit: 'metre',
-      unitPrice: fromPence(unit),
-      unitPricePence: unit,
-      total: fromPence(total),
-      totalPence: total,
+      type: 'track',
+      label: 'Roman blind track',
+      quantity,
+      unit: 'item',
+      unitPrice: fromPence(trackUnitPence),
+      unitPricePence: trackUnitPence,
+      total: fromPence(trackTotalPence),
+      totalPence: trackTotalPence,
+      baseMetres: trackBaseMetres,
     })
   }
 

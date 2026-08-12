@@ -28,6 +28,30 @@
         "videos",
         "audios"
       ]
+    },
+    "key": {
+      "type": "string",
+      "unique": true
+    },
+    "display_name": {
+      "type": "string"
+    },
+    "active": {
+      "type": "boolean",
+      "default": true
+    },
+    "sort_order": {
+      "type": "integer",
+      "default": 0
+    },
+    "mechanism_family": {
+      "type": "string"
+    },
+    "mechanism_finishes": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::mechanism-finish.mechanism-finish",
+      "inversedBy": "compatible_mechanisations"
     }
   }
 }

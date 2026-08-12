@@ -103,16 +103,21 @@ function publicLiningType(item: any, fallbackColours: any[] = [], appliesField: 
       [type.key, type.documentId, type.id].filter(Boolean).some((value: any) => typeIdentifiers.has(String(value)))
     )
   })
-  const colours = linkedColours.length > 0 ? linkedColours : compatibleFallbackColours
+  const isInterlining = /interlin/i.test(String(item.key || item.display_name || item.liningType || item.name || ''))
+  const colours = isInterlining ? [] : (linkedColours.length > 0 ? linkedColours : compatibleFallbackColours)
+  const displayName = /full\s+lining/i.test(String(item.display_name || item.liningType || item.name || ''))
+    ? 'Standard Lining'
+    : item.display_name || item.liningType || item.name || ''
 
-  return publicOption(item, {
-    liningType: item.display_name || item.liningType || item.name || '',
+  return publicOption({ ...item, display_name: displayName }, {
+    liningType: displayName,
     pricePerMetre: Number(item.price_per_metre) || 0,
     pricePerMetrePence: Math.round((Number(item.price_per_metre) || 0) * 100),
     blackout: item.blackout === true,
     appliesToCurtains: item.applies_to_curtains === true,
     appliesToBlinds: item.applies_to_blinds === true,
     thumbnail: firstMediaUrl(item.thumbnail),
+    requiresColour: !isInterlining,
     availableColours: colours.filter((colour: any) => colour?.active !== false).map(publicLiningColour),
   })
 }
@@ -195,7 +200,7 @@ export default {
       findPublicOptions(strapi, 'trimmings', 'api::trimming.trimming', {}, requestId),
       findPublicOptions(strapi, 'linings', 'api::lining.lining', { populate: { thumbnail: true, lining_colour_options: { populate: { thumbnail: true } } } }, requestId),
       findPublicOptions(strapi, 'lining-colours', 'api::lining-colour.lining-colour', { populate: { thumbnail: true, compatible_lining_types: true } }, requestId),
-      findPublicOptions(strapi, 'mechanisations', 'api::mechanisation.mechanisation', { populate: { thumbnail: true } }, requestId),
+      findPublicOptions(strapi, 'mechanisations', 'api::mechanisation.mechanisation', { populate: { thumbnail: true, mechanism_finishes: true } }, requestId),
       findPublicOptions(strapi, 'mechanism-finishes', 'api::mechanism-finish.mechanism-finish', { populate: { thumbnail: true, compatible_mechanisations: true } }, requestId, true),
       findPublicOptions(strapi, 'cushion-finishes', 'api::cushion-piping.cushion-piping', { populate: { thumbnail: true } }, requestId),
       findPublicOptions(strapi, 'cushion-pads', 'api::cushion-pad.cushion-pad', { populate: { thumbnail: true } }, requestId),
@@ -204,7 +209,7 @@ export default {
       findPublicOptions(strapi, 'configurations', 'api::made-to-measure-configuration.made-to-measure-configuration', { filters: { active: true } }, requestId, true),
     ])
     const configurationByType = Object.fromEntries(configurations.map((item: any) => [item.product_type, item]))
-    const activeLinings = linings.filter((item: any) => item.active !== false)
+    const activeLinings = linings.filter((item: any) => item.active !== false && item.is_configurator_option !== false && !/no[-_ ]lining|none|unlined/i.test(String(item.key || item.display_name || item.liningType || item.name || '')))
     const activeLiningColours = liningColours.filter((item: any) => item.active !== false)
     const curtainLiningTypes = activeLinings.filter((item: any) => item.applies_to_curtains === true).map((item: any) => publicLiningType(item, activeLiningColours, 'applies_to_curtains'))
     const blindLiningTypes = activeLinings.filter((item: any) => item.applies_to_blinds === true).map((item: any) => publicLiningType(item, activeLiningColours, 'applies_to_blinds'))
