@@ -12,9 +12,8 @@ const { createStrapi } = require('@strapi/strapi');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const records = [
-  { uid: 'api::lining.lining', key: 'no-lining', data: { key: 'no-lining', liningType: 'No lining', display_name: 'No lining', price_per_metre: 0, active: true, sort_order: 0, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
-  { uid: 'api::lining.lining', key: 'lined', data: { key: 'lined', liningType: 'Full lining', display_name: 'Full lining', active: true, sort_order: 10, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
-  { uid: 'api::lining.lining', key: 'interlined', data: { key: 'interlined', liningType: 'Interlined', display_name: 'Interlined', active: true, sort_order: 20, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
+  { uid: 'api::lining.lining', key: 'lined', data: { key: 'lined', liningType: 'Standard Lining', display_name: 'Standard Lining', price_per_metre: 9, active: true, sort_order: 10, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
+  { uid: 'api::lining.lining', key: 'interlined', data: { key: 'interlined', liningType: 'Interlining', display_name: 'Interlining', price_per_metre: 10, active: true, sort_order: 20, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
   { uid: 'api::lining.lining', key: 'blackout', data: { key: 'blackout', liningType: 'Blackout Lining', display_name: 'Blackout Lining', blackout: true, active: true, sort_order: 30, is_configurator_option: true, applies_to_curtains: true, applies_to_blinds: true } },
   ...[
     ['white', 'White', '#ffffff', 10], ['pale-ivory', 'Pale Ivory', '#f5f0dd', 20], ['ivory', 'Ivory', '#ece4ca', 30], ['cream', 'Cream', '#e8d8ad', 40],
@@ -145,6 +144,15 @@ async function connectRelation(strapi, uid, key, relation, relatedRecords, apply
   });
 }
 
+async function setRelation(strapi, uid, key, relation, relatedRecords, apply) {
+  if (!apply) return;
+  const record = await findByKey(strapi, uid, key);
+  if (!record) throw new Error(`Cannot set ${uid}:${key}; record was not created/found.`);
+  await strapi.entityService.update(uid, record.id, {
+    data: { [relation]: { set: relatedRecords.map(item => item.id).filter(Boolean) } },
+  });
+}
+
 async function main(argv = process.argv.slice(2)) {
   const apply = argv.includes('--apply');
   const unsupported = argv.filter(flag => !['--apply', '--dry-run'].includes(flag));
@@ -163,10 +171,11 @@ async function main(argv = process.argv.slice(2)) {
     const results = [];
     for (const record of records) results.push(await upsert(app, record, apply));
     const byKey = new Map(results.filter(item => item.id).map(item => [item.key, item]));
-    const liningTypes = ['no-lining', 'lined', 'interlined', 'blackout'].map(key => byKey.get(key)).filter(Boolean);
-    const liningTypesWithColours = ['lined', 'interlined', 'blackout'].map(key => byKey.get(key)).filter(Boolean);
+    const liningColours = ['white', 'pale-ivory', 'ivory', 'cream'].map(key => byKey.get(key)).filter(Boolean);
     const cordedMechanisms = ['corded-left', 'corded-right'].map(key => byKey.get(key)).filter(Boolean);
-    for (const key of ['white', 'pale-ivory', 'ivory', 'cream']) await connectRelation(app, 'api::lining-colour.lining-colour', key, 'compatible_lining_types', liningTypesWithColours, apply);
+    await setRelation(app, 'api::lining.lining', 'lined', 'lining_colour_options', liningColours, apply);
+    await setRelation(app, 'api::lining.lining', 'interlined', 'lining_colour_options', [], apply);
+    await setRelation(app, 'api::lining.lining', 'blackout', 'lining_colour_options', liningColours.filter((_, index) => index < 2), apply);
     for (const key of ['chrome', 'brass']) await connectRelation(app, 'api::mechanism-finish.mechanism-finish', key, 'compatible_mechanisations', cordedMechanisms, apply);
     console.log(JSON.stringify({ mode: apply ? 'apply' : 'dry-run', migrations, created: results.filter(item => item.action === 'created').map(item => `${item.uid}:${item.key}`), wouldCreate: results.filter(item => item.action === 'would-create').map(item => `${item.uid}:${item.key}`), updated: results.filter(item => item.action === 'updated').map(item => `${item.uid}:${item.key}`), wouldUpdate: results.filter(item => item.action === 'would-update').map(item => `${item.uid}:${item.key}`), existing: results.filter(item => item.action === 'exists').map(item => `${item.uid}:${item.key}`), records: records.length }, null, 2));
     return results;

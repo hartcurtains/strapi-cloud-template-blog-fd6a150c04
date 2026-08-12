@@ -591,6 +591,7 @@ async function ensureLiningCatalogue(strapi: Core.Strapi): Promise<void> {
             liningType: 'Standard Lining',
             price_per_metre: 9,
             active: true,
+            sort_order: 10,
             is_configurator_option: true,
             blackout: false,
           } as any,
@@ -602,6 +603,7 @@ async function ensureLiningCatalogue(strapi: Core.Strapi): Promise<void> {
             liningType: 'Interlining',
             price_per_metre: 10,
             active: true,
+            sort_order: 20,
             is_configurator_option: true,
             lining_colour_options: { set: [] },
           } as any,
@@ -613,12 +615,34 @@ async function ensureLiningCatalogue(strapi: Core.Strapi): Promise<void> {
             liningType: 'Blackout Lining',
             price_per_metre: 9,
             active: true,
+            sort_order: 30,
             is_configurator_option: true,
             blackout: true,
           } as any,
         });
       }
     }
+    // Keep the public catalogue aligned with the business rules. In
+    // particular, Interlining has no colour relation and Blackout is limited
+    // to White and Pale Ivory; the storefront reads these relations directly.
+    const refreshedLinings = await strapi.entityService.findMany('api::lining.lining', { limit: 100 });
+    const liningColours = await strapi.entityService.findMany('api::lining-colour.lining-colour' as any, { limit: 100 } as any);
+    const findLining = (needle: string) => (Array.isArray(refreshedLinings) ? refreshedLinings : []).find((record: any) => {
+      const value = String(record.key || record.display_name || record.liningType || '').toLowerCase();
+      return value.includes(needle);
+    });
+    const findColour = (needle: string) => (Array.isArray(liningColours) ? liningColours : []).find((record: any) => {
+      const value = String(record.key || record.display_name || '').toLowerCase();
+      return value === needle || value.replace(/\s+/g, '-') === needle;
+    });
+    const standard = findLining('standard') || findLining('lined');
+    const interlining = findLining('interlining');
+    const blackout = findLining('blackout');
+    const standardColours = ['white', 'pale-ivory', 'ivory', 'cream'].map(findColour).filter(Boolean).map((record: any) => record.id);
+    const blackoutColours = ['white', 'pale-ivory'].map(findColour).filter(Boolean).map((record: any) => record.id);
+    if (standard) await strapi.entityService.update('api::lining.lining', standard.id, { data: { lining_colour_options: { set: standardColours } } as any });
+    if (interlining) await strapi.entityService.update('api::lining.lining', interlining.id, { data: { lining_colour_options: { set: [] } } as any });
+    if (blackout) await strapi.entityService.update('api::lining.lining', blackout.id, { data: { lining_colour_options: { set: blackoutColours } } as any });
     console.log('Ensured Standard, Interlining, and Blackout lining catalogue');
   } catch (error: any) {
     console.warn('Error ensuring lining catalogue:', error.message);
@@ -630,7 +654,7 @@ async function ensureMechanismFinishOptions(strapi: Core.Strapi): Promise<void> 
   try {
     const finishes: any[] = [];
     for (const [sort_order, value] of [[0, ['chrome', 'Chrome']], [1, ['brass', 'Brass']]] as const) {
-      const existing = await strapi.entityService.findMany(uid as any, { filters: { key: value[0] }, limit: 1 });
+      const existing = await strapi.entityService.findMany(uid as any, { filters: { key: value[0] } as any, limit: 1 } as any);
       const current: any = Array.isArray(existing) ? existing[0] : null;
       const record = current
         ? await strapi.entityService.update(uid as any, current.id, { data: { key: value[0], display_name: value[1], active: true, sort_order } as any })

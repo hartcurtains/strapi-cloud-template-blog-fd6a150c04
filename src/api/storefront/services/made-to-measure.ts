@@ -259,28 +259,43 @@ function optionSnapshot(record: any, extra: Record<string, any> = {}) {
 }
 
 async function validateLining(strapi: any, line: any, productType: string, issues: ValidationIssue[]) {
+  if (productType === 'cushion') return { type: null, colour: null, interlining: null }
   const typeSelection = selected(line, ['liningTypeKey', 'liningTypeId', 'selectedLiningType', 'liningType'])
   const colourSelection = selected(line, ['liningColourKey', 'liningColourId', 'selectedLiningColour', 'liningColour', 'liningFinish'])
+  const interliningSelection = selected(line, ['interliningTypeKey', 'interliningId', 'selectedInterlining', 'interlining'])
   const typeKey = String(optionIdentifier(typeSelection) ?? '').trim().toLowerCase()
-  if (NO_LINING_KEYS.has(typeKey)) return { type: null, colour: null }
-  if (!hasSelection(typeSelection) && !hasSelection(colourSelection)) return { type: null, colour: null }
-  if (!hasSelection(typeSelection)) {
-    issue(issues, 'liningType', 'A lining type is required when a lining colour/finish is selected.')
-    return { type: null, colour: null }
+  const type = hasSelection(typeSelection) && !NO_LINING_KEYS.has(typeKey)
+    ? await activeOption(strapi, 'liningType', typeSelection, { pricing_rule: true })
+    : null
+  const typeIdentity = String(type?.key ?? type?.display_name ?? type?.name ?? type?.liningType ?? typeSelection?.name ?? typeSelection?.label ?? typeKey)
+  const typeIsInterlining = /interlin/i.test(typeIdentity)
+  const typeIsBlackout = type?.blackout === true || /blackout/i.test(typeIdentity)
+  const typeIsStandard = type?.key === 'lined' || /standard\s+lining/i.test(typeIdentity)
+  const colour = hasSelection(colourSelection)
+    ? await activeOption(strapi, 'liningColour', colourSelection, { compatible_lining_types: true })
+    : null
+
+  // Standard or Blackout is the required base layer for curtains and blinds.
+  // Interlining is an optional second layer and cannot be used as the base.
+  if (!hasSelection(typeSelection) || NO_LINING_KEYS.has(typeKey) || typeIsInterlining || (!typeIsStandard && !typeIsBlackout)) {
+    issue(issues, 'liningType', 'Standard Lining or Blackout Lining is required.')
+  } else if (!type) {
+    issue(issues, 'liningType', 'The selected lining type is unavailable or inactive.')
   }
-  const type = await activeOption(strapi, 'liningType', typeSelection, { pricing_rule: true })
-  const isInterlining = /interlin/i.test(String(typeSelection?.name ?? typeSelection?.label ?? typeSelection?.key ?? typeSelection ?? ''))
-  const colour = isInterlining || !hasSelection(colourSelection)
-    ? null
-    : await activeOption(strapi, 'liningColour', colourSelection, { compatible_lining_types: true })
-  if (!type) issue(issues, 'liningType', 'The selected lining type is unavailable or inactive.')
-  if (type && /interlin/i.test(String(type.key ?? type.display_name ?? type.name ?? type.liningType ?? ''))) {
-    if (hasSelection(colourSelection)) issue(issues, 'liningColour', 'Interlining does not accept a colour selection.')
-  } else if (!hasSelection(colourSelection)) {
+  if (!hasSelection(colourSelection)) {
     issue(issues, 'liningColour', 'A lining colour/finish is required when a lining type is selected.')
   } else if (!colour) {
     issue(issues, 'liningColour', 'The selected lining colour/finish is unavailable or inactive.')
   }
+
+  const interlining = hasSelection(interliningSelection)
+    ? await activeOption(strapi, 'liningType', interliningSelection, { pricing_rule: true })
+    : null
+  if (hasSelection(interliningSelection) && (!interlining || !/interlin/i.test(String(interlining.key ?? interlining.display_name ?? interlining.name ?? interlining.liningType ?? '')))) {
+    issue(issues, 'interliningType', 'The selected interlining is unavailable or inactive.')
+  }
+  const interliningColourSelection = selected(line, ['interliningColourKey', 'interliningColourId', 'selectedInterliningColour'])
+  if (hasSelection(interliningColourSelection)) issue(issues, 'interliningColour', 'Interlining does not accept a colour selection.')
   if (type && productType === 'curtain' && type.applies_to_curtains !== true) issue(issues, 'liningType', 'This lining type is not available for curtains.')
   if (type && productType === 'blind' && type.applies_to_blinds !== true) issue(issues, 'liningType', 'This lining type is not available for blinds.')
   if (colour && productType === 'curtain' && colour.applies_to_curtains !== true) issue(issues, 'liningColour', 'This lining colour/finish is not available for curtains.')
@@ -289,7 +304,7 @@ async function validateLining(strapi: any, line: any, productType: string, issue
     const compatible = Array.isArray(colour.compatible_lining_types) && colour.compatible_lining_types.some((candidate: any) => optionMatches(candidate, type))
     if (!compatible) issue(issues, 'liningColour', 'The selected lining colour/finish is not compatible with the selected lining type.')
   }
-  return { type, colour }
+  return { type, colour, interlining }
 }
 
 export async function validateLineOptions(strapi: any, line: any, productTypeInput: string, issues: ValidationIssue[] = []): Promise<{ productType: string, issues: ValidationIssue[], selectedOptions: Record<string, any>, lining?: any }> {
@@ -315,6 +330,10 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
     blackout: lining.type.blackout === true,
   })
   if (lining.colour) selectedOptions.liningColour = optionSnapshot(lining.colour, {
+  })
+  if (lining.interlining) selectedOptions.interliningType = optionSnapshot(lining.interlining, {
+    unitPrice: numberValue(lining.interlining.price_per_metre),
+    unitPricePence: toPence(lining.interlining.price_per_metre),
   })
 
   const blackoutRequested = line?.blackoutLining === true || line?.selectedBlackoutLining === true ||
@@ -351,7 +370,10 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
     // valid selectable mechanism; only reject an explicitly non-corded one
     // when a finish is being validated.
     if (mechanism && mechanism.mechanism_family && mechanism.mechanism_family !== 'corded') issue(issues, 'mechanism', 'Mechanism finishes are only valid for corded mechanisms.')
-    if (mechanism && finish && !(Array.isArray(finish.compatible_mechanisations) && finish.compatible_mechanisations.some((candidate: any) => optionMatches(candidate, mechanism)))) issue(issues, 'mechanismFinish', 'The selected mechanism finish is not compatible with the selected mechanism.')
+    const compatibleMechanisms = Array.isArray(finish?.compatible_mechanisations) ? finish.compatible_mechanisations : []
+    // Empty compatibility relations are the legacy catalogue's universal
+    // relation. Only a populated relation can make a finish incompatible.
+    if (mechanism && finish && compatibleMechanisms.length > 0 && !compatibleMechanisms.some((candidate: any) => optionMatches(candidate, mechanism))) issue(issues, 'mechanismFinish', 'The selected mechanism finish is not compatible with the selected mechanism.')
     if (mechanism) selectedOptions.mechanism = optionSnapshot(mechanism, { unitPrice: numberValue(mechanism.price), unitPricePence: toPence(mechanism.price) })
     if (finish) selectedOptions.mechanismFinish = optionSnapshot(finish)
   }
@@ -891,6 +913,20 @@ async function calculateLine(strapi: any, line: any, index: number) {
       unitPricePence: unit,
       total: fromPence(liningTotalPence),
       totalPence: liningTotalPence,
+    })
+  }
+  if (validated.selectedOptions.interliningType) {
+    const unit = validated.selectedOptions.interliningType.unitPricePence || toPence(validated.selectedOptions.interliningType.unitPrice)
+    const interliningTotalPence = multiplyPence(unit, liningMetres * quantity)
+    accessories.push({
+      type: 'interlining',
+      label: validated.selectedOptions.interliningType.label || 'Interlining',
+      quantity: liningMetres * quantity,
+      unit: 'metre',
+      unitPrice: fromPence(unit),
+      unitPricePence: unit,
+      total: fromPence(interliningTotalPence),
+      totalPence: interliningTotalPence,
     })
   }
   if (requiresRomanTrack) {
