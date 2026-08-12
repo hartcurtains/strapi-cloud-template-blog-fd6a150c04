@@ -145,6 +145,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
   await repairCushionSizePricingFields(strapi);
   await repairCushionPadPricingFields(strapi);
   await retireNoLiningOptions(strapi);
+  await ensureLiningCatalogue(strapi);
   await ensureMechanismFinishOptions(strapi);
   await ensureNormalizedColourCatalogue(strapi);
 
@@ -575,6 +576,52 @@ async function retireNoLiningOptions(strapi: Core.Strapi): Promise<void> {
     // A missing seed must not prevent Strapi from starting; the setup script
     // remains available for an explicit administrative reconciliation.
     console.warn('⚠️  Error ensuring No Lining option:', error.message);
+  }
+}
+
+async function ensureLiningCatalogue(strapi: Core.Strapi): Promise<void> {
+  try {
+    const records = await strapi.entityService.findMany('api::lining.lining', { limit: 100 });
+    for (const record of (Array.isArray(records) ? records : []) as any[]) {
+      const identity = String(record.key || record.display_name || record.liningType || '').toLowerCase();
+      if (identity.includes('full lining') || identity === 'standard lining') {
+        await strapi.entityService.update('api::lining.lining', record.id, {
+          data: {
+            display_name: 'Standard Lining',
+            liningType: 'Standard Lining',
+            price_per_metre: 9,
+            active: true,
+            is_configurator_option: true,
+            blackout: false,
+          } as any,
+        });
+      } else if (identity.includes('interlining')) {
+        await strapi.entityService.update('api::lining.lining', record.id, {
+          data: {
+            display_name: 'Interlining',
+            liningType: 'Interlining',
+            price_per_metre: 10,
+            active: true,
+            is_configurator_option: true,
+            lining_colour_options: { set: [] },
+          } as any,
+        });
+      } else if (identity.includes('blackout')) {
+        await strapi.entityService.update('api::lining.lining', record.id, {
+          data: {
+            display_name: 'Blackout Lining',
+            liningType: 'Blackout Lining',
+            price_per_metre: 9,
+            active: true,
+            is_configurator_option: true,
+            blackout: true,
+          } as any,
+        });
+      }
+    }
+    console.log('Ensured Standard, Interlining, and Blackout lining catalogue');
+  } catch (error: any) {
+    console.warn('Error ensuring lining catalogue:', error.message);
   }
 }
 
