@@ -581,7 +581,7 @@ async function retireNoLiningOptions(strapi: Core.Strapi): Promise<void> {
 
 async function ensureLiningCatalogue(strapi: Core.Strapi): Promise<void> {
   try {
-    const records = await strapi.entityService.findMany('api::lining.lining', { sort: ['id:asc'], limit: 100 });
+    const records = await strapi.entityService.findMany('api::lining.lining', { publicationState: 'preview', sort: ['id:asc'], limit: 100 });
     const canonicalByDocumentId = new Map<string, number>();
     for (const record of (Array.isArray(records) ? records : []) as any[]) {
       const documentId = String(record.documentId || '');
@@ -635,7 +635,7 @@ async function ensureLiningCatalogue(strapi: Core.Strapi): Promise<void> {
     // Keep the public catalogue aligned with the business rules. In
     // particular, Interlining has no colour relation and Blackout is limited
     // to White and Pale Ivory; the storefront reads these relations directly.
-    const refreshedLinings = await strapi.entityService.findMany('api::lining.lining', { limit: 100 });
+    const refreshedLinings = await strapi.entityService.findMany('api::lining.lining', { publicationState: 'preview', sort: ['id:asc'], limit: 100 });
     const liningColours = await strapi.entityService.findMany('api::lining-colour.lining-colour' as any, { limit: 100 } as any);
     const findLining = (needle: string) => (Array.isArray(refreshedLinings) ? refreshedLinings : []).find((record: any) => {
       const value = String(record.key || record.display_name || record.liningType || '').toLowerCase();
