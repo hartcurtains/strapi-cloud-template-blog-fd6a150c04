@@ -63,6 +63,35 @@ test('blind quote accepts standard lining, optional interlining, and mechanism f
   assert.equal(quote.breakdown.accessories.find(item => item.type === 'interlining').unitPricePence, 1000)
 })
 
+test('blind quote accepts active legacy mechanisms without configurator flag', async () => {
+  const records = catalogue()
+  records['api::mechanisation.mechanisation'] = [{
+    id: 'corded-left',
+    documentId: 'corded-left',
+    key: 'corded-left',
+    name: 'Corded Left',
+    price: 20,
+    active: true,
+  }]
+
+  const quote = await calculateMadeToMeasureQuote(fakeStrapi(records), {
+    items: [{
+      madeToMeasureV2: true,
+      productType: 'blind',
+      fabricId: 'fabric-1',
+      quantity: 1,
+      measurements: { width: 100, height: 100 },
+      blindTypeId: 'stacked',
+      liningTypeKey: 'lined',
+      liningColourKey: 'white',
+      mechanismKey: 'corded-left',
+    }],
+    shipping: '0.00',
+  })
+
+  assert.equal(quote.items[0].selectedOptions.mechanism.key, 'corded-left')
+})
+
 test('curtain and blind quotes reject missing or standalone interlining', async () => {
   const strapi = fakeStrapi(catalogue())
   const base = {

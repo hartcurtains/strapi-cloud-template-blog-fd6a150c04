@@ -172,7 +172,9 @@ async function findByIdentifier(strapi: any, uid: string, identifier: any, popul
 
 async function activeOption(strapi: any, name: keyof typeof OPTION_UIDS, identifier: any, populate: any = undefined) {
   const uid = OPTION_UIDS[name]
-  const extra = ['cushionFinish', 'cushionSize', 'cushionPad', 'liningColour', 'mechanismFinish'].includes(name)
+  // Mechanisation records pre-date the configurator flag, so an active
+  // mechanism must remain selectable even when that legacy field is absent.
+  const extra = ['cushionFinish', 'cushionSize', 'cushionPad', 'liningColour', 'mechanism', 'mechanismFinish'].includes(name)
     ? { active: true }
     : { active: true, is_configurator_option: true }
   return findByIdentifier(strapi, uid, identifier, populate, extra)
