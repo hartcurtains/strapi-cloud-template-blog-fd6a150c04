@@ -71,7 +71,6 @@ test('blind quote accepts active legacy mechanisms without configurator flag', a
     key: 'corded-left',
     name: 'Corded Left',
     price: 20,
-    active: true,
   }]
 
   const quote = await calculateMadeToMeasureQuote(fakeStrapi(records), {
@@ -90,6 +89,25 @@ test('blind quote accepts active legacy mechanisms without configurator flag', a
   })
 
   assert.equal(quote.items[0].selectedOptions.mechanism.key, 'corded-left')
+
+  records['api::mechanisation.mechanisation'][0].active = false
+  await assert.rejects(
+    () => calculateMadeToMeasureQuote(fakeStrapi(records), {
+      items: [{
+        madeToMeasureV2: true,
+        productType: 'blind',
+        fabricId: 'fabric-1',
+        quantity: 1,
+        measurements: { width: 100, height: 100 },
+        blindTypeId: 'stacked',
+        liningTypeKey: 'lined',
+        liningColourKey: 'white',
+        mechanismKey: 'corded-left',
+      }],
+      shipping: '0.00',
+    }),
+    error => error.name === 'MadeToMeasureValidationError' && error.issues.some(issue => issue.field === 'mechanism'),
+  )
 })
 
 test('curtain and blind quotes reject missing or standalone interlining', async () => {
