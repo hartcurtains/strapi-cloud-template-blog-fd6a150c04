@@ -912,8 +912,9 @@ async function calculateLine(strapi: any, line: any, index: number) {
     accessories.push({ type: 'cushion_pad', label: validated.selectedOptions.cushionPad.label, quantity, unit: 'item', unitPrice: fromPence(unit), unitPricePence: unit, total: fromPence(multiplyPence(unit, quantity)), totalPence: multiplyPence(unit, quantity) })
   }
   const blindTypeLabel = String(validated.selectedOptions.blindType?.label || validated.selectedOptions.blindType?.name || '')
+  const requiresExtraLining = productType === 'blind' && /waterfall|stacked/i.test(blindTypeLabel)
   const requiresRomanTrack = productType === 'blind' && /waterfall|stacked|roman/i.test(blindTypeLabel)
-  const liningMetres = productType === 'cushion' ? 0 : requiresRomanTrack ? materialMetres + 0.5 : materialMetres
+  const liningMetres = productType === 'cushion' ? 0 : requiresExtraLining ? materialMetres + 0.5 : materialMetres
   if (validated.selectedOptions.liningType) {
     let liningTotalPence: number
     if (liningPricingRule && liningPricingRule.formula && liningPricingRule.formula.steps) {
