@@ -129,7 +129,17 @@ export default factories.createCoreController("api::order.order", ({ strapi }) =
       }
       if (Object.keys(updateData).length === 0) return ctx.badRequest('No allowed order fields to update');
 
-      const order = await strapi.entityService.update('api::order.order', id, { data: updateData });
+      // Strapi v5 REST routes use documentId, while entityService.update
+      // still expects the numeric record id. Resolve both forms so admin
+      // notes updates work with the same identifier used by the UI.
+      const numericId = Number(id);
+      const existing = await strapi.db.query('api::order.order').findOne({
+        where: Number.isInteger(numericId) && numericId > 0 ? { id: numericId } : { documentId: id },
+        select: ['id'],
+      });
+      if (!existing) return ctx.notFound('Order not found');
+
+      const order = await strapi.entityService.update('api::order.order', existing.id, { data: updateData });
       return ctx.send({ data: order });
     } catch (error) {
       console.error('❌ Order Controller - Error updating order:', error);
