@@ -46,12 +46,33 @@ async function authenticateAdmin(ctx: any): Promise<any | null> {
   }
 }
 
+async function authenticateFullAccessApiToken(ctx: any): Promise<any | null> {
+  const token = bearerToken(ctx);
+  if (!token || !global.strapi) return null;
+
+  try {
+    const apiTokenService = global.strapi.service('admin::api-token');
+    const apiToken = await apiTokenService.getBy({
+      accessKey: apiTokenService.hash(token),
+    });
+
+    if (!apiToken || apiToken.type !== 'full-access') return null;
+    if (apiToken.expiresAt && new Date(apiToken.expiresAt) < new Date()) return null;
+
+    return { kind: 'full-access-api-token', apiToken };
+  } catch {
+    return null;
+  }
+}
+
 async function authenticateCatalogWrite(ctx: any): Promise<any | null> {
   const authorization = ctx?.request?.headers?.authorization;
   if (authorized(authorization, process.env.STRAPI_API_TOKEN)) return { kind: 'internal' };
+  const fullAccessApiToken = await authenticateFullAccessApiToken(ctx);
+  if (fullAccessApiToken) return fullAccessApiToken;
   return authenticateAdmin(ctx);
 }
 
-module.exports = { authorized, authenticateCatalogWrite, authenticateAdmin, bearerToken };
+module.exports = { authorized, authenticateCatalogWrite, authenticateAdmin, authenticateFullAccessApiToken, bearerToken };
 
 export {};
