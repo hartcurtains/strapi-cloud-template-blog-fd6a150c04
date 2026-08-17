@@ -11,6 +11,11 @@ const adminCatalogRoutes = require('../src/plugins/order-management/shared/route
 
 let server;
 
+const ADMIN_ONLY_CATALOG_READS = new Set([
+  'mechanism-finishes',
+  'made-to-measure-configurations',
+]);
+
 before(async () => { server = await startStrapiTestApp(); });
 after(async () => { if (server) await server.stop(); });
 
@@ -154,10 +159,29 @@ test('initialized Strapi router contains the complete protected mutation matrix'
 });
 
 test('required public catalog reads remain reachable', async () => {
-  for (const entity of surface.CATALOG_ENTITIES) {
+  for (const entity of surface.CATALOG_ENTITIES.filter(entity => !ADMIN_ONLY_CATALOG_READS.has(entity.collection))) {
     const response = await jsonRequest(`/api/${entity.collection}`);
     assert.equal(response.status, 200, `GET /api/${entity.collection}`);
   }
+});
+
+test('mechanism finishes and MTM configurations are admin-only direct reads', async () => {
+  for (const collection of ADMIN_ONLY_CATALOG_READS) {
+    const anonymous = await jsonRequest(`/api/${collection}`);
+    assert.equal(anonymous.status, 403, `anonymous GET /api/${collection}`);
+
+    const customer = await jsonRequest(`/api/${collection}`, 'GET', `Bearer ${server.customerToken}`);
+    assert.equal(customer.status, 403, `customer GET /api/${collection}`);
+
+    const internal = await jsonRequest(`/api/${collection}`, 'GET', `Bearer ${server.internalToken}`);
+    assert.equal(internal.status, 200, await internal.clone().text());
+
+    const admin = await jsonRequest(`/api/${collection}`, 'GET', `Bearer ${server.adminToken}`);
+    assert.equal(admin.status, 200, await admin.clone().text());
+  }
+
+  const publicOptions = await jsonRequest('/api/storefront/configurator-options');
+  assert.equal(publicOptions.status, 200, await publicOptions.clone().text());
 });
 
 test('folder history and analysis are private to genuine Strapi administrators', async () => {
