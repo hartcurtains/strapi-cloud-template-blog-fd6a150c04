@@ -15,7 +15,7 @@ const CATALOG_ENTITIES = Object.freeze([
   { uid: 'api::curtain-type.curtain-type', collection: 'curtain-types', fields: ['name', 'price', 'thumbnail', 'fullness_multiplier', 'key', 'display_name', 'active', 'sort_order', 'is_configurator_option'] },
   { uid: 'api::blind-type.blind-type', collection: 'blind-types', fields: ['name', 'thumbnail', 'key', 'display_name', 'active', 'sort_order', 'is_configurator_option'] },
   { uid: 'api::cushion-type.cushion-type', collection: 'cushion-types', fields: ['name', 'types', 'width_cm', 'height_cm'] },
-  { uid: 'api::cushion-size.cushion-size', collection: 'cushion-sizes', fields: ['name', 'width_cm', 'height_cm', 'shape', 'thumbnail', 'key', 'active', 'sort_order', 'duck_feather_surcharge'] },
+  { uid: 'api::cushion-size.cushion-size', collection: 'cushion-sizes', fields: ['name', 'width_cm', 'height_cm', 'shape', 'thumbnail', 'duck_feather_surcharge', 'workmanship_cost'] },
   { uid: 'api::cushion-piping.cushion-piping', collection: 'cushion-piping-types', fields: ['name', 'type', 'price', 'thumbnail', 'key', 'active', 'sort_order'] },
   { uid: 'api::cushion-pad.cushion-pad', collection: 'cushion-pads', fields: ['name', 'type', 'price', 'thumbnail', 'key', 'active', 'sort_order'] },
   { uid: 'api::curtain-pole.curtain-pole', collection: 'curtain-poles', fields: ['name', 'thumbnail', 'price', 'allowed_lengths', 'allowed_brackets', 'bracket_requirement'] },
