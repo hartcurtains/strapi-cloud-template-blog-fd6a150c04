@@ -4,8 +4,13 @@
 
 import { factories } from '@strapi/strapi';
 const catalogUploadConfig = require('../../../catalog/catalog-upload-config');
+const catalogRelations = require('../../../plugins/order-management/server/controllers/catalog-relations');
 
 export default factories.createCoreController('api::order-management.order-management', ({ strapi }) => ({
+  async catalogRelationUpdate(ctx) {
+    return catalogRelations.update(ctx);
+  },
+
   // Simple test endpoint
   async test(ctx) {
     ctx.body = { message: 'Order Management API is working!' };

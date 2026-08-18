@@ -43,5 +43,11 @@ export default {
       handler: 'order-management.bulkImageUpload',
       config: customMutationPolicyConfig(),
     },
+    {
+      method: 'POST',
+      path: '/order-management/admin/catalog/relations',
+      handler: 'order-management.catalogRelationUpdate',
+      config: customMutationPolicyConfig(),
+    },
   ],
 };
