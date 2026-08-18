@@ -17,6 +17,29 @@ async function resolveRecord(strapi, uid, identifier) {
   return strapi.db.query(uid).findOne({ where, select: ['id', 'documentId'] });
 }
 
+function recordKey(record) {
+  return record?.documentId || record?.id || null;
+}
+
+function relationRecords(record, field) {
+  const value = record?.[field];
+  return Array.isArray(value) ? value.filter(Boolean) : [];
+}
+
+function uniqueRecords(records) {
+  const seen = new Set();
+  return records.filter((record) => {
+    const key = recordKey(record);
+    if (!key || seen.has(String(key))) return false;
+    seen.add(String(key));
+    return true;
+  });
+}
+
+async function loadWithRelation(strapi, uid, id, field) {
+  return strapi.entityService.findOne(uid, id, { populate: [field] });
+}
+
 module.exports = {
   async update(ctx) {
     const submitted = ctx.request.body?.data || ctx.request.body;
@@ -55,16 +78,63 @@ module.exports = {
       targetRecords.push(target);
     }
 
-    const uniqueTargetIds = [...new Set(targetRecords.map((record) => record.id))];
-    const relationData = { [field]: { set: uniqueTargetIds } };
-    const updated = await strapi.entityService.update(sourceEntity.uid, source.id, { data: relationData });
+    const uniqueTargetRecords = uniqueRecords(targetRecords);
+    let updated = source;
+
+    if (relation.mappedBy) {
+      // Strapi stores a mappedBy relation on the opposite (inversedBy) side.
+      // Updating the inverse field directly can return 200 without changing
+      // the join table, so apply connect/disconnect operations to the owner.
+      const targetModel = strapi.contentType(relation.target);
+      const ownerField = relation.mappedBy;
+      const ownerRelation = targetModel?.attributes?.[ownerField];
+      if (!ownerRelation || ownerRelation.type !== 'relation') {
+        return ctx.badRequest('The catalog relation owner is not configured');
+      }
+
+      const currentSource = await loadWithRelation(strapi, sourceEntity.uid, source.id, field);
+      const currentTargetRecords = relationRecords(currentSource, field);
+      const desiredKeys = new Set(uniqueTargetRecords.map((record) => String(recordKey(record))));
+      const sourceKey = recordKey(source);
+
+      for (const currentTarget of currentTargetRecords) {
+        if (!desiredKeys.has(String(recordKey(currentTarget)))) {
+          await strapi.entityService.update(relation.target, currentTarget.id, {
+            data: { [ownerField]: { disconnect: [sourceKey] } },
+          });
+        }
+      }
+
+      const currentKeys = new Set(currentTargetRecords.map((record) => String(recordKey(record))));
+      for (const target of uniqueTargetRecords) {
+        if (!currentKeys.has(String(recordKey(target)))) {
+          await strapi.entityService.update(relation.target, target.id, {
+            data: { [ownerField]: { connect: [sourceKey] } },
+          });
+        }
+      }
+    } else {
+      // The source owns this relation. Strapi v5 relation mutations expect
+      // document IDs (not the numeric database IDs returned by db.query).
+      const relationIds = uniqueTargetRecords.map((record) => recordKey(record));
+      updated = await strapi.entityService.update(sourceEntity.uid, source.id, {
+        data: { [field]: { set: relationIds } },
+      });
+    }
+
+    const verified = await loadWithRelation(strapi, sourceEntity.uid, source.id, field);
+    const actualKeys = new Set(relationRecords(verified, field).map((record) => String(recordKey(record))));
+    const expectedKeys = new Set(uniqueTargetRecords.map((record) => String(recordKey(record))));
+    if (actualKeys.size !== expectedKeys.size || [...expectedKeys].some((key) => !actualKeys.has(key))) {
+      throw new Error(`Catalog relation verification failed for ${sourceCollection}.${field}`);
+    }
 
     return ctx.send({
       data: {
         sourceCollection,
         sourceId: updated?.documentId || source.documentId || source.id,
         field,
-        targetIds: targetRecords.map((record) => record.documentId || record.id),
+        targetIds: uniqueTargetRecords.map((record) => recordKey(record)),
       },
     });
   },
