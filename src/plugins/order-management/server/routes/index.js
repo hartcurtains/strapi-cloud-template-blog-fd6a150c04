@@ -62,6 +62,12 @@ module.exports = [
     },
     {
       method: 'POST',
+      path: relativePath(adminCatalogRoutes.relationUpdate),
+      handler: 'catalog-relations.update',
+      config: { ...customMutationPolicyConfig(), middlewares: [] },
+    },
+    {
+      method: 'POST',
       path: relativePath(adminCatalogRoutes.bulkImageUpload),
       handler: 'import-export.bulkImageUpload',
       config: { ...customMutationPolicyConfig(), middlewares: [] },

@@ -30,6 +30,7 @@ const CUSTOM_MUTATIONS = Object.freeze([
   { method: 'POST', path: '/order-management/import', operation: 'catalog-import' },
   { method: 'POST', path: '/order-management/bulk-image-upload', operation: 'bulk-image-upload' },
   { method: 'POST', path: '/order-management/create-fabric-with-colour', operation: 'fabric-colour-create' },
+  { method: 'POST', path: '/order-management/admin/catalog/relations', operation: 'catalog-relation-update' },
   { method: 'POST', path: '/order-management/ashley-wilde/analyse', operation: 'image-folder-analyse' },
   { method: 'POST', path: '/order-management/ashley-wilde/presign-upload', operation: 'image-direct-upload-presign' },
   { method: 'POST', path: '/order-management/ashley-wilde/complete-upload', operation: 'image-direct-upload-complete' },

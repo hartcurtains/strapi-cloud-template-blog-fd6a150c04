@@ -2,6 +2,7 @@
   "base": "/order-management",
   "import": "/order-management/import",
   "createFabricWithColour": "/order-management/create-fabric-with-colour",
+  "relationUpdate": "/order-management/admin/catalog/relations",
   "bulkImageUpload": "/order-management/bulk-image-upload",
   "ashleyWildeAnalyse": "/order-management/ashley-wilde/analyse",
   "ashleyWildeFinalise": "/order-management/ashley-wilde/finalise",
