@@ -268,6 +268,23 @@ test('email links keep raw tokens out of HTTP request URLs and confirmation is P
   assert.deepEqual(route.config.middlewares, ['plugin::users-permissions.rateLimit']);
 });
 
+test('email confirmation route wrapper preserves Strapi 5 content-api descriptors', () => {
+  const plugin = extendUsersPermissions({
+    services: { user: () => ({}) },
+    controllers: { auth: () => ({ register() {} }), user: {} },
+    routes: {
+      'content-api': () => ({
+        type: 'content-api',
+        routes: [{ method: 'GET', path: '/auth/email-confirmation', config: {} }],
+      }),
+    },
+  });
+  const generated = plugin.routes['content-api']({});
+  assert.equal(generated.type, 'content-api');
+  assert.equal(generated.routes[0].method, 'POST');
+  assert.deepEqual(generated.routes[0].config.middlewares, ['plugin::users-permissions.rateLimit']);
+});
+
 test('email budgets remain below the published provider rate ceilings', () => {
   const { RATE_LIMITS } = require('../src/api/security-state/services/security-state');
   assert.deepEqual(RATE_LIMITS['email-global-minute'], { windowMs: 60_000, max: 8 });

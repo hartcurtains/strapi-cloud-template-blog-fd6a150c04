@@ -4,11 +4,20 @@
 
 import { factories } from '@strapi/strapi';
 const catalogUploadConfig = require('../../../catalog/catalog-upload-config');
-const catalogRelations = require('../../../plugins/order-management/server/controllers/catalog-relations');
 
 export default factories.createCoreController('api::order-management.order-management', ({ strapi }) => ({
   async catalogRelationUpdate(ctx) {
-    return catalogRelations.update(ctx);
+    // Resolve the custom plugin controller through Strapi's runtime registry.
+    // The plugin source is deliberately excluded from the root TypeScript
+    // compilation, so importing it by a relative filesystem path would make
+    // the compiled API controller require a file that is not present in
+    // dist/src/plugins on Strapi Cloud.
+    const plugin = strapi.plugin('order-management');
+    const catalogRelations = plugin?.controller('catalog-relations');
+    if (!catalogRelations || typeof catalogRelations.update !== 'function') {
+      return ctx.internalServerError('Catalog relation controller is unavailable', undefined);
+    }
+    return (catalogRelations as any).update(ctx);
   },
 
   // Simple test endpoint

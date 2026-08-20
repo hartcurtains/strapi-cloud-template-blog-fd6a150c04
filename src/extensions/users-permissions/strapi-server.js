@@ -9,17 +9,30 @@ const { requestPasswordReset, resetPassword } = require('./password-reset-email'
 
 module.exports = (plugin) => {
   const originalContentApiRoutes = plugin.routes['content-api'];
-  plugin.routes['content-api'] = (strapiInstance) => originalContentApiRoutes(strapiInstance).map((route) => {
-    if (route.path !== '/auth/email-confirmation') return route;
-    return {
-      ...route,
-      method: 'POST',
-      config: {
-        ...route.config,
-        middlewares: ['plugin::users-permissions.rateLimit'],
-      },
-    };
-  });
+  plugin.routes['content-api'] = (strapiInstance) => {
+    const generated = originalContentApiRoutes(strapiInstance);
+    const routes = Array.isArray(generated) ? generated : generated?.routes;
+    if (!Array.isArray(routes)) return generated;
+
+    const patchedRoutes = routes.map((route) => {
+      if (route.path !== '/auth/email-confirmation') return route;
+      return {
+        ...route,
+        method: 'POST',
+        config: {
+          ...route.config,
+          middlewares: ['plugin::users-permissions.rateLimit'],
+        },
+      };
+    });
+
+    // Strapi 4 factories returned the route array directly. Strapi 5 wraps
+    // it in a content-api descriptor, so preserve that descriptor for route
+    // registration while keeping compatibility with either shape.
+    return Array.isArray(generated)
+      ? patchedRoutes
+      : { ...generated, routes: patchedRoutes };
+  };
 
   const originalUserService = plugin.services.user;
   plugin.services.user = ({ strapi: strapiInstance }) => ({
