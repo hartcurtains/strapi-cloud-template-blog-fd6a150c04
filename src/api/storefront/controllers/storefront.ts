@@ -3,6 +3,7 @@ import {
   calculateSampleQuote,
   MadeToMeasureValidationError,
 } from '../services/made-to-measure'
+import { buildCatalogueSnapshot } from '../services/catalogue-snapshot'
 
 const firstMediaUrl = (media: any): string | null => {
   const visit = (value: any): string | null => {
@@ -190,6 +191,16 @@ export default {
     } }
   },
 
+  async catalogueSnapshot(ctx: any) {
+    const requestId = ctx.get('x-request-id') || `catalogue-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    const snapshot = await buildCatalogueSnapshot(strapi, requestId)
+    // Next owns the long-lived tagged cache. Keep this authenticated upstream
+    // response out of shared edge caches so a refresh always reads the latest
+    // live database state instead of serving a stale aggregate.
+    ctx.set('Cache-Control', 'private, no-store')
+    ctx.body = { data: snapshot }
+  },
+
   async configuratorOptions(ctx: any) {
     const requestId = ctx.get('x-request-id') || `configurator-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
     if (typeof strapi?.log?.info === 'function') strapi.log.info(JSON.stringify({ event: 'configurator-options-request-start', requestId, path: ctx.path }))
@@ -293,7 +304,10 @@ export default {
         thumbnail: firstMediaUrl(item.thumbnail),
       })),
       cushionSizes: cushionSizes.map((item: any) => publicOption(item, { shape: item.shape, width_cm: Number(item.width_cm), height_cm: Number(item.height_cm), workmanshipCost: item.workmanship_cost == null ? 25 : Number(item.workmanship_cost), duckFeatherSurcharge: Number(item.duck_feather_surcharge) || 0, thumbnail: firstMediaUrl(item.thumbnail) })),
-      pricingRules: pricingRules.map((item: any) => ({ ...identity(item), name: item.name || '', product_type: item.product_type || '', formula: item.formula })),
+      // Rule formulas remain server-side implementation details. The public
+      // options contract only needs identity metadata; MTM quote/checkout
+      // routes resolve the authoritative rule from Strapi when calculating.
+      pricingRules: pricingRules.map((item: any) => ({ ...identity(item), name: item.name || '', product_type: item.product_type || '' })),
       disabledLegacyOptions: { trimmings: legacyTrimmings.length === 0, curtainPoles: true, curtainTracks: true },
     }
     ctx.set('Cache-Control', 'public, max-age=300, s-maxage=900, stale-while-revalidate=86400')

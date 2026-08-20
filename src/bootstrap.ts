@@ -205,7 +205,7 @@ export default async ({ strapi }: { strapi: Core.Strapi }) => {
       'api::curtain.curtain',
       'api::blind.blind',
       'api::cushion.cushion',
-      'api::order.order',
+      // Operational/customer records must never be deployed from a repository export.
     ];
 
     let totalImported = 0;

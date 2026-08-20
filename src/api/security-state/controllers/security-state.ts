@@ -1,4 +1,4 @@
-import { createSecurityStateStore } from '../services/security-state';
+import { createSecurityStateStore, RATE_LIMITS } from '../services/security-state';
 
 const HASH = /^[0-9a-f]{64}$/i;
 const ACCOUNT = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -11,10 +11,14 @@ function validAccount(value: unknown): value is string {
   return typeof value === 'string' && ACCOUNT.test(value);
 }
 
+function validRateLimitCategory(value: unknown): value is string {
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(RATE_LIMITS, value);
+}
+
 export default {
   async rateLimitCheck(ctx: any) {
     const body = ctx.request.body as any;
-    if (!validHash(body?.hashedKey) || typeof body?.actionCategory !== 'string') {
+    if (!validHash(body?.hashedKey) || !validRateLimitCategory(body?.actionCategory)) {
       return ctx.badRequest('Invalid security request');
     }
 

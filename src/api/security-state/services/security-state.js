@@ -7,9 +7,21 @@ const RATE_LIMITS = Object.freeze({
   login: { windowMs: 60_000, max: 20 },
   checkout: { windowMs: 5 * 60_000, max: 20 },
   'checkout-create': { windowMs: 5 * 60_000, max: 20 },
+  cart: { windowMs: 5 * 60_000, max: 20 },
   orders: { windowMs: 60_000, max: 30 },
   'calculate-price': { windowMs: 60_000, max: 100 },
+  search: { windowMs: 5 * 60_000, max: 50 },
+  catalog: { windowMs: 5 * 60_000, max: 120 },
   'account-deletion': { windowMs: 15 * 60_000, max: 5 },
+  // Keep application-triggered email comfortably below Strapi Cloud's
+  // published 20/minute and 100/hour provider limits. The daily ceiling is an
+  // application fair-use budget rather than a provider-advertised quota.
+  'email-global-minute': { windowMs: 60_000, max: 8 },
+  'email-global-hour': { windowMs: 60 * 60_000, max: 50 },
+  'email-global-day': { windowMs: 24 * 60 * 60_000, max: 200 },
+  'email-ip-hour': { windowMs: 60 * 60_000, max: 5 },
+  'email-recipient-hour': { windowMs: 60 * 60_000, max: 3 },
+  'email-recipient-day': { windowMs: 24 * 60 * 60_000, max: 6 },
 });
 const CHALLENGE_CATEGORY = 'account-deletion-challenge';
 const CHALLENGE_TTL_MS = 10 * 60_000;

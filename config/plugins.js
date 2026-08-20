@@ -2,7 +2,10 @@ export default {
   'users-permissions': {
     config: {
       register: {
-        allowedFields: ['title', 'firstname', 'lastname'],
+        allowedFields: [
+          'title', 'firstname', 'lastname',
+          'gdprConsent', 'gdprConsentDate', 'termsAccepted', 'termsAcceptedDate',
+        ],
       },
     },
   },

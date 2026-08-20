@@ -1,7 +1,32 @@
 const utils = require('@strapi/utils');
-const { ApplicationError } = utils.errors;
+const { ApplicationError, ValidationError } = utils.errors;
+const { enforceEmailRateLimits } = require('./email-rate-limit');
+const {
+  confirmEmail,
+  sendConfirmationEmail,
+} = require('./confirmation-email');
+const { requestPasswordReset, resetPassword } = require('./password-reset-email');
 
 module.exports = (plugin) => {
+  const originalContentApiRoutes = plugin.routes['content-api'];
+  plugin.routes['content-api'] = (strapiInstance) => originalContentApiRoutes(strapiInstance).map((route) => {
+    if (route.path !== '/auth/email-confirmation') return route;
+    return {
+      ...route,
+      method: 'POST',
+      config: {
+        ...route.config,
+        middlewares: ['plugin::users-permissions.rateLimit'],
+      },
+    };
+  });
+
+  const originalUserService = plugin.services.user;
+  plugin.services.user = ({ strapi: strapiInstance }) => ({
+    ...originalUserService({ strapi: strapiInstance }),
+    sendConfirmationEmail: (user) => sendConfirmationEmail(strapiInstance, user),
+  });
+
   // The auth controller is a factory in Strapi v5. Wrap the factory so the
   // registration override is actually installed on the instantiated
   // controller rather than on the factory function itself.
@@ -12,99 +37,74 @@ module.exports = (plugin) => {
     return {
       ...controller,
       register: async (ctx) => {
-        const strapi = strapiInstance;
-    const {
-      email,
-      password,
-      username,
-      role,
-      title,
-      firstname,
-      lastname,
-      first_name,
-      last_name,
-    } = ctx.request.body;
+        const body = ctx.request.body || {};
+        const forbiddenFields = [
+          'role', 'roles', 'confirmed', 'blocked', 'provider',
+          'confirmationToken', 'confirmationTokenExpiresAt', 'resetPasswordToken',
+        ];
+        const attemptedFields = forbiddenFields.filter((field) =>
+          Object.prototype.hasOwnProperty.call(body, field)
+        );
+        if (attemptedFields.length > 0) {
+          strapiInstance.log.warn('Rejected privileged fields in a registration request');
+          throw new ApplicationError('Privileged account fields cannot be set during registration');
+        }
 
-    // These are the profile fields defined by the user schema. Keep the
-    // canonical Strapi names while accepting the legacy snake_case aliases.
-    const firstName = typeof (firstname || first_name) === 'string'
-      ? (firstname || first_name).trim()
-      : '';
-    const lastName = typeof (lastname || last_name) === 'string'
-      ? (lastname || last_name).trim()
-      : '';
+        if (body.gdprConsent !== true || body.termsAccepted !== true) {
+          throw new ValidationError('Privacy and terms consent are required');
+        }
 
-    // SECURITY: Block any attempt to set admin role during registration
-    if (role) {
-      strapi.log.error(`🚨 SECURITY ALERT: User ${email} tried to set role during registration: ${role}`);
-      throw new ApplicationError("Role cannot be set during registration");
-    }
+        const firstNameSource = body.firstname ?? body.first_name;
+        const lastNameSource = body.lastname ?? body.last_name;
+        const firstName = typeof firstNameSource === 'string' ? firstNameSource.trim() : '';
+        const lastName = typeof lastNameSource === 'string' ? lastNameSource.trim() : '';
+        if (!firstName || !lastName) {
+          throw new ValidationError('First name and last name are required');
+        }
 
-    if (!email || !password || !username) {
-      throw new ApplicationError("Email, username, and password are required");
-    }
+        await enforceEmailRateLimits(strapiInstance, ctx, body.email);
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      throw new ApplicationError("Please provide a valid email address");
-    }
+        const consentedAt = new Date().toISOString();
+        ctx.request.body = {
+          username: body.username,
+          email: typeof body.email === 'string' ? body.email.trim().toLowerCase() : body.email,
+          password: body.password,
+          title: body.title || null,
+          firstname: firstName,
+          lastname: lastName,
+          gdprConsent: true,
+          gdprConsentDate: consentedAt,
+          termsAccepted: true,
+          termsAcceptedDate: consentedAt,
+        };
 
-    // Validate password strength
-    if (password.length < 8) {
-      throw new ApplicationError("Password must be at least 8 characters long");
-    }
-
-    // Check if user already exists
-    const existingUser = await strapi.db.query("plugin::users-permissions.user").findOne({
-      where: { email },
-    });
-
-    if (existingUser) {
-      throw new ApplicationError("User with this email already exists");
-    }
-
-    // Always assign authenticated role - NO EXCEPTIONS
-    const authenticatedRole = await strapi.db.query("plugin::users-permissions.role").findOne({
-      where: { type: "authenticated" },
-    });
-
-    if (!authenticatedRole) {
-      throw new ApplicationError("Authenticated role not found");
-    }
-
-    // The startup migration guarantees these consent columns exist before the
-    // registration controller is available, so persist the submitted consent
-    // values on every newly created account.
-    const userData = {
-      email,
-      password,
-      username,
-      confirmed: true,
-      provider: "local",
-      role: authenticatedRole.id, // FORCED - no way to override
-      ...(firstName ? { firstname: firstName } : {}),
-      ...(lastName ? { lastname: lastName } : {}),
-      ...(title ? { title } : {}),
-      gdprConsent: true,
-      gdprConsentDate: new Date().toISOString(),
-      termsAccepted: true,
-      termsAcceptedDate: new Date().toISOString(),
-    };
-
-    const newUser = await strapi.entityService.create("plugin::users-permissions.user", {
-      data: userData,
-    });
-
-    // Issue JWT
-    const jwt = strapi.plugins["users-permissions"].services.jwt.issue({
-      id: newUser.id,
-    });
-
-    // Log registration for audit purposes (GDPR compliance)
-    strapi.log.info(`New user registered: ${email} at ${new Date().toISOString()}`);
-
-        return { jwt, user: newUser };
+        // Delegate account creation, duplicate checks, role assignment,
+        // confirmation-token generation, email delivery and response
+        // sanitization to Strapi's maintained controller.
+        return controller.register(ctx);
+      },
+      forgotPassword: async (ctx) => {
+        await enforceEmailRateLimits(strapiInstance, ctx, ctx.request.body?.email);
+        return requestPasswordReset(ctx, strapiInstance);
+      },
+      resetPassword: async (ctx) => resetPassword(ctx, strapiInstance),
+      emailConfirmation: async (ctx) => confirmEmail(ctx, strapiInstance),
+      sendEmailConfirmation: async (ctx) => {
+        await enforceEmailRateLimits(strapiInstance, ctx, ctx.request.body?.email);
+        const email = typeof ctx.request.body?.email === 'string'
+          ? ctx.request.body.email.trim().toLowerCase()
+          : '';
+        if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          throw new ValidationError('A valid email address is required');
+        }
+        const user = await strapiInstance.db.query('plugin::users-permissions.user').findOne({
+          where: { email },
+        });
+        if (user && user.confirmed !== true && user.blocked !== true) {
+          await sendConfirmationEmail(strapiInstance, user);
+        }
+        // Do not disclose whether an address exists, is blocked or is already confirmed.
+        return ctx.send({ sent: true });
       },
     };
   };
@@ -137,7 +137,9 @@ module.exports = (plugin) => {
     delete updateData.blocked;
     delete updateData.provider;
     delete updateData.resetPasswordToken;
+    delete updateData.resetPasswordTokenExpiresAt;
     delete updateData.confirmationToken;
+    delete updateData.confirmationTokenExpiresAt;
 
     const user = await strapi.entityService.update("plugin::users-permissions.user", id, {
       data: updateData,

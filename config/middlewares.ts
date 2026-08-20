@@ -1,10 +1,25 @@
 const catalogUploadConfig = require('../src/catalog/catalog-upload-config');
 
+const corsOrigins = [process.env.FRONTEND_URL, process.env.PUBLIC_URL]
+  .filter(Boolean)
+  .map((value) => {
+    try { return new URL(String(value)).origin; } catch { return null; }
+  })
+  .filter((value, index, all): value is string => Boolean(value) && all.indexOf(value) === index);
+
 export default [
   'strapi::logger',
   'strapi::errors',
   'strapi::security',
-  'strapi::cors',
+  {
+    name: 'strapi::cors',
+    config: {
+      origin: corsOrigins.length > 0 ? corsOrigins : ['http://localhost:3000'],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
+      headers: ['Content-Type', 'Authorization', 'Origin', 'Accept'],
+      keepHeadersOnError: true,
+    },
+  },
   'strapi::poweredBy',
   'strapi::query',
   // Must remain before strapi::body: it rejects sensitive requests without parsing payloads.

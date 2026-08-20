@@ -45,6 +45,12 @@
                                                   "private":  true,
                                                   "searchable":  false
                                               },
+                       "resetPasswordTokenExpiresAt":  {
+                                                            "type":  "datetime",
+                                                            "configurable":  false,
+                                                            "private":  true,
+                                                            "searchable":  false
+                                                        },
                        "confirmationToken":  {
                                                  "type":  "string",
                                                  "configurable":  false,
@@ -79,6 +85,12 @@
                                                  "type":  "datetime",
                                                  "configurable":  false
                                              },
+                       "confirmationTokenExpiresAt":  {
+                                                          "type":  "datetime",
+                                                          "configurable":  false,
+                                                          "private":  true,
+                                                          "searchable":  false
+                                                      },
                        "role":  {
                                     "type":  "relation",
                                     "relation":  "manyToOne",

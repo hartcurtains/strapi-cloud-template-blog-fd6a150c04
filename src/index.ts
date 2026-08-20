@@ -2,7 +2,11 @@ import type { Core } from '@strapi/strapi';
 import importData from './bootstrap';
 import fs from 'fs';
 import fsPromises from 'fs/promises';
+import { registerCatalogueRefresh } from './api/storefront/services/catalogue-refresh';
 
+// Development-only compatibility for transient Windows file locks. Never
+// replace process-level failure handling in production.
+if (process.platform === 'win32' && process.env.NODE_ENV !== 'production') {
 // PATCH: Wrap fs.unlink to handle Windows file lock errors gracefully
 // This prevents Strapi from crashing when temp files are locked on Windows
 const originalUnlink = fs.unlink;
@@ -55,70 +59,7 @@ const safeUnlinkPromise = async (path: fs.PathLike) => {
 (fsPromises as any).unlink = safeUnlinkPromise;
 
 console.log('✅ Patched fs.unlink methods to handle Windows file lock errors');
-
-// Set up global unhandled rejection handler to prevent crashes from Windows file lock errors
-// This must be set up before Strapi starts to catch all async errors
-// Use prependListener to ensure this runs FIRST before any other handlers
-const windowsFileLockHandler = (reason: any, promise: Promise<any>) => {
-  // Check if it's a Windows file lock error
-  const isWindowsError = reason?.code === 'EPERM' || 
-                        reason?.errno === -4048 || // Windows EPERM errno
-                        reason?.message?.includes('EPERM') ||
-                        reason?.message?.includes('unlink') ||
-                        reason?.message?.includes('operation not permitted') ||
-                        reason?.syscall === 'unlink' ||
-                        (reason?.path && reason.path.includes('Temp'));
-  
-  if (isWindowsError) {
-    // Log but don't crash - this is just a cleanup error from file uploads
-    console.warn(`⚠️ Caught unhandled Windows file lock error (non-fatal):`, 
-      reason.message?.substring(0, 200) || reason.toString().substring(0, 200));
-    // Suppress the error - don't crash the server
-    return;
-  }
-  
-  // For other errors, use default Node.js behavior (log and potentially exit)
-  console.error('Unhandled Rejection:', reason);
-};
-
-// Remove any existing handlers first, then add ours as the first handler
-const existingRejectionHandlers = process.listeners('unhandledRejection');
-existingRejectionHandlers.forEach(handler => process.removeListener('unhandledRejection', handler));
-process.prependListener('unhandledRejection', windowsFileLockHandler);
-// Also add as regular listener in case prependListener doesn't work
-process.on('unhandledRejection', windowsFileLockHandler);
-
-// Also handle uncaught exceptions (Node.js converts unhandled rejections to exceptions)
-const windowsFileLockExceptionHandler = (error: Error) => {
-  // Check if it's a Windows file lock error
-  const isWindowsError = (error as any)?.code === 'EPERM' || 
-                        (error as any)?.errno === -4048 ||
-                        error.message?.includes('EPERM') ||
-                        error.message?.includes('unlink') ||
-                        error.message?.includes('operation not permitted') ||
-                        (error as any)?.syscall === 'unlink' ||
-                        ((error as any)?.path && (error as any).path.includes('Temp'));
-  
-  if (isWindowsError) {
-    // Log but don't crash - this is just a cleanup error from file uploads
-    console.warn(`⚠️ Caught uncaught Windows file lock exception (non-fatal):`, 
-      error.message?.substring(0, 200) || error.toString().substring(0, 200));
-    // Suppress the error - don't crash the server
-    return;
-  }
-  
-  // For other errors, use default Node.js behavior (log and exit)
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
-};
-
-// Handle uncaught exceptions (Node.js converts unhandled rejections to these)
-const existingExceptionHandlers = process.listeners('uncaughtException');
-existingExceptionHandlers.forEach(handler => process.removeListener('uncaughtException', handler));
-process.prependListener('uncaughtException', windowsFileLockExceptionHandler);
-process.on('uncaughtException', windowsFileLockExceptionHandler);
-
-console.log('✅ Global unhandled rejection and uncaught exception handlers registered for Windows file lock errors');
+}
 
 export default {
   /**
@@ -137,6 +78,40 @@ export default {
    * run jobs, or perform some special logic.
    */
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    const confirmationEmail = require('./extensions/users-permissions/confirmation-email');
+    const frontendOrigin = confirmationEmail.configuredOrigin('FRONTEND_URL');
+    confirmationEmail.configuredOrigin('PUBLIC_URL');
+    if (process.env.NODE_ENV === 'production') {
+      const tokenSecret = String(process.env.EMAIL_CONFIRMATION_TOKEN_SECRET || '');
+      if (tokenSecret.length < 32) {
+        throw new Error('EMAIL_CONFIRMATION_TOKEN_SECRET must contain at least 32 characters');
+      }
+      const resetSecret = String(process.env.PASSWORD_RESET_TOKEN_SECRET || '');
+      if (resetSecret.length < 32) {
+        throw new Error('PASSWORD_RESET_TOKEN_SECRET must contain at least 32 characters');
+      }
+    }
+    const usersPermissionsStore = strapi.store({ type: 'plugin', name: 'users-permissions' });
+    const advancedSettings = (await usersPermissionsStore.get({ key: 'advanced' })) as Record<string, unknown> | null;
+    if (!advancedSettings) {
+      throw new Error('Users & Permissions advanced settings are unavailable');
+    }
+    const confirmationRedirect = `${frontendOrigin}/auth?confirmed=1`;
+    if (
+      advancedSettings.email_confirmation !== true ||
+      advancedSettings.email_confirmation_redirection !== confirmationRedirect
+    ) {
+      await usersPermissionsStore.set({
+        key: 'advanced',
+        value: {
+          ...advancedSettings,
+          email_confirmation: true,
+          email_confirmation_redirection: confirmationRedirect,
+        },
+      });
+      strapi.log.info('Registration email confirmation is enabled by application policy');
+    }
+
     // Strapi Cloud can disable repository user migrations, and this project
     // intentionally defaults DATABASE_RUN_MIGRATIONS to false. Apply PB-07
     // explicitly after content-type synchronization so production cannot boot
@@ -160,7 +135,18 @@ export default {
     const userConsentMigration = require('../database/migrations/2026.08.10T00.00.00.user-consent-fields.js');
     await userConsentMigration.ensureColumns(strapi.db.connection);
 
+    const confirmationTokenMigration = require('../database/migrations/2026.08.19T00.00.00.user-confirmation-token-expiry.js');
+    await confirmationTokenMigration.ensureSchema(strapi.db.connection);
+    const passwordResetMigration = require('../database/migrations/2026.08.19T00.05.00.user-password-reset-expiry.js');
+    await passwordResetMigration.ensureSchema(strapi.db.connection);
+
     // Import data from git on first startup
     await importData({ strapi });
+
+    // Catalogue mutations (including publish/unpublish updates) invalidate
+    // the one-request storefront snapshot through a debounced server-only
+    // trigger. Registration happens after bootstrap imports so startup repair
+    // writes do not create a refresh storm.
+    registerCatalogueRefresh(strapi);
   },
 };

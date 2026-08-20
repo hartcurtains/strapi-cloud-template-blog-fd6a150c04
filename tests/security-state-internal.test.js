@@ -37,6 +37,8 @@ test('protected Strapi security routes persist atomically and cleanly', async ()
 
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'a'.repeat(64), actionCategory: 'login' }, 'wrong-secret')).status, 401);
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'b'.repeat(64), actionCategory: 'login' })).status, 200);
+    assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'f'.repeat(64), actionCategory: 'cart' })).status, 200);
+    assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'g'.repeat(64), actionCategory: 'unsupported' })).status, 400);
 
     const rateKey = 'c'.repeat(64);
     const rateResponses = await Promise.all(Array.from({ length: 25 }, () => post(context.baseUrl, ratePath, {
@@ -51,7 +53,7 @@ test('protected Strapi security routes persist atomically and cleanly', async ()
     const storedRate = await context.app.db.connection('security_states')
       .where({ kind: 'rate_limit', action_category: 'login', hashed_key: rateKey })
       .first();
-    assert.equal(storedRate.request_count, 25);
+    assert.equal(storedRate.request_count, 20);
     assert.match(storedRate.hashed_key, /^[0-9a-f]{64}$/);
     assert.equal(storedRate.expires_at !== null, true);
 
