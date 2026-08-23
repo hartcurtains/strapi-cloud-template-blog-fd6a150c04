@@ -11,7 +11,8 @@ test('aggregate storefront route is server-authenticated and read-only', () => {
   const routes = read('src/api/storefront/routes/storefront.ts');
   assert.match(routes, /path:\s*'\/storefront\/catalogue-snapshot'/);
   assert.match(routes, /handler:\s*'storefront\.catalogueSnapshot'/);
-  assert.match(routes, /catalogueSnapshot'[\s\S]*?auth:\s*true/);
+  assert.match(routes, /catalogueSnapshot'[\s\S]*?auth:\s*\{\s*scope:\s*\[['"]find['"]\]\s*\}/);
+  assert.doesNotMatch(routes, /path:\s*'\/storefront\/catalogue-snapshot'[\s\S]*?auth:\s*false/);
 });
 
 test('aggregate projection excludes orders and pricing formulas', () => {
