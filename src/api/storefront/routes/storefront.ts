@@ -17,7 +17,10 @@ export default {
         // API token so the full aggregate cannot be pulled anonymously;
         // pricing formulas and private relations are still removed by the
         // controller/service projection.
-        auth: true,
+        // Strapi 5 requires protected routes to use an auth object. An empty
+        // scope means any authenticated server-side token may access the
+        // route; anonymous browser requests remain unauthorized.
+        auth: { scope: [] },
       },
     },
     {
