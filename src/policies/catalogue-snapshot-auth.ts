@@ -34,12 +34,17 @@ export default async (policyContext: any) => {
   const authorization = policyContext.request.headers.authorization
   const bearer = bearerToken(authorization)
   const headerSecret = policyContext.request.headers['x-catalogue-snapshot-secret']
-  const expected = String(process.env.CATALOGUE_REFRESH_SECRET || '').trim()
+  const internalSecret = policyContext.request.headers['x-strapi-internal-security-secret']
+  const expectedSecrets = [
+    String(process.env.CATALOGUE_REFRESH_SECRET || '').trim(),
+    String(process.env.STRAPI_INTERNAL_SECURITY_SECRET || '').trim(),
+  ].filter(Boolean)
 
   // Prefer the existing lifecycle-refresh secret. The API-token fallback keeps
   // deployments that already have a server-only Strapi token working while
   // still rejecting anonymous and browser-originated requests.
-  if (!matchesSecret(headerSecret, expected) && !matchesSecret(bearer, expected) && !(await validApiToken(bearer))) {
+  const matchesConfiguredSecret = expectedSecrets.some(expected => matchesSecret(headerSecret, expected) || matchesSecret(internalSecret, expected) || matchesSecret(bearer, expected))
+  if (!matchesConfiguredSecret && !(await validApiToken(bearer))) {
     throw new UnauthorizedError('Unauthorized')
   }
 

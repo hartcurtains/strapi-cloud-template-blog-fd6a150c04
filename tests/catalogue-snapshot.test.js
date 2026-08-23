@@ -15,8 +15,10 @@ test('aggregate storefront route is server-authenticated and read-only', () => {
   assert.match(routes, /catalogueSnapshot'[\s\S]*?global::catalogue-snapshot-auth/);
   const policy = read('src/policies/catalogue-snapshot-auth.ts');
   assert.match(policy, /CATALOGUE_REFRESH_SECRET/);
+  assert.match(policy, /STRAPI_INTERNAL_SECURITY_SECRET/);
   assert.match(policy, /timingSafeEqual/);
   assert.match(policy, /x-catalogue-snapshot-secret/);
+  assert.match(policy, /x-strapi-internal-security-secret/);
   assert.match(policy, /admin::api-token/);
 });
 
