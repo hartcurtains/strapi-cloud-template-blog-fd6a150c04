@@ -13,14 +13,12 @@ export default {
       path: '/storefront/catalogue-snapshot',
       handler: 'storefront.catalogueSnapshot',
       config: {
-        // The browser never calls this route. Require a server-side Strapi
-        // API token so the full aggregate cannot be pulled anonymously;
-        // pricing formulas and private relations are still removed by the
-        // controller/service projection.
-        // A read-only API token may access read-scoped custom routes. An empty
-        // scope is treated as no permission by Strapi and returns 403, so use
-        // the built-in read scope while keeping anonymous requests blocked.
-        auth: { scope: ['find'] },
+        // The browser never calls this route. Require the existing
+        // server-to-server catalogue secret so the full aggregate cannot
+        // be pulled anonymously. The controller/service projection still
+        // removes pricing formulas and private relations.
+        auth: false,
+        policies: ['global::catalogue-snapshot-auth'],
       },
     },
     {
