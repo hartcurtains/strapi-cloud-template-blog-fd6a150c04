@@ -17,6 +17,7 @@ test('aggregate storefront route is server-authenticated and read-only', () => {
   assert.match(policy, /CATALOGUE_REFRESH_SECRET/);
   assert.match(policy, /timingSafeEqual/);
   assert.match(policy, /x-catalogue-snapshot-secret/);
+  assert.match(policy, /admin::api-token/);
 });
 
 test('aggregate projection excludes orders and pricing formulas', () => {

@@ -12,15 +12,34 @@ function matchesSecret(supplied: unknown, expected: unknown): boolean {
   return timingSafeEqual(suppliedDigest, expectedDigest)
 }
 
+function bearerToken(authorization: unknown): string | null {
+  if (typeof authorization !== 'string') return null
+  const parts = authorization.trim().split(/\s+/)
+  return parts.length === 2 && parts[0].toLowerCase() === 'bearer' ? parts[1] : null
+}
+
+async function validApiToken(token: string | null): Promise<boolean> {
+  if (!token || !global.strapi) return false
+
+  try {
+    const apiTokenService = global.strapi.service('admin::api-token')
+    const apiToken = await apiTokenService.getBy({ accessKey: apiTokenService.hash(token) })
+    return Boolean(apiToken && (!apiToken.expiresAt || new Date(apiToken.expiresAt) >= new Date()))
+  } catch {
+    return false
+  }
+}
+
 export default async (policyContext: any) => {
   const authorization = policyContext.request.headers.authorization
-  const bearer = typeof authorization === 'string'
-    ? authorization.match(/^Bearer\s+(.+)$/i)?.[1]?.trim()
-    : undefined
-  const supplied = bearer || policyContext.request.headers['x-catalogue-snapshot-secret']
+  const bearer = bearerToken(authorization)
+  const headerSecret = policyContext.request.headers['x-catalogue-snapshot-secret']
   const expected = String(process.env.CATALOGUE_REFRESH_SECRET || '').trim()
 
-  if (!matchesSecret(supplied, expected)) {
+  // Prefer the existing lifecycle-refresh secret. The API-token fallback keeps
+  // deployments that already have a server-only Strapi token working while
+  // still rejecting anonymous and browser-originated requests.
+  if (!matchesSecret(headerSecret, expected) && !matchesSecret(bearer, expected) && !(await validApiToken(bearer))) {
     throw new UnauthorizedError('Unauthorized')
   }
 
