@@ -291,8 +291,12 @@ export async function buildCatalogueSnapshot(strapi: any, requestId = `catalogue
         images: { fields: ['url', 'alternativeText', 'formats'] },
         brand: { fields: ['name', 'description', 'publishedAt'], populate: { thumbnail: { fields: ['url', 'formats'] } } },
         colours: { fields: ['name', 'normalizedColour', 'publishedAt'], populate: { thumbnail: { fields: ['url', 'formats'] } } },
-        care_instructions: { fields: ['name', 'type', 'description', 'title'] },
-        cushions: { fields: ['name', 'slug'], populate: { cushion_type: { fields: ['name'] } } },
+        // These deployed relation schemas only expose `name` (and the
+        // cushion type relation). Avoid requesting legacy fields such as
+        // care-instruction.type or cushion.slug, which Strapi rejects with
+        // "Invalid key type/slug" before the aggregate can be built.
+        care_instructions: { fields: ['name'] },
+        cushions: { fields: ['name'], populate: { cushion_type: { fields: ['name'] } } },
         pricing_rules: { fields: ['name', 'product_type'] },
       },
     }),
