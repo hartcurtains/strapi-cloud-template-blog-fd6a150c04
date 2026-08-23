@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useFetchClient } from '@strapi/strapi/admin';
+import adminCatalogRoutes from '../../../shared/routes.json';
 import { 
   ShoppingCart, RefreshCw, Search, CreditCard, Package, Clock, Settings, 
   CheckCircle, Inbox, Loader2, Eye, User, Truck, Scissors, Ruler, 
@@ -18,6 +20,7 @@ export default function OrderPage() {
   const [orderStatusFilter, setOrderStatusFilter] = useState('all');
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [imageErrors, setImageErrors] = useState({}); // Track which images have errors
+  const { post: adminPost } = useFetchClient();
   
   useEffect(() => {
     fetchOrders();
@@ -265,34 +268,30 @@ export default function OrderPage() {
   const updateOrderStatus = async (orderId, newStatus) => {
     try {
       setUpdatingStatus(true);
-      const response = await fetch(`/api/orders/${orderId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          data: {
-            statusOrder: newStatus
-          }
-        })
+      const currentOrder = orders.find((order) => order.id === orderId);
+      const orderNumber = currentOrder?.orderNumber || currentOrder?.order_number;
+      if (!orderNumber) throw new Error('This order does not have a valid order number.');
+      const response = await adminPost(adminCatalogRoutes.adminOrderTransition, {
+        orderNumber,
+        status: newStatus,
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const updatedOrder = response?.data?.data || response?.data || {};
+      if (!response || response.error || response.status >= 400) {
+        throw new Error(response?.error?.message || response?.error || 'The protected order transition failed.');
       }
 
       // Update the order in the local state
       setOrders(prevOrders => 
         prevOrders.map(order => 
           order.id === orderId 
-            ? { ...order, statusOrder: newStatus }
+            ? { ...order, ...updatedOrder, statusOrder: newStatus }
             : order
         )
       );
 
       // Update the selected order if it's the same one
       if (selectedOrder && selectedOrder.id === orderId) {
-        setSelectedOrder(prev => ({ ...prev, statusOrder: newStatus }));
+        setSelectedOrder(prev => ({ ...prev, ...updatedOrder, statusOrder: newStatus }));
       }
 
       console.log('✅ Order status updated successfully!');

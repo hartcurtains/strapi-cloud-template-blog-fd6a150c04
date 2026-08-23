@@ -1,5 +1,6 @@
 {
   "base": "/order-management",
+  "adminOrderTransition": "/order-management/order-admin/transition",
   "import": "/order-management/import",
   "createFabricWithColour": "/order-management/create-fabric-with-colour",
   "relationUpdate": "/order-management/admin/catalog/relations",

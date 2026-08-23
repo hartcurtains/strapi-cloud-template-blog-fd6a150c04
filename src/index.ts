@@ -140,6 +140,13 @@ export default {
     const passwordResetMigration = require('../database/migrations/2026.08.19T00.05.00.user-password-reset-expiry.js');
     await passwordResetMigration.ensureSchema(strapi.db.connection);
 
+    // Email delivery is an outbox-style ledger.  This project deliberately
+    // disables Strapi's automatic database migrations, so create its table and
+    // indexes explicitly before any payment/status transition can enqueue an
+    // email intent.  The migration is idempotent and safe to run on every boot.
+    const orderEmailDeliveryMigration = require('../database/migrations/2026.08.23T00.00.00.order-email-delivery.js');
+    await orderEmailDeliveryMigration.up(strapi.db.connection);
+
     // Import data from git on first startup
     await importData({ strapi });
 

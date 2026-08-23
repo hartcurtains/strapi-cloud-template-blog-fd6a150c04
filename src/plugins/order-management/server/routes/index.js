@@ -4,6 +4,12 @@ const relativePath = (path) => path.slice(adminCatalogRoutes.base.length);
 
 module.exports = [
     {
+      method: 'POST',
+      path: '/order-admin/transition',
+      handler: 'order-admin.transition',
+      config: { policies: ['admin::isAuthenticatedAdmin'], middlewares: [] },
+    },
+    {
       method: 'GET',
       path: '/test',
       handler: 'import-export.test',
