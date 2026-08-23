@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 
 const TABLE = 'security_states';
 const RATE_LIMITS = Object.freeze({
+  register: { windowMs: 60_000, max: 5 },
   login: { windowMs: 60_000, max: 20 },
   checkout: { windowMs: 5 * 60_000, max: 20 },
   'checkout-create': { windowMs: 5 * 60_000, max: 20 },

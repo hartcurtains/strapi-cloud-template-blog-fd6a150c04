@@ -8,6 +8,7 @@ const STATUS_RANK: Record<string, number> = {
 };
 
 const ORDER_NUMBER = /^[A-Za-z0-9._-]{1,128}$/;
+const { sendOrderStatusEmail } = require('../../../extensions/order-status-email');
 
 function parseJson(value: unknown, fallback: any) {
   if (typeof value !== 'string') return value ?? fallback;
@@ -113,6 +114,7 @@ export default {
       }
 
       const updated = await strapi.entityService.update('api::order.order', order.id, { data: updateData });
+      await sendOrderStatusEmail(strapi, { ...order, ...updated }, currentStatus, status, ctx);
       return ctx.send({ result: 'transitioned', data: updated });
     } catch (error) {
       strapi.log.error('Protected admin order transition failed', error);

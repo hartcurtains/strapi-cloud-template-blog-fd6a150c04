@@ -117,6 +117,41 @@ test('startup and frontend retain the email-confirmation fail-closed controls', 
   assert.doesNotMatch(frontendRegister, /NextResponse\.json\(\{\s*jwt\s*:/s);
 });
 
+test('email delivery uses the active Strapi provider instead of a forced SMTP override', () => {
+  const pluginsTs = fs.readFileSync(path.resolve(__dirname, '../config/plugins.ts'), 'utf8');
+  const pluginsJs = fs.readFileSync(path.resolve(__dirname, '../config/plugins.js'), 'utf8');
+  const backendEntry = fs.readFileSync(path.resolve(__dirname, '../src/index.ts'), 'utf8');
+  const envExample = fs.readFileSync(path.resolve(__dirname, '../.env.example'), 'utf8');
+  const packageJson = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
+
+  assert.doesNotMatch(pluginsTs, /provider\s*:\s*['"](?:nodemailer|smtp)['"]/i);
+  assert.doesNotMatch(pluginsJs, /provider\s*:\s*['"](?:nodemailer|smtp)['"]/i);
+  assert.doesNotMatch(pluginsTs, /SMTP_(?:HOST|PORT|USER|PASS|USERNAME|PASSWORD)/i);
+  assert.doesNotMatch(pluginsJs, /SMTP_(?:HOST|PORT|USER|PASS|USERNAME|PASSWORD)/i);
+  assert.doesNotMatch(backendEntry, /SMTP_(?:HOST|PORT|USER|PASS|USERNAME|PASSWORD)/i);
+  assert.doesNotMatch(envExample, /SMTP_(?:HOST|PORT|USER|PASS|USERNAME|PASSWORD)/i);
+  assert.equal(Object.hasOwn(packageJson.dependencies || {}, '@strapi/provider-email-nodemailer'), false);
+  assert.match(backendEntry, /EMAIL_CONFIRMATION_TOKEN_SECRET/);
+  assert.match(backendEntry, /PASSWORD_RESET_TOKEN_SECRET/);
+});
+
+test('confirmation, reset and order-status mail remain on Strapi email service', () => {
+  const emailSources = [
+    '../src/extensions/users-permissions/confirmation-email.js',
+    '../src/extensions/users-permissions/password-reset-email.js',
+    '../src/extensions/order-status-email.js',
+  ].map((relativePath) => fs.readFileSync(path.resolve(__dirname, relativePath), 'utf8'));
+
+  for (const source of emailSources) {
+    assert.match(source, /strapi\.plugin\(['"]email['"]\)\.service\(['"]email['"]\)\.send/);
+  }
+
+  for (const controller of ['order-admin.ts', 'order-payment.ts', 'order-cancellation.ts']) {
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/api/order/controllers', controller), 'utf8');
+    assert.match(source, /sendOrderStatusEmail/);
+  }
+});
+
 test('email throttling applies global, IP and recipient budgets without storing raw identifiers', async () => {
   const calls = [];
   const store = {
