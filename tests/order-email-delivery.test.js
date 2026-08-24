@@ -11,7 +11,12 @@ const {
   DEFAULT_MAX_ATTEMPTS,
 } = require('../src/api/order-email-delivery/services/email-delivery');
 const { createPaymentStore } = require('../src/api/order/services/payment');
-const { sendOrderStatusEmail, retryOrderStatusEmails } = require('../src/extensions/order-status-email');
+const {
+  sendOrderStatusEmail,
+  retryOrderStatusEmails,
+  buildOrderStatusEmail,
+  emailTypeForStatus,
+} = require('../src/extensions/order-status-email');
 
 test('production boot applies the delivery ledger and schedules bounded retries', () => {
   const root = path.join(__dirname, '..');
@@ -141,7 +146,7 @@ test('only the first authoritative payment transition creates one confirmation i
 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].to, 'buyer@example.test');
-  assert.equal(calls[0].subject.includes('Order confirmed'), true);
+  assert.equal(calls[0].subject.includes('Processing'), true);
   assert.equal(await knex('order_email_deliveries').where({ order_number: 'ORD-PAID-EMAIL', email_type: 'order_confirmation' }).count({ count: '*' }).first().then((row) => Number(row.count)), 1);
   assert.deepEqual(await knex('orders').where({ order_number: 'ORD-PAID-EMAIL' }).first().select('status_order', 'payment_status'), { status_order: 'processing', payment_status: 'paid' });
 });
@@ -166,6 +171,37 @@ test('provider failure leaves payment paid and makes the durable intent retryabl
   assert.deepEqual(retried, { scanned: 1, sent: 1, failed: 0, skipped: 0 });
   assert.equal(calls.length, 2);
   assert.equal((await knex('order_email_deliveries').where({ order_number: 'ORD-RETRY-EMAIL' }).first()).status, 'sent');
+});
+
+test('forward admin status changes create one email per status and never promise replies', async t => {
+  const { knex } = await fixture(t);
+  const calls = [];
+  const strapi = fakeStrapi(knex, async (message) => calls.push(message));
+  const order = { orderNumber: 'ORD-STATUS-EMAIL', customerEmail: 'status@example.test', customerName: 'Status Buyer' };
+  const transitions = [
+    ['pending', 'processing', 'order_confirmation'],
+    ['processing', 'shipped', 'order_shipped'],
+    ['shipped', 'delivered', 'order_delivered'],
+  ];
+
+  for (const [previous, next, emailType] of transitions) {
+    const result = await sendOrderStatusEmail(strapi, order, previous, next);
+    assert.equal(result.sent, true);
+    assert.equal(emailTypeForStatus(next), emailType);
+  }
+
+  assert.equal(calls.length, transitions.length);
+  assert.ok(calls.every(message => !/reply to this email/i.test(`${message.text}\n${message.html}`)));
+  assert.equal(buildOrderStatusEmail({
+    firstName: 'Status',
+    orderNumber: order.orderNumber,
+    status: 'delivered',
+    frontendOrigin: 'https://www.example.test',
+  }).text.includes('reply'), false);
+  assert.deepEqual(
+    (await knex('order_email_deliveries').where({ order_number: order.orderNumber }).orderBy('id')).map(row => row.email_type),
+    transitions.map(([, , emailType]) => emailType),
+  );
 });
 
 test('unchanged pending order state does not create a confirmation email', async t => {
