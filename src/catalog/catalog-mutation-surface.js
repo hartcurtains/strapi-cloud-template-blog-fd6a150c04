@@ -21,6 +21,7 @@ const CATALOG_ENTITIES = Object.freeze([
   { uid: 'api::curtain-pole.curtain-pole', collection: 'curtain-poles', fields: ['name', 'thumbnail', 'price', 'allowed_lengths', 'allowed_brackets', 'bracket_requirement'] },
   { uid: 'api::made-to-measure-configuration.made-to-measure-configuration', collection: 'made-to-measure-configurations', fields: ['key', 'product_type', 'display_name', 'active', 'delivery_lead_time', 'delivery_message', 'delivery_returns_copy', 'disabled_option_categories', 'sample_max_quantity', 'sample_unit_price_pence', 'pricing_version'] },
   { uid: 'api::brand.brand', collection: 'brands', fields: ['name', 'thumbnail', 'description', 'fabrics'] },
+  { uid: 'api::care-instruction.care-instruction', collection: 'care-instructions', fields: ['name', 'icon', 'fabrics'] },
 ]);
 
 const CUSTOM_MUTATIONS = Object.freeze([

@@ -40,6 +40,12 @@ test('protected Strapi security routes persist atomically and cleanly', async ()
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'f'.repeat(64), actionCategory: 'cart' })).status, 200);
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'g'.repeat(64), actionCategory: 'unsupported' })).status, 400);
 
+    const cronNonceKey = '1'.repeat(64);
+    const firstCronNonce = await post(context.baseUrl, ratePath, { hashedKey: cronNonceKey, actionCategory: 'cron-nonce' });
+    const replayedCronNonce = await post(context.baseUrl, ratePath, { hashedKey: cronNonceKey, actionCategory: 'cron-nonce' });
+    assert.equal((await firstCronNonce.json()).allowed, true);
+    assert.equal((await replayedCronNonce.json()).allowed, false);
+
     const rateKey = 'c'.repeat(64);
     const rateResponses = await Promise.all(Array.from({ length: 25 }, () => post(context.baseUrl, ratePath, {
       hashedKey: rateKey,

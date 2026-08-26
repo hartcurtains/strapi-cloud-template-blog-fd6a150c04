@@ -184,6 +184,31 @@ test('mechanism finishes and MTM configurations are admin-only direct reads', as
   assert.equal(publicOptions.status, 200, await publicOptions.clone().text());
 });
 
+test('order-management export and relation data are protected from public access', async () => {
+  const routes = [
+    { method: 'POST', path: '/api/order-management/export', body: {} },
+    { method: 'POST', path: '/order-management/export', body: {} },
+    { method: 'GET', path: '/api/order-management/relation-data' },
+    { method: 'GET', path: '/order-management/relation-data' },
+  ];
+  const untrustedCredentials = [
+    undefined,
+    `Bearer ${server.customerToken}`,
+    `Bearer ${server.forgedAdminToken}`,
+    'Bearer wrong-internal-token',
+  ];
+
+  for (const route of routes) {
+    for (const credential of untrustedCredentials) {
+      const response = await jsonRequest(route.path, route.method, credential, route.body || {});
+      assert.ok([401, 403].includes(response.status), `${route.method} ${route.path} credential ${credential || 'anonymous'}`);
+    }
+
+    const authorized = await jsonRequest(route.path, route.method, `Bearer ${server.internalToken}`, route.body || {});
+    assert.equal(authorized.status, 200, `${route.method} ${route.path}: ${await authorized.clone().text()}`);
+  }
+});
+
 test('folder history and analysis are private to genuine Strapi administrators', async () => {
   for (const credential of [
     undefined,

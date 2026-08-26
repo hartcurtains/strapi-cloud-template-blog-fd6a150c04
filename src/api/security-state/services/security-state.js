@@ -11,6 +11,8 @@ const RATE_LIMITS = Object.freeze({
   cart: { windowMs: 5 * 60_000, max: 20 },
   orders: { windowMs: 60_000, max: 30 },
   'calculate-price': { windowMs: 60_000, max: 100 },
+  'delivery-eligibility': { windowMs: 60_000, max: 30 },
+  'cron-nonce': { windowMs: 10 * 60_000, max: 1 },
   search: { windowMs: 5 * 60_000, max: 50 },
   catalog: { windowMs: 5 * 60_000, max: 120 },
   'account-deletion': { windowMs: 15 * 60_000, max: 5 },

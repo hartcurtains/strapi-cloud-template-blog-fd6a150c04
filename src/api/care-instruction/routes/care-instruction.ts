@@ -2,7 +2,7 @@
  * care-instruction router
  */
 
-import { factories } from '@strapi/strapi';
+const { mutationPolicyConfig } = require('../../../catalog/catalog-mutation-surface');
 
 export default {
   routes: [
@@ -26,25 +26,19 @@ export default {
       method: 'POST',
       path: '/care-instructions',
       handler: 'care-instruction.create',
-      config: {
-        auth: false, // Allow admin access for creating
-      },
+      config: mutationPolicyConfig('api::care-instruction.care-instruction'),
     },
     {
       method: 'PUT',
       path: '/care-instructions/:id',
       handler: 'care-instruction.update',
-      config: {
-        auth: false, // Allow admin access for updating
-      },
+      config: mutationPolicyConfig('api::care-instruction.care-instruction'),
     },
     {
       method: 'DELETE',
       path: '/care-instructions/:id',
       handler: 'care-instruction.delete',
-      config: {
-        auth: false, // Allow admin access for deleting
-      },
+      config: mutationPolicyConfig('api::care-instruction.care-instruction'),
     },
   ],
 };

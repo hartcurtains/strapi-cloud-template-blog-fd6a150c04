@@ -25,17 +25,13 @@ export default {
       method: 'POST',
       path: '/order-management/export',
       handler: 'order-management.bulkExport',
-      config: {
-        auth: false,
-      },
+      config: customMutationPolicyConfig(),
     },
     {
       method: 'GET',
       path: '/order-management/relation-data',
       handler: 'order-management.getRelationData',
-      config: {
-        auth: false,
-      },
+      config: customMutationPolicyConfig(),
     },
     {
       method: 'POST',

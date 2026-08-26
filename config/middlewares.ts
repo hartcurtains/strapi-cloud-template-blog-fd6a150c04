@@ -24,6 +24,8 @@ export default [
   'strapi::query',
   // Must remain before strapi::body: it rejects sensitive requests without parsing payloads.
   'global::catalog-write-prebody-auth',
+  // Quote requests are server-to-server and must be bounded before JSON parsing.
+  'global::storefront-quote-prebody-limit',
   // Trace only Ashley Media uploads carrying the client correlation header.
   'global::ashley-upload-diagnostics',
   {

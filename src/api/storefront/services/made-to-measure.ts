@@ -569,8 +569,22 @@ const lineSampleQuantity = (line: any): number => isSampleLine(line) ? Math.max(
 
 export const sampleQuantityForItems = (items: any[]): number => items.reduce((sum, item) => sum + lineSampleQuantity(item), 0)
 
-export async function calculateSampleQuote(strapi: any, input: any) {
+// Keep this aligned with the checkout validator's maximum number of distinct
+// cart lines so larger legitimate orders retain their existing behavior while
+// quote requests still have a finite work bound.
+export const MAX_QUOTE_ITEMS = 100
+
+function quoteItems(input: any): any[] {
   const items = Array.isArray(input?.items) ? input.items : [input]
+  if (!items.length) throw new MadeToMeasureValidationError([{ field: 'items', message: 'At least one item is required.' }])
+  if (items.length > MAX_QUOTE_ITEMS) {
+    throw new MadeToMeasureValidationError([{ field: 'items', message: `A maximum of ${MAX_QUOTE_ITEMS} items may be quoted at one time.` }])
+  }
+  return items
+}
+
+export async function calculateSampleQuote(strapi: any, input: any) {
+  const items = quoteItems(input)
   const configuration = await requireSampleConfiguration(strapi)
   const sampleItems = items.filter(isSampleLine)
   const issues: ValidationIssue[] = []
@@ -739,8 +753,7 @@ async function calculateStandardFabricQuote(strapi: any, items: any[]) {
 }
 
 export async function calculateOrderQuote(strapi: any, input: any) {
-  const items = Array.isArray(input?.items) ? input.items : [input]
-  if (!items.length) throw new MadeToMeasureValidationError([{ field: 'items', message: 'At least one item is required.' }])
+  const items = quoteItems(input)
   const shippingPence = penceFromDecimal(input?.shipping)
   if (shippingPence === null || shippingPence < 0) throw new MadeToMeasureValidationError([{ field: 'shipping', message: 'A valid shipping amount is required.' }])
   const sampleItems = items.filter(isSampleLine)
@@ -1020,8 +1033,7 @@ async function calculateLine(strapi: any, line: any, index: number) {
 }
 
 export async function calculateMadeToMeasureQuote(strapi: any, input: any) {
-  const items = Array.isArray(input?.items) ? input.items : [input]
-  if (!items.length) throw new MadeToMeasureValidationError([{ field: 'items', message: 'At least one item is required.' }])
+  const items = quoteItems(input)
   const sampleQuantity = sampleQuantityForItems(items)
   if (sampleQuantity) {
     const sampleConfiguration = await requireSampleConfiguration(strapi)

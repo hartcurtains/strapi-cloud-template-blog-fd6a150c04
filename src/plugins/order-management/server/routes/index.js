@@ -28,19 +28,13 @@ module.exports = [
       method: 'POST',
       path: '/export',
       handler: 'import-export.bulkExport',
-      config: {
-        policies: [],
-        middlewares: [],
-      },
+      config: { ...customMutationPolicyConfig(), middlewares: [] },
     },
     {
       method: 'GET',
       path: '/relation-data',
       handler: 'import-export.getRelationData',
-      config: {
-        policies: [],
-        middlewares: [],
-      },
+      config: { ...customMutationPolicyConfig(), middlewares: [] },
     },
     {
       method: 'POST',
