@@ -33,7 +33,7 @@ export default {
       method: 'POST',
       path: '/storefront/made-to-measure/quote',
       handler: 'storefront.madeToMeasureQuote',
-      config: { auth: false, policies: ['global::server-internal-auth'] },
+      config: { auth: false, policies: ['global::storefront-quote-auth'] },
     },
     {
       method: 'POST',
