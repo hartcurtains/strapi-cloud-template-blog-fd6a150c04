@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   SUPPLIER, canonicalManifestLines, loadProductionMappings, normalizeCanonicalColourName, normalizeRelativePath,
-  normalizeStem, normalizeToken, parseFilename, validateColourMap,
+  normalizeStem, normalizeToken, parseFilename, safeFilename, validateColourMap,
 } = require('../../shared/ashley-wilde-mapping');
 const supplierMappings = require('./supplier-mapping');
 const uploadPolicy = require('../../shared/ashley-wilde-upload-policy.json');
@@ -224,8 +224,36 @@ function inferMissingProductCode(filename, colourMap) {
   return suffix ? stem.slice(0, -suffix.length) : stem;
 }
 
+function lauraAshleyFilenameVariants(filename, supplier) {
+  const originalFilename = String(filename || '');
+  if (normalizedFabricName(supplier) !== normalizedFabricName('Laura Ashley') || !safeFilename(originalFilename)) {
+    return [{ filename: originalFilename, numberedVariant: false }];
+  }
+
+  const extension = path.extname(originalFilename);
+  const rawStem = path.basename(originalFilename, extension);
+  const numbered = rawStem.match(/^(.*)_(\d+)$/);
+  if (!numbered || !numbered[1]) return [{ filename: originalFilename, numberedVariant: false }];
+
+  const unnumberedFilename = `${numbered[1]}${extension}`;
+  const variants = [{ filename: unnumberedFilename, numberedVariant: true }];
+  if (/^la/i.test(numbered[1])) {
+    const prefixStrippedStem = numbered[1].slice(2);
+    if (prefixStrippedStem) variants.push({ filename: `${prefixStrippedStem}${extension}`, numberedVariant: true });
+  }
+  return variants;
+}
+
 function parseSupplierFilename(filename, colourMap, supplier) {
-  const parsed = { ...parseFilename(filename, colourMap), supplier };
+  const variants = lauraAshleyFilenameVariants(filename, supplier);
+  let resolvedFilename = variants[0];
+  let parsed = { ...parseFilename(resolvedFilename.filename, colourMap), filename, supplier };
+  for (const variant of variants.slice(1)) {
+    if (parsed.status !== 'unknown_mapping_product') break;
+    resolvedFilename = variant;
+    parsed = { ...parseFilename(variant.filename, colourMap), filename, supplier };
+  }
+  if (resolvedFilename.numberedVariant && parsed.assetType === 'ordinary_colour') parsed.assetType = 'numbered_alternate';
   if (parsed.status !== 'unknown_mapping_product') {
     return {
       ...parsed,
@@ -234,7 +262,7 @@ function parseSupplierFilename(filename, colourMap, supplier) {
         : null,
     };
   }
-  const supplierProductCode = inferMissingProductCode(filename, colourMap);
+  const supplierProductCode = inferMissingProductCode(resolvedFilename.filename, colourMap);
   return {
     ...parsed,
     supplierProductCode: supplierProductCode || null,

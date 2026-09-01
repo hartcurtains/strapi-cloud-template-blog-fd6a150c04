@@ -42,6 +42,13 @@ const versions = [
   activeVersion('Clarissa Hulse', 'clarissa', [], 0),
 ];
 
+const lauraVersions = [
+  activeVersion('Laura Ashley', 'laura', [
+    { fabricName: 'Alfriston', fabricDocumentId: 'laura-alfriston', supplierProductCode: 'ALFRISTON' },
+    { fabricName: 'Ambrose', fabricDocumentId: 'laura-ambrose', supplierProductCode: 'AMBROSE' },
+  ], 8),
+];
+
 const mappingRows = {
   'emily-active-import': [
     { supplier: 'Emily Bond', fabricName: 'Alice', fabricDocumentId: 'stale-emily-alice', supplierProductCode: 'ALICE', supplierColourCode: 'ST', officialColourName: 'Stone', internalColourCode: 'ST', evidenceStatus: 'verified_official', source: 'official supplier mapping' },
@@ -54,6 +61,22 @@ const mappingRows = {
   'clarissa-active-import': [],
 };
 
+const lauraMappingRows = {
+  'laura-active-import': [
+    ['Alfriston', 'laura-alfriston', 'ALFRISTON', 'FE', 'Fern'],
+    ['Alfriston', 'laura-alfriston', 'ALFRISTON', 'NA', 'Natural'],
+    ['Alfriston', 'laura-alfriston', 'ALFRISTON', 'SA', 'Sage'],
+    ['Ambrose', 'laura-ambrose', 'AMBROSE', 'EM', 'Emerald'],
+    ['Ambrose', 'laura-ambrose', 'AMBROSE', 'FE', 'Fern'],
+    ['Ambrose', 'laura-ambrose', 'AMBROSE', 'OC', 'Ochre'],
+    ['Ambrose', 'laura-ambrose', 'AMBROSE', 'PA', 'Pearl'],
+    ['Ambrose', 'laura-ambrose', 'AMBROSE', 'SA', 'Sage'],
+  ].map(([fabricName, fabricDocumentId, supplierProductCode, supplierColourCode, officialColourName]) => ({
+    supplier: 'Laura Ashley', fabricName, fabricDocumentId, supplierProductCode, supplierColourCode,
+    officialColourName, internalColourCode: supplierColourCode, evidenceStatus: 'verified_official', source: 'official supplier mapping',
+  })),
+};
+
 const fabrics = [
   { documentId: 'emily-alice', name: 'Alice', brand: { name: 'Emily Bond' } },
   { documentId: 'ashley-alice', name: 'Alice', brand: { name: 'Ashley Wilde' } },
@@ -62,7 +85,12 @@ const fabrics = [
   { documentId: 'ashley-ashton', name: 'Ashton', brand: { name: 'Ashley Wilde' } },
 ];
 
-function strapiFor(activeVersions = versions, writes = null) {
+const lauraFabrics = [
+  { documentId: 'laura-alfriston', name: 'Alfriston', brand: { name: 'Laura Ashley' } },
+  { documentId: 'laura-ambrose', name: 'Ambrose', brand: { name: 'Laura Ashley' } },
+];
+
+function strapiFor(activeVersions = versions, writes = null, fixture = { fabrics, mappingRows }) {
   return {
     entityService: {
       async findMany(uid, query = {}) {
@@ -71,9 +99,9 @@ function strapiFor(activeVersions = versions, writes = null) {
           return requested ? activeVersions.filter((version) => version.supplier === requested) : activeVersions;
         }
         if (uid === 'api::fabric.fabric') {
-          if (query.filters?.documentId) return fabrics.filter((fabric) => fabric.documentId === query.filters.documentId);
-          if (query.filters?.name?.$eqi) return fabrics.filter((fabric) => fabric.name.toLowerCase() === String(query.filters.name.$eqi).toLowerCase());
-          return fabrics;
+          if (query.filters?.documentId) return fixture.fabrics.filter((fabric) => fabric.documentId === query.filters.documentId);
+          if (query.filters?.name?.$eqi) return fixture.fabrics.filter((fabric) => fabric.name.toLowerCase() === String(query.filters.name.$eqi).toLowerCase());
+          return fixture.fabrics;
         }
         if (uid === 'api::fabric-colour-identity.fabric-colour-identity') return [];
         if (uid === 'api::fabric-colour-asset.fabric-colour-asset') return [];
@@ -92,7 +120,7 @@ function strapiFor(activeVersions = versions, writes = null) {
       if (uid !== 'api::supplier-fabric-colour-mapping.supplier-fabric-colour-mapping') throw new Error(`Unexpected documents API UID: ${uid}`);
       return {
         async findMany(query = {}) {
-          return mappingRows[query.filters?.mappingImport?.documentId] || [];
+          return fixture.mappingRows[query.filters?.mappingImport?.documentId] || [];
         },
       };
     },
@@ -148,6 +176,70 @@ test('Ashley Wilde active mapping still resolves Alaska / Aqua', async () => {
   assert.equal(alaska.fabricName, 'Alaska');
   assert.equal(alaska.supplierColourName, 'Aqua');
   assert.equal(alaska.status, 'would_stage_identity');
+});
+
+test('Laura Ashley numbered image variants resolve product-scoped colours and preserve source filenames', async () => {
+  const strapi = strapiFor(lauraVersions, null, { fabrics: lauraFabrics, mappingRows: lauraMappingRows });
+  const expected = [
+    ['laalfristonfe_1.jpg', 'ALFRISTON', 'FE'],
+    ['laalfristonna_1.jpg', 'ALFRISTON', 'NA'],
+    ['laalfristonsa_1.jpg', 'ALFRISTON', 'SA'],
+    ['laambroseem_1.jpg', 'AMBROSE', 'EM'],
+    ['laambrosefe_1.jpg', 'AMBROSE', 'FE'],
+    ['laambroseoc_1.jpg', 'AMBROSE', 'OC'],
+    ['laambrosepa_1.jpg', 'AMBROSE', 'PA'],
+    ['laambrosesa_1.jpg', 'AMBROSE', 'SA'],
+  ];
+
+  for (const [filename, supplierProductCode, supplierColourCode] of expected) {
+    const row = (await analyse('Laura Ashley', filename, strapi)).rows[0];
+    assert.equal(row.status, 'would_stage_identity');
+    assert.equal(row.supplierProductCode, supplierProductCode);
+    assert.equal(row.supplierColourCode, supplierColourCode);
+    assert.equal(row.fabricColourCode, `${supplierProductCode}${supplierColourCode}`);
+    assert.equal(row.assetType, 'numbered_alternate');
+    assert.equal(row.filename, filename);
+    assert.equal(row.relativePath, filename);
+    assert.equal(row.supplierColourCode.endsWith('1'), false);
+  }
+
+  const ordinary = (await analyse('Laura Ashley', 'alfristonfe.jpg', strapi)).rows[0];
+  assert.equal(ordinary.status, 'would_stage_identity');
+  assert.equal(ordinary.supplierProductCode, 'ALFRISTON');
+  assert.equal(ordinary.supplierColourCode, 'FE');
+  assert.equal(ordinary.assetType, 'ordinary_colour');
+
+  const multiDigit = (await analyse('Laura Ashley', 'laambrosefe_12.jpg', strapi)).rows[0];
+  assert.equal(multiDigit.status, 'would_stage_identity');
+  assert.equal(multiDigit.supplierProductCode, 'AMBROSE');
+  assert.equal(multiDigit.supplierColourCode, 'FE');
+  assert.equal(multiDigit.assetType, 'numbered_alternate');
+
+  const nestedPath = 'Laura images/laalfristonfe_1.jpg';
+  const nested = (await analyse('Laura Ashley', nestedPath, strapi)).rows[0];
+  assert.equal(nested.filename, 'laalfristonfe_1.jpg');
+  assert.equal(nested.relativePath, nestedPath);
+
+  const mappings = await mappingService.getActiveImporterMappings(strapi, 'Laura Ashley');
+  const invalid = importer.parseSupplierFilename('laalfristonzz_12.jpg', mappings.colourMap, 'Laura Ashley');
+  assert.equal(invalid.status, 'pending_manual_mapping');
+  assert.equal(invalid.supplierProductCode, 'ALFRISTON');
+  assert.equal(invalid.supplierColourCode, 'ZZ');
+  assert.equal(invalid.filename, 'laalfristonzz_12.jpg');
+  assert.doesNotMatch(invalid.supplierColourCode, /1$/);
+
+  const unknown = importer.parseSupplierFilename('launknownfe_1.jpg', mappings.colourMap, 'Laura Ashley');
+  assert.equal(unknown.status, 'unknown_mapping_product');
+  assert.equal(unknown.supplierProductCode, 'UNKNOWN');
+  assert.doesNotMatch(unknown.warning, /FE1/);
+
+  const ambiguousMap = structuredClone(mappings.colourMap);
+  const alfriston = ambiguousMap.products['ALFRISTON|laura-alfriston'];
+  ambiguousMap.products.duplicate = { ...alfriston, fabricName: 'Alfriston Duplicate', productName: 'Alfriston Duplicate', fabricDocumentId: 'laura-alfriston-duplicate' };
+  const ambiguous = importer.parseSupplierFilename('laalfristonfe_1.jpg', ambiguousMap, 'Laura Ashley');
+  assert.equal(ambiguous.status, 'ambiguous_filename');
+  assert.equal(ambiguous.filename, 'laalfristonfe_1.jpg');
+  assert.equal(ambiguous.supplierProductCode, undefined);
 });
 
 test('changed content under the same scoped filename requires the explicit replacement option', async () => {
