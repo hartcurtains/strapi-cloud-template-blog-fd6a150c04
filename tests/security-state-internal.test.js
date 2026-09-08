@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const { startStrapiTestApp } = require('./helpers/strapi-app');
 const migration = require('../database/migrations/2026.07.27T00.00.00.security-state');
-const { createSecurityStateStore } = require('../src/api/security-state/services/security-state');
+const { createSecurityStateStore, RATE_LIMITS } = require('../src/api/security-state/services/security-state');
 
 const INTERNAL_SECRET = 'strapi-internal-security-test-secret';
 
@@ -35,9 +35,16 @@ test('protected Strapi security routes persist atomically and cleanly', async ()
     const challengeCreatePath = '/api/security-internal/account-deletion-challenge/create';
     const challengeVerifyPath = '/api/security-internal/account-deletion-challenge/verify';
 
+    assert.deepEqual(RATE_LIMITS.contact, { windowMs: 15 * 60_000, max: 3 });
+    assert.deepEqual(RATE_LIMITS.login, { windowMs: 60_000, max: 20 });
+    assert.deepEqual(RATE_LIMITS.register, { windowMs: 60_000, max: 5 });
+    assert.deepEqual(RATE_LIMITS.orders, { windowMs: 60_000, max: 30 });
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'a'.repeat(64), actionCategory: 'login' }, 'wrong-secret')).status, 401);
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'b'.repeat(64), actionCategory: 'login' })).status, 200);
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'f'.repeat(64), actionCategory: 'cart' })).status, 200);
+    const contactResponse = await post(context.baseUrl, ratePath, { hashedKey: 'h'.repeat(64), actionCategory: 'contact' });
+    assert.equal(contactResponse.status, 200);
+    assert.equal((await contactResponse.json()).allowed, true);
     assert.equal((await post(context.baseUrl, ratePath, { hashedKey: 'g'.repeat(64), actionCategory: 'unsupported' })).status, 400);
 
     const cronNonceKey = '1'.repeat(64);

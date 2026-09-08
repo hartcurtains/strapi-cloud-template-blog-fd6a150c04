@@ -16,6 +16,7 @@ const RATE_LIMITS = Object.freeze({
   search: { windowMs: 5 * 60_000, max: 50 },
   catalog: { windowMs: 5 * 60_000, max: 120 },
   'account-deletion': { windowMs: 15 * 60_000, max: 5 },
+  contact: { windowMs: 15 * 60_000, max: 3 },
   // Keep application-triggered email comfortably below Strapi Cloud's
   // published 20/minute and 100/hour provider limits. The daily ceiling is an
   // application fair-use budget rather than a provider-advertised quota.

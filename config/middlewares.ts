@@ -26,6 +26,8 @@ export default [
   'global::catalog-write-prebody-auth',
   // Quote requests are server-to-server and must be bounded before JSON parsing.
   'global::storefront-quote-prebody-limit',
+  // Contact email requests are small and must be bounded before JSON parsing.
+  'global::contact-email-prebody-limit',
   // Trace only Ashley Media uploads carrying the client correlation header.
   'global::ashley-upload-diagnostics',
   {
