@@ -81,11 +81,11 @@ export function validateContactEmailPayload(input: unknown): ContactEmailPayload
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function configuredFrom(): string | undefined {
@@ -108,7 +108,7 @@ export function buildContactEmail(payload: ContactEmailPayload) {
     payload.message,
   ].filter((line): line is string => line !== null).join('\n');
   const safeSubject = escapeHtml(subject);
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${safeSubject}</title></head><body><h1>${safeSubject}</h1><p><strong>Name:</strong> ${escapeHtml(payload.firstName)} ${escapeHtml(payload.lastName)}</p><p><strong>Email:</strong> ${escapeHtml(payload.email)}</p>${payload.phone ? `<p><strong>Phone:</strong> ${escapeHtml(payload.phone)}</p>` : ''}<p><strong>Subject:</strong> ${escapeHtml(label)}</p><p><strong>Message:</strong><br>${escapeHtml(payload.message).replaceAll('\n', '<br>')}</p></body></html>`;
+  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${safeSubject}</title></head><body><h1>${safeSubject}</h1><p><strong>Name:</strong> ${escapeHtml(payload.firstName)} ${escapeHtml(payload.lastName)}</p><p><strong>Email:</strong> ${escapeHtml(payload.email)}</p>${payload.phone ? `<p><strong>Phone:</strong> ${escapeHtml(payload.phone)}</p>` : ''}<p><strong>Subject:</strong> ${escapeHtml(label)}</p><p><strong>Message:</strong><br>${escapeHtml(payload.message).replace(/\n/g, '<br>')}</p></body></html>`;
   return { subject, text, html };
 }
 
