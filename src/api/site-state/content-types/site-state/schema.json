@@ -15,6 +15,11 @@
       "type": "boolean",
       "required": true,
       "default": true
+    },
+    "madeToMeasureEnabled": {
+      "type": "boolean",
+      "required": true,
+      "default": true
     }
   }
 }
