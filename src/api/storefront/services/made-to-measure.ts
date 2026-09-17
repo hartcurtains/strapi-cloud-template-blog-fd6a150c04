@@ -446,6 +446,55 @@ const fabricMetres = (fabric: any, productType: string, widthCm: number, heightC
   return (widths * cutLengthCm) / 100
 }
 
+const PINCH_PLEAT_HEADING = 'Pinch Pleat'
+const PINCH_PLEAT_WIDTH_CM = 55
+const PINCH_PLEAT_HEM_ALLOWANCE_CM = 30
+const PINCH_PLEAT_BASE_WORKMANSHIP_PER_WIDTH = 95
+const PINCH_PLEAT_INTERLINING_WORKMANSHIP_PER_WIDTH = 25
+
+const ceilToHalfMetre = (value: number): number => Math.ceil((numberValue(value) * 2) - 1e-9) / 2
+
+export const calculatePinchPleatPricing = ({
+  widthCm,
+  heightCm,
+  patternRepeatCm,
+  fabricPricePerMetre,
+  interliningPricePerMetre = 0,
+  hasInterlining = false,
+}: {
+  widthCm: number
+  heightCm: number
+  patternRepeatCm?: number
+  fabricPricePerMetre: number
+  interliningPricePerMetre?: number
+  hasInterlining?: boolean
+}) => {
+  const numberOfWidths = Math.max(1, Math.ceil(numberValue(widthCm) / PINCH_PLEAT_WIDTH_CM))
+  const repeatCm = Math.max(0, numberValue(patternRepeatCm))
+  const cutLengthCm = numberValue(heightCm) + PINCH_PLEAT_HEM_ALLOWANCE_CM + repeatCm
+  const rawFabricMetres = (cutLengthCm / 100) * numberOfWidths
+  const roundedFabricMetres = ceilToHalfMetre(rawFabricMetres)
+  const baseWorkmanship = numberOfWidths * PINCH_PLEAT_BASE_WORKMANSHIP_PER_WIDTH
+  const interliningMaterialCost = hasInterlining
+    ? roundedFabricMetres * numberValue(interliningPricePerMetre)
+    : 0
+  const interliningWorkmanship = hasInterlining
+    ? numberOfWidths * PINCH_PLEAT_INTERLINING_WORKMANSHIP_PER_WIDTH
+    : 0
+
+  return {
+    numberOfWidths,
+    cutLengthCm,
+    rawFabricMetres,
+    roundedFabricMetres,
+    fabricCost: roundedFabricMetres * numberValue(fabricPricePerMetre),
+    baseWorkmanship,
+    interliningMaterialCost,
+    interliningWorkmanship,
+    totalWorkmanship: baseWorkmanship + interliningWorkmanship,
+  }
+}
+
 // Existing cushion-size records describe flat two-dimensional cushion sizes.
 // Price the two cover faces as a real cut layout in linear metres. The
 // cushion-size, piping and pad catalogues remain the source of their own
@@ -548,14 +597,33 @@ function splitLiningRuleAmounts(outputs: Record<string, any>, totalAmount: numbe
   }
 }
 
-async function pricingRule(strapi: any, productType: string) {
+async function pricingRule(strapi: any, productType: string, headingName = '') {
   const rules = await strapi.entityService.findMany('api::pricing-rule.pricing-rule', {
     publicationState: 'live',
     filters: { product_type: productType },
     sort: ['id:desc'],
-    limit: 1,
+    limit: 100,
   })
-  return Array.isArray(rules) ? rules[0] || null : null
+  if (!Array.isArray(rules)) return null
+
+  // The live publicationState query is authoritative in Strapi. The explicit
+  // null check also keeps unit-test doubles honest without treating fixtures
+  // that omit publication metadata as drafts.
+  const liveRules = rules.filter(rule => rule?.publishedAt !== null)
+  if (productType !== 'curtain') return liveRules[0] || null
+
+  const sharedCurtainRule = liveRules.find(rule =>
+    rule?.name === 'Curtain' && rule?.product_type === 'curtain'
+  ) || liveRules.find(rule => !rule?.name && rule?.product_type === 'curtain') || null
+
+  if (headingName === PINCH_PLEAT_HEADING) {
+    const dedicatedPinchPleatRule = liveRules.find(rule =>
+      rule?.name === PINCH_PLEAT_HEADING && rule?.product_type === 'curtain'
+    )
+    return dedicatedPinchPleatRule || sharedCurtainRule
+  }
+
+  return sharedCurtainRule
 }
 
 export const isSampleLine = (line: any): boolean => {
@@ -822,7 +890,12 @@ async function calculateLine(strapi: any, line: any, index: number) {
   if (heightCm <= 0) issue(issues, `items[${index}].height`, 'A positive height/drop is required.')
   if (issues.length) throw new MadeToMeasureValidationError(issues)
 
-  const rule = await pricingRule(strapi, productType)
+  const headingName = validated.selectedOptions.curtainType?.label || validated.selectedOptions.curtainType?.name || ''
+  const rule = await pricingRule(strapi, productType, headingName)
+  const dedicatedPinchPleatRule = productType === 'curtain' &&
+    headingName === PINCH_PLEAT_HEADING &&
+    rule?.name === PINCH_PLEAT_HEADING &&
+    rule?.product_type === 'curtain'
   const fullnessMultiplier = numberValue(validated.selectedOptions.curtainType?.fullnessMultiplier, 1)
   let materialMetres = productType === 'cushion'
     ? calculateCushionFabricMetres(fabric, widthCm, heightCm, validated.selectedOptions.cushionFinish?.label)
@@ -849,10 +922,12 @@ async function calculateLine(strapi: any, line: any, index: number) {
   const nonCushionRuleOutputs = productType === 'cushion' ? {} : evaluatePricingRuleOutputs(rule, {
     width_cm: widthCm,
     height_cm: heightCm,
-    quantity,
+    // Dedicated rules price one configured unit; line quantity is applied by
+    // the existing pence scaling below exactly once.
+    quantity: dedicatedPinchPleatRule ? 1 : quantity,
     fullness_multiplier: fullnessMultiplier,
     curtain_type: { fullness_multiplier: fullnessMultiplier },
-    curtain_heading: { name: validated.selectedOptions.curtainType?.label || validated.selectedOptions.curtainType?.name || '' },
+    curtain_heading: { name: headingName },
     blind_type: validated.selectedOptions.blindType || {},
     mechanism: validated.selectedOptions.mechanism || {},
     fabric: {
@@ -861,8 +936,34 @@ async function calculateLine(strapi: any, line: any, index: number) {
       patternRepeat_cm: numberValue(fabric?.pattern_repeat_cm || fabric?.patternRepeat_cm),
     },
     lining: { price_per_metre: numberValue(validated.selectedOptions.liningType?.unitPrice) },
+    interlining: { price_per_metre: numberValue(validated.lining?.interlining?.price_per_metre) },
     trimmings: [],
   })
+  const pinchPleatFallback = dedicatedPinchPleatRule
+    ? calculatePinchPleatPricing({
+      widthCm,
+      heightCm,
+      patternRepeatCm: fabric?.patternRepeat_cm || fabric?.pattern_repeat_cm,
+      fabricPricePerMetre: fabric?.price_per_metre,
+      interliningPricePerMetre: validated.lining?.interlining?.price_per_metre,
+      hasInterlining: Boolean(validated.selectedOptions.interliningType),
+    })
+    : null
+  const outputOrFallback = (key: string, fallback: number): number => {
+    const value = nonCushionRuleOutputs[key]
+    return value === undefined || value === null ? fallback : numberValue(value, fallback)
+  }
+  const dedicatedPinchPleatPricing = pinchPleatFallback ? {
+    ...pinchPleatFallback,
+    numberOfWidths: outputOrFallback('numberOfWidths', pinchPleatFallback.numberOfWidths),
+    roundedFabricMetres: outputOrFallback('roundedFabricMetres', pinchPleatFallback.roundedFabricMetres),
+    fabricCost: outputOrFallback('fabricCost', pinchPleatFallback.fabricCost),
+    baseWorkmanship: outputOrFallback('baseWorkmanship', pinchPleatFallback.baseWorkmanship),
+    interliningMaterialCost: outputOrFallback('interliningMaterialCost', pinchPleatFallback.interliningMaterialCost),
+    interliningWorkmanship: outputOrFallback('interliningWorkmanship', pinchPleatFallback.interliningWorkmanship),
+    totalWorkmanship: outputOrFallback('totalWorkmanship', pinchPleatFallback.totalWorkmanship),
+  } : null
+  if (dedicatedPinchPleatPricing) materialMetres = dedicatedPinchPleatPricing.roundedFabricMetres
   const liningPricingRule = productType === 'cushion' ? null : validated.lining?.type?.pricing_rule
   const liningRuleOutputs: Record<string, any> = {}
   const liningRuleData = liningPricingRule?.formula?.steps ? {
@@ -877,7 +978,9 @@ async function calculateLine(strapi: any, line: any, index: number) {
     ? evaluateLiningPricingRule(liningPricingRule, liningRuleData, liningRuleOutputs)
     : 0
   const liningRuleAmounts = splitLiningRuleAmounts(liningRuleOutputs, liningRuleTotalAmount)
-  const interliningPricingRule = productType === 'cushion' ? null : validated.lining?.interlining?.pricing_rule
+  const interliningPricingRule = productType === 'cushion' || dedicatedPinchPleatRule
+    ? null
+    : validated.lining?.interlining?.pricing_rule
   const interliningRuleOutputs: Record<string, any> = {}
   const interliningRuleData = interliningPricingRule?.formula?.steps ? {
     width_cm: widthCm,
@@ -899,13 +1002,19 @@ async function calculateLine(strapi: any, line: any, index: number) {
     ? (ruleOutputs.workmanshipCost ?? rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? validated.selectedOptions.cushionSize?.workmanshipCost ?? LEGACY_CUSHION_WORKMANSHIP)
     : liningRuleIncludesWorkmanship
       ? liningRuleAmounts.workmanshipAmount
+    : dedicatedPinchPleatPricing
+      ? dedicatedPinchPleatPricing.baseWorkmanship
     : (rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? nonCushionRuleOutputs.workmanshipCost ?? 0)
   const workmanshipPence = toPence(workmanshipAmount)
   const fabricAmount = productType === 'cushion' && ruleOutputs.fabricCost !== undefined
     ? numberValue(ruleOutputs.fabricCost)
+    : dedicatedPinchPleatPricing
+      ? dedicatedPinchPleatPricing.fabricCost
     : numberValue(fabric?.price_per_metre) * materialMetres
   const fabricPence = productType === 'cushion'
     ? toPence(fabricAmount)
+    : dedicatedPinchPleatPricing
+      ? toPence(fabricAmount)
     : multiplyPence(fabricUnitPence, materialMetres)
   const baseProductPence = fabricPence + workmanshipPence
   const accessories: any[] = []
@@ -953,8 +1062,12 @@ async function calculateLine(strapi: any, line: any, index: number) {
   if (validated.selectedOptions.interliningType) {
     const unit = validated.selectedOptions.interliningType.unitPricePence || toPence(validated.selectedOptions.interliningType.unitPrice)
     const ruleMaterialMetres = numberValue(interliningRuleOutputs.totalInterlining_m)
-    const interliningMetres = interliningPricingRule && ruleMaterialMetres > 0 ? ruleMaterialMetres : liningMetres
-    const interliningTotalPence = interliningPricingRule && interliningRuleData
+    const interliningMetres = dedicatedPinchPleatPricing
+      ? dedicatedPinchPleatPricing.roundedFabricMetres
+      : interliningPricingRule && ruleMaterialMetres > 0 ? ruleMaterialMetres : liningMetres
+    const interliningTotalPence = dedicatedPinchPleatPricing
+      ? multiplyPence(toPence(dedicatedPinchPleatPricing.interliningMaterialCost), quantity)
+      : interliningPricingRule && interliningRuleData
       ? multiplyPence(toPence(interliningRuleAmounts.materialAmount), quantity)
       : multiplyPence(unit, interliningMetres * quantity)
     const interliningUnitPence = interliningTotalPence > 0
@@ -970,8 +1083,11 @@ async function calculateLine(strapi: any, line: any, index: number) {
       total: fromPence(interliningTotalPence),
       totalPence: interliningTotalPence,
     })
-    if (interliningPricingRule && interliningRuleAmounts.hasWorkmanship && interliningRuleAmounts.workmanshipAmount > 0) {
-      const workmanshipPence = toPence(interliningRuleAmounts.workmanshipAmount)
+    const interliningWorkmanship = dedicatedPinchPleatPricing
+      ? dedicatedPinchPleatPricing.interliningWorkmanship
+      : interliningRuleAmounts.hasWorkmanship ? interliningRuleAmounts.workmanshipAmount : 0
+    if (interliningWorkmanship > 0) {
+      const workmanshipPence = toPence(interliningWorkmanship)
       const workmanshipTotalPence = multiplyPence(workmanshipPence, quantity)
       accessories.push({
         type: 'interlining_workmanship',

@@ -2,7 +2,7 @@ require('../../node_modules/ts-node/register')
 
 const test = require('node:test')
 const assert = require('node:assert/strict')
-const { calculateMadeToMeasureQuote, calculateOrderQuote } = require('../src/api/storefront/services/made-to-measure')
+const { calculateMadeToMeasureQuote, calculateOrderQuote, calculatePinchPleatPricing } = require('../src/api/storefront/services/made-to-measure')
 
 const record = (key, data = {}) => ({ id: key, documentId: key, key, active: true, is_configurator_option: true, ...data })
 
@@ -40,6 +40,95 @@ const cushionPricingFormula = {
   ],
   finalOutput: 'totalPrice',
 }
+
+const pinchPleatPricingFormula = {
+  steps: [
+    { inputs: ['width_cm', 55], output: 'numberOfWidths', operation: 'ceilDivide' },
+    { inputs: ['height_cm', 30], output: 'dropWithAllowance_cm', operation: 'add' },
+    { inputs: ['dropWithAllowance_cm', 'fabric.patternRepeat_cm'], output: 'cutLengthCm', operation: 'add' },
+    { inputs: ['cutLengthCm', 100], output: 'cutLengthMetres', operation: 'divide' },
+    { inputs: ['cutLengthMetres', 'numberOfWidths'], output: 'rawFabricMetres', operation: 'multiply' },
+    { inputs: ['rawFabricMetres', 2], output: 'halfMetreUnits', operation: 'multiply' },
+    { inputs: ['halfMetreUnits'], output: 'roundedHalfMetreUnits', operation: 'ceil' },
+    { inputs: ['roundedHalfMetreUnits', 2], output: 'roundedFabricMetres', operation: 'divide' },
+    { inputs: ['roundedFabricMetres', 'fabric.price_per_metre'], output: 'fabricCost', operation: 'multiply' },
+    { inputs: ['numberOfWidths', 95], output: 'baseWorkmanship', operation: 'multiply' },
+    {
+      condition: 'interlining.price_per_metre > 0',
+      operation: 'if_else',
+      on_true: {
+        sub_steps: [
+          { inputs: ['roundedFabricMetres', 'interlining.price_per_metre'], output: 'interliningMaterialCost', operation: 'multiply' },
+          { inputs: ['numberOfWidths', 25], output: 'interliningWorkmanship', operation: 'multiply' },
+          { inputs: ['numberOfWidths', 120], output: 'totalWorkmanship', operation: 'multiply' },
+        ],
+      },
+      on_false: {
+        sub_steps: [
+          { inputs: [0], output: 'interliningMaterialCost', operation: 'set' },
+          { inputs: [0], output: 'interliningWorkmanship', operation: 'set' },
+          { inputs: ['baseWorkmanship'], output: 'totalWorkmanship', operation: 'set' },
+        ],
+      },
+      output: 'workmanshipBranch',
+    },
+    { inputs: ['totalWorkmanship'], output: 'workmanshipCost', operation: 'set' },
+    { inputs: ['fabricCost', 'interliningMaterialCost', 'totalWorkmanship'], output: 'totalPrice', operation: 'add' },
+  ],
+  finalOutput: 'totalPrice',
+}
+
+const pinchPleatFixtures = ({ dedicatedRule = null, draftDedicated = false } = {}) => {
+  const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140, pattern_repeat_cm: 17.5 })
+  const sharedRule = record('curtain-rule', { name: 'Curtain', product_type: 'curtain', formula: { workmanshipFee: 17 } })
+  const standardLining = record('lined', {
+    liningType: 'Standard Lining', price_per_metre: 7, applies_to_curtains: true,
+  })
+  const interlining = record('interlined', {
+    liningType: 'Interlining', price_per_metre: 10, applies_to_curtains: true,
+  })
+  const records = {
+    'api::fabric.fabric': [fabric],
+    'api::curtain-type.curtain-type': [
+      record('pinch', { name: 'Pinch Pleat', fullness_multiplier: 2.5 }),
+      record('pencil', { name: 'Pencil Pleat', fullness_multiplier: 2 }),
+      record('wave', { name: 'Wave', fullness_multiplier: 2 }),
+      record('eyelet', { name: 'Eyelet', fullness_multiplier: 2 }),
+    ],
+    'api::lining.lining': [standardLining, interlining],
+    'api::lining-colour.lining-colour': [record('white', {
+      display_name: 'White', applies_to_curtains: true, compatible_lining_types: [record('lined')],
+    })],
+    'api::pricing-rule.pricing-rule': [
+      ...(dedicatedRule ? [record('pinch-rule', {
+        name: 'Pinch Pleat', product_type: 'curtain', publishedAt: draftDedicated ? null : '2026-09-17T00:00:00.000Z', formula: pinchPleatPricingFormula,
+      })] : []),
+      sharedRule,
+    ],
+  }
+  return { fabric, standardLining, interlining, records }
+}
+
+const strapiForPinchPleat = records => ({ entityService: { findMany: async (uid, params = {}) => {
+  let values = records[uid] || []
+  if (params.filters?.product_type) values = values.filter(item => item.product_type === params.filters.product_type)
+  const requested = params.filters?.$and?.find(item => item.$or)?.$or?.map(item => Object.values(item)[0]) || []
+  return requested.length
+    ? values.filter(item => requested.includes(item.key) || requested.includes(item.id) || requested.includes(item.documentId))
+    : values
+} } })
+
+const pinchPleatItem = (curtainTypeId = 'pinch', quantity = 1, interliningTypeKey = null) => ({
+  madeToMeasureV2: true,
+  productType: 'curtain',
+  fabricId: 'fabric-1',
+  quantity,
+  measurements: { width: 220, height: 220 },
+  curtainTypeId,
+  liningTypeKey: 'lined',
+  liningColourKey: 'white',
+  ...(interliningTypeKey ? { interliningTypeKey } : {}),
+})
 
 test('lining price uses unformatted calculated fabric metres at 700 pence per metre', async () => {
   const fabric = record('fabric-1', { price_per_metre: 20, usable_width_cm: 140, pattern_repeat_cm: 64 })
@@ -678,4 +767,106 @@ test('mixed blind and cushion order quotes re-resolve persisted canonical select
   assert.equal(quote.items[1].selectedOptions.cushionPad.key, 'pad-1')
   assert.equal(quote.breakdown.totalPence, quote.breakdown.subtotalPence + quote.breakdown.shippingPence)
   assert.equal(quote.breakdown.subtotalPence, quote.breakdown.madeToMeasure.lines.reduce((sum, line) => sum + line.totalPence, 0))
+})
+
+test('Pinch Pleat uses the dedicated live rule and the required width and metre calculations', async () => {
+  const pricing = calculatePinchPleatPricing({
+    widthCm: 220,
+    heightCm: 220,
+    patternRepeatCm: 17.5,
+    fabricPricePerMetre: 20,
+    interliningPricePerMetre: 10,
+    hasInterlining: true,
+  })
+  assert.deepEqual(pricing, {
+    numberOfWidths: 4,
+    cutLengthCm: 267.5,
+    rawFabricMetres: 10.7,
+    roundedFabricMetres: 11,
+    fabricCost: 220,
+    baseWorkmanship: 380,
+    interliningMaterialCost: 110,
+    interliningWorkmanship: 100,
+    totalWorkmanship: 480,
+  })
+
+  for (const [widthCm, expected] of [[220, 4], [221, 5], [275, 5], [276, 6]]) {
+    assert.equal(calculatePinchPleatPricing({ widthCm, heightCm: 220, fabricPricePerMetre: 20 }).numberOfWidths, expected)
+  }
+  assert.equal(calculatePinchPleatPricing({ widthCm: 220, heightCm: 220, patternRepeatCm: 0, fabricPricePerMetre: 20 }).cutLengthCm, 250)
+  assert.equal(calculatePinchPleatPricing({ widthCm: 220, heightCm: 220, patternRepeatCm: 0, fabricPricePerMetre: 20 }).rawFabricMetres, 10)
+  assert.deepEqual(
+    [10, 10.1, 10.5, 10.6].map(rawFabricMetres => {
+      const result = calculatePinchPleatPricing({ widthCm: 55, heightCm: rawFabricMetres * 100 - 30, fabricPricePerMetre: 20 })
+      return result.roundedFabricMetres
+    }),
+    [10, 10.5, 10.5, 11]
+  )
+})
+
+test('Pinch Pleat consumes dedicated outputs, DB interlining rate, and quantity exactly once', async () => {
+  const { records } = pinchPleatFixtures({ dedicatedRule: true })
+  const strapi = strapiForPinchPleat(records)
+  const quote = await calculateMadeToMeasureQuote(strapi, {
+    items: [pinchPleatItem('pinch', 1, 'interlined')],
+    shipping: '0.00',
+  })
+  const line = quote.items[0]
+  const interlining = quote.breakdown.accessories.find(item => item.type === 'interlining')
+  const interliningWorkmanship = quote.breakdown.accessories.find(item => item.type === 'interlining_workmanship')
+
+  assert.equal(line.calculatedQuantity.materialMetres, 11)
+  assert.equal(quote.breakdown.fabric[0].quantity, 11)
+  assert.equal(quote.breakdown.fabric[0].totalPence, 22000)
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 38000)
+  assert.equal(interlining.quantity, 11)
+  assert.equal(interlining.totalPence, 11000)
+  assert.equal(interliningWorkmanship.quantity, 1)
+  assert.equal(interliningWorkmanship.totalPence, 10000)
+  assert.equal(quote.breakdown.totalPence, 88700)
+
+  const doubled = await calculateMadeToMeasureQuote(strapi, {
+    items: [pinchPleatItem('pinch', 2, 'interlined')],
+    shipping: '0.00',
+  })
+  assert.equal(doubled.breakdown.totalPence, quote.breakdown.totalPence * 2)
+  assert.equal(doubled.breakdown.makingCharge[0].totalPence, 76000)
+})
+
+test('Pinch Pleat falls back safely and never becomes the generic curtain rule', async () => {
+  for (const fixture of [
+    { label: 'absent', options: {} },
+    { label: 'draft', options: { dedicatedRule: true, draftDedicated: true } },
+  ]) {
+    const { records } = pinchPleatFixtures(fixture.options)
+    const strapi = strapiForPinchPleat(records)
+    const quote = await calculateMadeToMeasureQuote(strapi, {
+      items: [pinchPleatItem('pinch')],
+      shipping: '0.00',
+    })
+    assert.equal(quote.breakdown.makingCharge[0].totalPence, 1700, fixture.label)
+  }
+
+  const { records } = pinchPleatFixtures({ dedicatedRule: true })
+  const strapi = strapiForPinchPleat(records)
+  for (const heading of ['pencil', 'wave', 'eyelet']) {
+    const quote = await calculateMadeToMeasureQuote(strapi, {
+      items: [pinchPleatItem(heading)],
+      shipping: '0.00',
+    })
+    assert.equal(quote.breakdown.makingCharge[0].totalPence, 1700, heading)
+  }
+})
+
+test('Pinch Pleat without interlining keeps the base workmanship and omits interlining charges', async () => {
+  const { records } = pinchPleatFixtures({ dedicatedRule: true })
+  const quote = await calculateMadeToMeasureQuote(strapiForPinchPleat(records), {
+    items: [pinchPleatItem('pinch')],
+    shipping: '0.00',
+  })
+
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 38000)
+  assert.equal(quote.breakdown.accessories.some(item => item.type === 'interlining'), false)
+  assert.equal(quote.breakdown.accessories.some(item => item.type === 'interlining_workmanship'), false)
+  assert.equal(quote.breakdown.totalPence, 67700)
 })
