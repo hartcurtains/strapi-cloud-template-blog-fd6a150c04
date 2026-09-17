@@ -786,6 +786,145 @@ function evaluatePricingRuleOutputs(rule: any, data: Record<string, any>): Recor
   return store
 }
 
+function nullableNumber(value: any): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function firstNumericOutput(outputs: Record<string, any>, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = nullableNumber(outputs?.[key])
+    if (value !== null) return value
+  }
+  return null
+}
+
+function findPinchPleatAllowance(rule: any): number | null {
+  const steps = Array.isArray(rule?.formula?.steps) ? rule.formula.steps : []
+  const allowanceStep = steps.find((step: any) =>
+    /allowance/i.test(String(step?.name || '')) ||
+    ['dropWithAllowance_cm', 'cutLengthBeforeRepeatCm', 'cutLengthBeforeRepeat_cm'].includes(String(step?.output || ''))
+  )
+  const inputs = Array.isArray(allowanceStep?.inputs)
+    ? allowanceStep.inputs
+    : allowanceStep?.input !== undefined
+      ? [allowanceStep.input]
+      : []
+  const numericInput = inputs
+    .filter((input: any) => typeof input === 'number' || (typeof input === 'string' && /^-?\d+(?:\.\d+)?$/.test(input.trim())))
+    .pop()
+  return nullableNumber(numericInput)
+}
+
+function buildAuthoritativePinchPleatSteps(rule: any, outputs: Record<string, any>) {
+  const unitByOutput: Record<string, string> = {
+    numberOfWidths: 'widths',
+    dropWithAllowance_cm: 'cm',
+    cutLengthBeforeRepeatCm: 'cm',
+    cutLengthBeforeRepeat_cm: 'cm',
+    cutLengthCm: 'cm',
+    cutLengthMetres: 'm',
+    cutLengthM: 'm',
+    rawFabricMetres: 'm',
+    halfMetreUnits: 'units',
+    roundedHalfMetreUnits: 'units',
+    roundedFabricMetres: 'm',
+    fabricCost: 'GBP',
+    baseWorkmanship: 'GBP',
+    interliningMaterialCost: 'GBP',
+    interliningWorkmanship: 'GBP',
+    totalWorkmanship: 'GBP',
+    totalPrice: 'GBP',
+  }
+  const steps = Array.isArray(rule?.formula?.steps) ? rule.formula.steps : []
+  return steps.flatMap((step: any) => {
+    const key = String(step?.output || '')
+    if (!key || !Object.prototype.hasOwnProperty.call(outputs, key)) return []
+    return [{
+      key,
+      name: step?.name || key,
+      value: outputs[key],
+      ...(unitByOutput[key] ? { unit: unitByOutput[key] } : {}),
+    }]
+  })
+}
+
+function buildPinchPleatCalculationBreakdown({
+  rule,
+  outputs,
+  fabric,
+  selectedOptions,
+  widthCm,
+  heightCm,
+  quantity,
+  lineBreakdown,
+}: {
+  rule: any
+  outputs: Record<string, any>
+  fabric: any
+  selectedOptions: Record<string, any>
+  widthCm: number
+  heightCm: number
+  quantity: number
+  lineBreakdown: any
+}) {
+  const accessories = Array.isArray(lineBreakdown?.accessories) ? lineBreakdown.accessories : []
+  const liningRow = accessories.find((item: any) => item?.type === 'lining' || item?.type === 'lining_material')
+  const interliningRow = accessories.find((item: any) => item?.type === 'interlining')
+  const interliningWorkmanshipRow = accessories.find((item: any) => item?.type === 'interlining_workmanship')
+  const interliningMaterialCost = firstNumericOutput(outputs, ['interliningMaterialCost'])
+  const interliningWorkmanship = firstNumericOutput(outputs, ['interliningWorkmanship'])
+  const interliningBranchSelected = interliningMaterialCost !== null || interliningWorkmanship !== null
+    ? (interliningMaterialCost || 0) > 0 || (interliningWorkmanship || 0) > 0
+    : Boolean(interliningRow && (nullableNumber(interliningRow?.unitPrice) || 0) > 0)
+  const totalWorkmanship = firstNumericOutput(outputs, ['totalWorkmanship'])
+  const totalWorkmanshipPence = totalWorkmanship === null
+    ? (nullableNumber(lineBreakdown?.makingCharge?.totalPence) || 0) + (nullableNumber(interliningWorkmanshipRow?.totalPence) || 0)
+    : multiplyPence(toPence(totalWorkmanship), quantity)
+
+  return {
+    ruleName: rule?.name || null,
+    productType: 'curtain',
+    heading: selectedOptions?.curtainType?.label || selectedOptions?.curtainType?.name || null,
+    widthCm,
+    numberOfWidths: firstNumericOutput(outputs, ['numberOfWidths']),
+    finishedDropCm: heightCm,
+    allowanceCm: findPinchPleatAllowance(rule),
+    cutLengthBeforeRepeatCm: firstNumericOutput(outputs, ['cutLengthBeforeRepeatCm', 'cutLengthBeforeRepeat_cm', 'dropWithAllowance_cm']),
+    patternRepeatCm: nullableNumber(fabric?.patternRepeat_cm ?? fabric?.pattern_repeat_cm),
+    cutLengthCm: firstNumericOutput(outputs, ['cutLengthCm', 'cutLength_cm']),
+    cutLengthM: firstNumericOutput(outputs, ['cutLengthM', 'cutLengthMetres', 'cutLength_m']),
+    rawFabricMetres: firstNumericOutput(outputs, ['rawFabricMetres', 'rawFabric_m']),
+    halfMetreUnits: firstNumericOutput(outputs, ['halfMetreUnits']),
+    roundedHalfMetreUnits: firstNumericOutput(outputs, ['roundedHalfMetreUnits']),
+    roundedFabricMetres: firstNumericOutput(outputs, ['roundedFabricMetres']),
+    fabric: {
+      name: fabric?.name || null,
+      pricePerMetre: nullableNumber(fabric?.price_per_metre),
+      metres: nullableNumber(lineBreakdown?.fabric?.quantity),
+      costPence: nullableNumber(lineBreakdown?.fabric?.totalPence),
+    },
+    lining: {
+      name: selectedOptions?.liningType?.label || selectedOptions?.liningType?.name || null,
+      pricePerMetre: nullableNumber(selectedOptions?.liningType?.unitPrice),
+      metres: nullableNumber(liningRow?.quantity),
+      costPence: nullableNumber(liningRow?.totalPence),
+    },
+    baseWorkmanshipPence: nullableNumber(lineBreakdown?.makingCharge?.totalPence),
+    interlining: {
+      selected: interliningBranchSelected,
+      metres: nullableNumber(interliningRow?.quantity),
+      pricePerMetre: nullableNumber(interliningRow?.unitPrice ?? selectedOptions?.interliningType?.unitPrice),
+      materialCostPence: nullableNumber(interliningRow?.totalPence),
+      workmanshipPence: nullableNumber(interliningWorkmanshipRow?.totalPence) || 0,
+    },
+    totalWorkmanshipPence,
+    totalPence: nullableNumber(lineBreakdown?.totalPence),
+    steps: buildAuthoritativePinchPleatSteps(rule, outputs),
+  }
+}
+
 async function calculateStandardFabricQuote(strapi: any, items: any[]) {
   const issues: ValidationIssue[] = []
   const lines: any[] = []
@@ -1121,22 +1260,35 @@ async function calculateLine(strapi: any, line: any, index: number) {
   const accessoriesPence = accessories.reduce((sum, item) => sum + item.totalPence, 0)
   const baseTotalPence = multiplyPence(baseProductPence, quantity)
   const lineTotalPence = baseTotalPence + accessoriesPence
+  const lineBreakdown: any = {
+    baseProduct: { label: 'Base product', total: fromPence(baseTotalPence), totalPence: baseTotalPence },
+    fabric: { label: 'Fabric', quantity: materialMetres * quantity, unit: 'metre', unitPrice: fromPence(fabricUnitPence), unitPricePence: fabricUnitPence, total: fromPence(multiplyPence(fabricUnitPence, materialMetres * quantity)), totalPence: multiplyPence(fabricUnitPence, materialMetres * quantity) },
+    makingCharge: { label: liningRuleIncludesWorkmanship ? `${validated.selectedOptions.liningType?.label || 'Lining'} workmanship` : productType === 'blind' ? 'Blind making' : 'Making charge', quantity, unit: 'item', unitPrice: fromPence(workmanshipPence), unitPricePence: workmanshipPence, total: fromPence(multiplyPence(workmanshipPence, quantity)), totalPence: multiplyPence(workmanshipPence, quantity) },
+    accessories,
+    discounts: [],
+    delivery: { total: '0.00', totalPence: 0 },
+    total: fromPence(lineTotalPence),
+    totalPence: lineTotalPence,
+  }
+  if (dedicatedPinchPleatRule) {
+    lineBreakdown.calculationBreakdown = buildPinchPleatCalculationBreakdown({
+      rule,
+      outputs: nonCushionRuleOutputs,
+      fabric,
+      selectedOptions: validated.selectedOptions,
+      widthCm,
+      heightCm,
+      quantity,
+      lineBreakdown,
+    })
+  }
   return {
     productType,
     quantity,
     fabric: fabric ? optionSnapshot(fabric, { unitPrice: numberValue(fabric.price_per_metre), unitPricePence: fabricUnitPence }) : null,
     selectedOptions: validated.selectedOptions,
     calculatedQuantity: { materialMetres, billableLiningMetres: liningMetres },
-    breakdown: {
-      baseProduct: { label: 'Base product', total: fromPence(baseTotalPence), totalPence: baseTotalPence },
-      fabric: { label: 'Fabric', quantity: materialMetres * quantity, unit: 'metre', unitPrice: fromPence(fabricUnitPence), unitPricePence: fabricUnitPence, total: fromPence(multiplyPence(fabricUnitPence, materialMetres * quantity)), totalPence: multiplyPence(fabricUnitPence, materialMetres * quantity) },
-      makingCharge: { label: liningRuleIncludesWorkmanship ? `${validated.selectedOptions.liningType?.label || 'Lining'} workmanship` : productType === 'blind' ? 'Blind making' : 'Making charge', quantity, unit: 'item', unitPrice: fromPence(workmanshipPence), unitPricePence: workmanshipPence, total: fromPence(multiplyPence(workmanshipPence, quantity)), totalPence: multiplyPence(workmanshipPence, quantity) },
-      accessories,
-      discounts: [],
-      delivery: { total: '0.00', totalPence: 0 },
-      total: fromPence(lineTotalPence),
-      totalPence: lineTotalPence,
-    },
+    breakdown: lineBreakdown,
     snapshot: {
       productType,
       quantity,
@@ -1158,6 +1310,9 @@ export async function calculateMadeToMeasureQuote(strapi: any, input: any) {
   const lines = []
   for (let index = 0; index < items.length; index += 1) lines.push(await calculateLine(strapi, items[index], index))
   const lineBreakdowns = lines.map(line => line.breakdown)
+  const calculationBreakdowns = lineBreakdowns
+    .map(item => item?.calculationBreakdown)
+    .filter(Boolean)
   const subtotalPence = lines.reduce((sum, line) => sum + line.breakdown.totalPence, 0)
   const shippingPence = toPence(input?.shipping ?? 0)
   const totalPence = subtotalPence + shippingPence
@@ -1172,6 +1327,7 @@ export async function calculateMadeToMeasureQuote(strapi: any, input: any) {
       discounts: [],
       delivery: { label: 'Delivery', total: fromPence(shippingPence), totalPence: shippingPence },
       lines: lineBreakdowns,
+      ...(calculationBreakdowns.length === 1 ? { calculationBreakdown: calculationBreakdowns[0] } : {}),
       subtotal: fromPence(subtotalPence),
       subtotalPence,
       total: fromPence(totalPence),

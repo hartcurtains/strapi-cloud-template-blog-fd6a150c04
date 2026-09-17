@@ -833,6 +833,49 @@ test('Pinch Pleat consumes dedicated outputs, DB interlining rate, and quantity 
   assert.equal(doubled.breakdown.makingCharge[0].totalPence, 76000)
 })
 
+test('Pinch Pleat exposes the authoritative calculation breakdown without changing the quote total', async () => {
+  const { records } = pinchPleatFixtures({ dedicatedRule: true })
+  const quote = await calculateMadeToMeasureQuote(strapiForPinchPleat(records), {
+    items: [pinchPleatItem('pinch', 1, 'interlined')],
+    shipping: '0.00',
+  })
+  const calculation = quote.breakdown.calculationBreakdown
+  const lineCalculation = quote.breakdown.lines[0].calculationBreakdown
+
+  assert.deepEqual(calculation, lineCalculation)
+  assert.equal(calculation.ruleName, 'Pinch Pleat')
+  assert.equal(calculation.productType, 'curtain')
+  assert.equal(calculation.heading, 'Pinch Pleat')
+  assert.equal(calculation.widthCm, 220)
+  assert.equal(calculation.numberOfWidths, 4)
+  assert.equal(calculation.finishedDropCm, 220)
+  assert.equal(calculation.allowanceCm, 30)
+  assert.equal(calculation.cutLengthBeforeRepeatCm, 250)
+  assert.equal(calculation.patternRepeatCm, 17.5)
+  assert.equal(calculation.cutLengthCm, 267.5)
+  assert.equal(calculation.cutLengthM, 2.675)
+  assert.equal(calculation.rawFabricMetres, 10.7)
+  assert.equal(calculation.halfMetreUnits, 21.4)
+  assert.equal(calculation.roundedHalfMetreUnits, 22)
+  assert.equal(calculation.roundedFabricMetres, 11)
+  assert.equal(calculation.fabric.pricePerMetre, 20)
+  assert.equal(calculation.fabric.metres, 11)
+  assert.equal(calculation.fabric.costPence, 22000)
+  assert.equal(calculation.lining.pricePerMetre, 7)
+  assert.equal(calculation.lining.metres, 11)
+  assert.equal(calculation.lining.costPence, 7700)
+  assert.equal(calculation.baseWorkmanshipPence, 38000)
+  assert.equal(calculation.interlining.selected, true)
+  assert.equal(calculation.interlining.metres, 11)
+  assert.equal(calculation.interlining.pricePerMetre, 10)
+  assert.equal(calculation.interlining.materialCostPence, 11000)
+  assert.equal(calculation.interlining.workmanshipPence, 10000)
+  assert.equal(calculation.totalWorkmanshipPence, 48000)
+  assert.equal(calculation.totalPence, 88700)
+  assert.equal(calculation.steps.find(step => step.key === 'numberOfWidths').value, 4)
+  assert.equal(calculation.steps.find(step => step.key === 'totalPrice').value, 810)
+})
+
 test('Pinch Pleat falls back safely and never becomes the generic curtain rule', async () => {
   for (const fixture of [
     { label: 'absent', options: {} },
@@ -855,6 +898,7 @@ test('Pinch Pleat falls back safely and never becomes the generic curtain rule',
       shipping: '0.00',
     })
     assert.equal(quote.breakdown.makingCharge[0].totalPence, 1700, heading)
+    assert.equal(quote.breakdown.calculationBreakdown, undefined, heading)
   }
 })
 
@@ -869,4 +913,11 @@ test('Pinch Pleat without interlining keeps the base workmanship and omits inter
   assert.equal(quote.breakdown.accessories.some(item => item.type === 'interlining'), false)
   assert.equal(quote.breakdown.accessories.some(item => item.type === 'interlining_workmanship'), false)
   assert.equal(quote.breakdown.totalPence, 67700)
+
+  assert.equal(quote.breakdown.calculationBreakdown.interlining.selected, false)
+  assert.equal(quote.breakdown.calculationBreakdown.interlining.metres, null)
+  assert.equal(quote.breakdown.calculationBreakdown.interlining.materialCostPence, null)
+  assert.equal(quote.breakdown.calculationBreakdown.interlining.workmanshipPence, 0)
+  assert.equal(quote.breakdown.calculationBreakdown.totalWorkmanshipPence, 38000)
+  assert.equal(quote.breakdown.calculationBreakdown.totalPence, 67700)
 })
