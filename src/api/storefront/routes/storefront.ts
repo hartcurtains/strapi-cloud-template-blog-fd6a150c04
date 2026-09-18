@@ -10,6 +10,14 @@ export default {
     },
     {
       method: 'GET',
+      path: '/storefront/runtime-fingerprint',
+      handler: 'storefront.runtimeFingerprint',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
       path: '/storefront/catalogue-snapshot',
       handler: 'storefront.catalogueSnapshot',
       config: {

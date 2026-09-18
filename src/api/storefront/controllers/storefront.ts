@@ -160,6 +160,14 @@ function liningPricingRules(linings: any[]) {
 }
 
 export default {
+  async runtimeFingerprint(ctx: any) {
+    ctx.set('Cache-Control', 'no-store')
+    ctx.body = {
+      commit: 'd72180e80cc609e9b225aafd62f371173987c312',
+      pricingRuntime: 'curtain-identity-resolver-v2',
+    }
+  },
+
   async navigation(ctx: any) {
     const [fabrics, brands, curtainPoles, linings, curtainTypes] = await Promise.all([
       strapi.entityService.findMany('api::fabric.fabric', {
