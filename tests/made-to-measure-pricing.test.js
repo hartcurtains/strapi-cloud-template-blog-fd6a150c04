@@ -296,7 +296,7 @@ test('blind interlining shows its workmanship separately without adding blind ma
     'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
     'api::lining.lining': [record('interlined', { liningType: 'Interlining', price_per_metre: null, pricing_rule: interliningPricingRule, applies_to_blinds: true })],
     'api::lining-colour.lining-colour': [record('white', { display_name: 'White', applies_to_blinds: true, compatible_lining_types: [record('interlined')] })],
-    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { name: 'Roman Blind', product_type: 'blind', formula: { workmanshipFee: 85 } })],
   }
   const strapi = { entityService: { findMany: async (uid, params = {}) => {
     const values = records[uid] || []
@@ -476,7 +476,7 @@ test('blind quote accepts legacy mechanisms without mechanism_family metadata', 
     'api::fabric.fabric': [fabric],
     'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
     'api::mechanisation.mechanisation': [record('corded-left', { name: 'Corded left', price: 20 })],
-    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { name: 'Roman Blind', product_type: 'blind', formula: { workmanshipFee: 85 } })],
   }
   const strapi = { entityService: { findMany: async (uid, params = {}) => {
     const values = records[uid] || []
@@ -501,6 +501,7 @@ test('blind quote includes workmanship emitted by the database pricing-rule step
     'api::fabric.fabric': [fabric],
     'api::blind-type.blind-type': [record('stacked', { name: 'Stacked', applies_to_blinds: true })],
     'api::pricing-rule.pricing-rule': [record('blind-rule', {
+      name: 'Roman Blind',
       product_type: 'blind',
       formula: {
         steps: [
@@ -535,7 +536,7 @@ test('no lining is a valid zero-cost option without a lining colour', async () =
       liningType: 'No lining', display_name: 'No lining', price_per_metre: 0,
       applies_to_blinds: true, applies_to_curtains: true,
     })],
-    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { name: 'Roman Blind', product_type: 'blind', formula: { workmanshipFee: 85 } })],
   }
   const strapi = { entityService: { findMany: async (uid, params = {}) => {
     const values = records[uid] || []
@@ -574,7 +575,7 @@ test('blind quote scales lining pricing-rule costs per unit with quantity', asyn
     'api::lining-colour.lining-colour': [record('cream', {
       display_name: 'Cream', applies_to_blinds: true, compatible_lining_types: [record('interlined')],
     })],
-    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { name: 'Roman Blind', product_type: 'blind', formula: { workmanshipFee: 85 } })],
   }
   const strapi = { entityService: { findMany: async (uid, params = {}) => {
     const values = records[uid] || []
@@ -753,7 +754,7 @@ test('mixed blind and cushion order quotes re-resolve persisted canonical select
     'api::cushion-piping.cushion-piping': [record('piping-1', { name: 'Piped', type: 'piped', price: 3 })],
     'api::cushion-pad.cushion-pad': [record('pad-1', { name: 'Cover only', type: 'cover_only', price: 0 })],
     'api::pricing-rule.pricing-rule': [
-      record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } }),
+      record('blind-rule', { name: 'Roman Blind', product_type: 'blind', formula: { workmanshipFee: 85 } }),
       record('cushion-rule', { product_type: 'cushion', formula: { workmanshipFee: 25 } }),
     ],
   }

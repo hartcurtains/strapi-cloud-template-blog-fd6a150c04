@@ -12,6 +12,10 @@ const PRODUCT_ALIASES: Record<string, string> = {
   cushion: 'cushion',
 }
 
+const ROMAN_BLIND_PRICING_RULE_NAME = 'Roman Blind'
+const ROMAN_BLIND_PRICING_PATH = 'dedicated-roman-blind'
+const ROMAN_BLIND_MAX_DIMENSION_CM = 250
+
 const NO_LINING_KEYS = new Set(['no-lining', 'no_lining', 'none', 'unlined'])
 
 const OPTION_UIDS: Record<string, string> = {
@@ -98,6 +102,8 @@ const optionLabel = (value: any): string => {
 
 const canonicalHeadingLabel = (value: any): string => optionLabel(value).trim().replace(/\s+/g, ' ')
 const headingIdentity = (value: any): string => canonicalHeadingLabel(value).toLowerCase()
+const isRomanBlindPricingRule = (rule: any): boolean =>
+  rule?.product_type === 'blind' && headingIdentity(rule?.name) === headingIdentity(ROMAN_BLIND_PRICING_RULE_NAME)
 
 const optionMatches = (record: any, identifier: any): boolean => {
   const value = String(optionIdentifier(identifier) ?? '')
@@ -585,6 +591,7 @@ function evaluateLiningPricingRule(rule: any, data: Record<string, any>, outputS
     const trimmed = input.trim()
     if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"')))
       return trimmed.slice(1, -1)
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed)
     return input.split('.').reduce((obj: any, k) => (obj != null ? obj[k] : undefined), store) ?? 0
   }
   const customRound = (v: number, t: number) => { const d = v % 1; return d > t ? Math.ceil(v) : Math.floor(v) }
@@ -703,6 +710,9 @@ async function pricingRule(strapi: any, productType: string, headingName = '') {
   // explicit null check also keeps unit-test doubles honest without treating
   // fixtures that omit publication metadata as drafts.
   const liveRules = rules.filter(rule => rule?.publishedAt !== null)
+  if (productType === 'blind') {
+    return liveRules.find(rule => isRomanBlindPricingRule(rule)) || null
+  }
   if (productType !== 'curtain') return liveRules[0] || null
 
   const sharedCurtainRule = liveRules.find(rule =>
@@ -801,6 +811,7 @@ function evaluatePricingRuleOutputs(rule: any, data: Record<string, any>): Recor
     if (typeof input !== 'string') return input ?? 0
     const trimmed = input.trim()
     if ((trimmed.startsWith("'") && trimmed.endsWith("'")) || (trimmed.startsWith('"') && trimmed.endsWith('"'))) return trimmed.slice(1, -1)
+    if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) return Number(trimmed)
     return input.split('.').reduce((obj: any, key) => {
       if (key.endsWith('[]')) {
         const array = obj?.[key.slice(0, -2)]
@@ -1018,6 +1029,84 @@ function buildPinchPleatCalculationBreakdown({
   }
 }
 
+function buildRomanBlindCalculationBreakdown({
+  rule,
+  outputs,
+  fabric,
+  selectedOptions,
+  widthCm,
+  heightCm,
+  quantity,
+  lineBreakdown,
+}: {
+  rule: any
+  outputs: Record<string, any>
+  fabric: any
+  selectedOptions: Record<string, any>
+  widthCm: number
+  heightCm: number
+  quantity: number
+  lineBreakdown: any
+}) {
+  const accessories = Array.isArray(lineBreakdown?.accessories) ? lineBreakdown.accessories : []
+  const accessory = (type: string) => accessories.find((item: any) => item?.type === type) || null
+  const unitPence = (type: string): number => {
+    const row = accessory(type)
+    return row ? Math.round(numberValue(row.totalPence) / Math.max(1, quantity)) : 0
+  }
+  const fabricMaterialCostPence = Math.round(numberValue(lineBreakdown?.fabric?.totalPence) / Math.max(1, quantity))
+  const interliningSelected = Boolean(selectedOptions?.interliningType)
+  const interliningWorkmanship = interliningSelected
+    ? firstNumericOutput(outputs, ['interliningWorkmanshipTotal']) || 0
+    : 0
+  const mainWorkmanship = firstNumericOutput(outputs, ['mainWorkmanship', 'workmanshipCost']) || 0
+  const totalPence = numberValue(lineBreakdown?.totalPence)
+  const unitTotalPence = Math.round(totalPence / Math.max(1, quantity))
+
+  return {
+    pricingPath: ROMAN_BLIND_PRICING_PATH,
+    ruleName: rule?.name || null,
+    productType: 'blind',
+    widthCm,
+    heightCm,
+    numberOfWidths: firstNumericOutput(outputs, ['numberOfWidths']),
+    cutLengthPerWidthCm: firstNumericOutput(outputs, ['cutLengthPerWidth_cm', 'cutLengthPerWidthCm']),
+    patternRepeatAddedPerWidthCm: firstNumericOutput(outputs, ['patternRepeatAddedPerWidth_cm', 'patternRepeatAddedPerWidthCm']) || 0,
+    rawFabricMetres: firstNumericOutput(outputs, ['rawFabricMetres']),
+    roundedFabricMetres: firstNumericOutput(outputs, ['roundedFabricMetres']),
+    fabricMaterialCost: firstNumericOutput(outputs, ['fabricMaterialCost', 'fabricCost']) || fabricMaterialCostPence / 100,
+    fabricMaterialCostPence,
+    widthWorkmanship: firstNumericOutput(outputs, ['widthWorkmanship']) || 0,
+    heightWorkmanship: firstNumericOutput(outputs, ['heightWorkmanship']) || 0,
+    mainWorkmanship,
+    mainWorkmanshipPence: toPence(mainWorkmanship),
+    trackCharge: firstNumericOutput(outputs, ['trackCharge']) || 0,
+    trackChargePence: unitPence('track'),
+    liningMaterialCost: unitPence('lining') / 100 + unitPence('lining_material') / 100,
+    liningMaterialCostPence: unitPence('lining') + unitPence('lining_material'),
+    interliningMaterialCost: interliningSelected ? unitPence('interlining') / 100 : 0,
+    interliningMaterialCostPence: interliningSelected ? unitPence('interlining') : 0,
+    interliningWidthWorkmanship: interliningSelected ? firstNumericOutput(outputs, ['interliningWidthWorkmanship']) || 0 : 0,
+    interliningHeightWorkmanship: interliningSelected ? firstNumericOutput(outputs, ['interliningHeightWorkmanship']) || 0 : 0,
+    interliningWorkmanshipTotal: interliningWorkmanship,
+    interliningWorkmanshipTotalPence: toPence(interliningWorkmanship),
+    mechanisationCharge: unitPence('mechanism') / 100,
+    mechanisationChargePence: unitPence('mechanism'),
+    unitTotal: fromPence(unitTotalPence),
+    unitTotalPence,
+    quantity,
+    total: fromPence(totalPence),
+    totalPence,
+    fabric: {
+      name: fabric?.name || null,
+      pricePerMetre: nullableNumber(fabric?.price_per_metre),
+      metres: nullableNumber(lineBreakdown?.fabric?.quantity) === null
+        ? null
+        : nullableNumber(lineBreakdown?.fabric?.quantity)! / Math.max(1, quantity),
+    },
+  }
+}
+
 async function calculateStandardFabricQuote(strapi: any, items: any[]) {
   const issues: ValidationIssue[] = []
   const lines: any[] = []
@@ -1120,10 +1209,23 @@ async function calculateLine(strapi: any, line: any, index: number) {
   }
   if (widthCm <= 0) issue(issues, `items[${index}].width`, 'A positive width is required.')
   if (heightCm <= 0) issue(issues, `items[${index}].height`, 'A positive height/drop is required.')
+  if (productType === 'blind' && widthCm > ROMAN_BLIND_MAX_DIMENSION_CM) {
+    issue(issues, `items[${index}].width`, `Roman Blind width must be no more than ${ROMAN_BLIND_MAX_DIMENSION_CM} cm.`)
+  }
+  if (productType === 'blind' && heightCm > ROMAN_BLIND_MAX_DIMENSION_CM) {
+    issue(issues, `items[${index}].height`, `Roman Blind height/drop must be no more than ${ROMAN_BLIND_MAX_DIMENSION_CM} cm.`)
+  }
   if (issues.length) throw new MadeToMeasureValidationError(issues)
 
   const headingName = canonicalHeadingLabel(validated.selectedOptions.curtainType)
   const rule = await pricingRule(strapi, productType, headingName)
+  const dedicatedRomanBlindRule = productType === 'blind' && isRomanBlindPricingRule(rule)
+  if (productType === 'blind' && !dedicatedRomanBlindRule) {
+    throw new MadeToMeasureValidationError([{
+      field: 'pricingRule',
+      message: `A published ${ROMAN_BLIND_PRICING_RULE_NAME} pricing rule is required for Roman Blinds.`,
+    }])
+  }
   const dedicatedPinchPleatRule = productType === 'curtain' &&
     isPinchPleatHeading(headingName) &&
     isPinchPleatHeading(rule?.name) &&
@@ -1171,6 +1273,10 @@ async function calculateLine(strapi: any, line: any, index: number) {
     interlining: { price_per_metre: numberValue(validated.lining?.interlining?.price_per_metre) },
     trimmings: [],
   })
+  const outputOrFallback = (key: string, fallback: number): number => {
+    const value = nonCushionRuleOutputs[key]
+    return value === undefined || value === null ? fallback : numberValue(value, fallback)
+  }
   const pinchPleatFallback = dedicatedPinchPleatRule
     ? calculatePinchPleatPricing({
       widthCm,
@@ -1181,10 +1287,6 @@ async function calculateLine(strapi: any, line: any, index: number) {
       hasInterlining: Boolean(validated.selectedOptions.interliningType),
     })
     : null
-  const outputOrFallback = (key: string, fallback: number): number => {
-    const value = nonCushionRuleOutputs[key]
-    return value === undefined || value === null ? fallback : numberValue(value, fallback)
-  }
   const dedicatedPinchPleatPricing = pinchPleatFallback ? {
     ...pinchPleatFallback,
     numberOfWidths: outputOrFallback('numberOfWidths', pinchPleatFallback.numberOfWidths),
@@ -1195,7 +1297,23 @@ async function calculateLine(strapi: any, line: any, index: number) {
     interliningWorkmanship: outputOrFallback('interliningWorkmanship', pinchPleatFallback.interliningWorkmanship),
     totalWorkmanship: outputOrFallback('totalWorkmanship', pinchPleatFallback.totalWorkmanship),
   } : null
+  const dedicatedRomanBlindPricing = dedicatedRomanBlindRule ? {
+    numberOfWidths: outputOrFallback('numberOfWidths', 0),
+    cutLengthPerWidthCm: outputOrFallback('cutLengthPerWidth_cm', outputOrFallback('cutLengthPerWidthCm', 0)),
+    patternRepeatAddedPerWidthCm: outputOrFallback('patternRepeatAddedPerWidth_cm', outputOrFallback('patternRepeatAddedPerWidthCm', 0)),
+    rawFabricMetres: outputOrFallback('rawFabricMetres', 0),
+    roundedFabricMetres: outputOrFallback('roundedFabricMetres', 0),
+    fabricMaterialCost: outputOrFallback('fabricMaterialCost', outputOrFallback('fabricCost', 0)),
+    widthWorkmanship: outputOrFallback('widthWorkmanship', 0),
+    heightWorkmanship: outputOrFallback('heightWorkmanship', 0),
+    mainWorkmanship: outputOrFallback('mainWorkmanship', outputOrFallback('workmanshipCost', 0)),
+    trackCharge: outputOrFallback('trackCharge', 0),
+    interliningWidthWorkmanship: outputOrFallback('interliningWidthWorkmanship', 0),
+    interliningHeightWorkmanship: outputOrFallback('interliningHeightWorkmanship', 0),
+    interliningWorkmanshipTotal: outputOrFallback('interliningWorkmanshipTotal', 0),
+  } : null
   if (dedicatedPinchPleatPricing) materialMetres = dedicatedPinchPleatPricing.roundedFabricMetres
+  if (dedicatedRomanBlindPricing) materialMetres = dedicatedRomanBlindPricing.roundedFabricMetres
   const liningPricingRule = productType === 'cushion' ? null : validated.lining?.type?.pricing_rule
   const liningRuleOutputs: Record<string, any> = {}
   const liningRuleData = liningPricingRule?.formula?.steps ? {
@@ -1232,6 +1350,8 @@ async function calculateLine(strapi: any, line: any, index: number) {
   const liningRuleIncludesWorkmanship = Boolean(liningPricingRule && liningRuleAmounts.hasWorkmanship)
   const workmanshipAmount = productType === 'cushion'
     ? (ruleOutputs.workmanshipCost ?? rule?.formula?.workmanshipFee ?? rule?.formula?.config?.workmanshipFee ?? validated.selectedOptions.cushionSize?.workmanshipCost ?? LEGACY_CUSHION_WORKMANSHIP)
+    : dedicatedRomanBlindPricing
+      ? dedicatedRomanBlindPricing.mainWorkmanship
     : liningRuleIncludesWorkmanship
       ? liningRuleAmounts.workmanshipAmount
     : dedicatedPinchPleatPricing
@@ -1240,11 +1360,15 @@ async function calculateLine(strapi: any, line: any, index: number) {
   const workmanshipPence = toPence(workmanshipAmount)
   const fabricAmount = productType === 'cushion' && ruleOutputs.fabricCost !== undefined
     ? numberValue(ruleOutputs.fabricCost)
+    : dedicatedRomanBlindPricing
+      ? dedicatedRomanBlindPricing.fabricMaterialCost
     : dedicatedPinchPleatPricing
       ? dedicatedPinchPleatPricing.fabricCost
     : numberValue(fabric?.price_per_metre) * materialMetres
   const fabricPence = productType === 'cushion'
     ? toPence(fabricAmount)
+    : dedicatedRomanBlindPricing
+      ? toPence(fabricAmount)
     : dedicatedPinchPleatPricing
       ? toPence(fabricAmount)
     : multiplyPence(fabricUnitPence, materialMetres)
@@ -1267,7 +1391,6 @@ async function calculateLine(strapi: any, line: any, index: number) {
   }
   const blindTypeLabel = String(validated.selectedOptions.blindType?.label || validated.selectedOptions.blindType?.name || '')
   const requiresExtraLining = productType === 'blind' && /waterfall|stacked/i.test(blindTypeLabel)
-  const requiresRomanTrack = productType === 'blind' && /waterfall|stacked|roman/i.test(blindTypeLabel)
   const liningMetres = productType === 'cushion' ? 0 : requiresExtraLining ? materialMetres + 0.5 : materialMetres
   if (validated.selectedOptions.liningType) {
     let liningTotalPence: number
@@ -1317,6 +1440,8 @@ async function calculateLine(strapi: any, line: any, index: number) {
     })
     const interliningWorkmanship = dedicatedPinchPleatPricing
       ? dedicatedPinchPleatPricing.interliningWorkmanship
+      : dedicatedRomanBlindPricing
+        ? dedicatedRomanBlindPricing.interliningWorkmanshipTotal
       : interliningRuleAmounts.hasWorkmanship ? interliningRuleAmounts.workmanshipAmount : 0
     if (interliningWorkmanship > 0) {
       const workmanshipPence = toPence(interliningWorkmanship)
@@ -1333,9 +1458,8 @@ async function calculateLine(strapi: any, line: any, index: number) {
       })
     }
   }
-  if (requiresRomanTrack) {
-    const trackBaseMetres = materialMetres
-    const trackUnitPence = toPence(trackBaseMetres <= 1 ? 100 : 100 + Math.ceil((trackBaseMetres - 1) / 0.5) * 30)
+  if (dedicatedRomanBlindPricing) {
+    const trackUnitPence = toPence(dedicatedRomanBlindPricing.trackCharge)
     const trackTotalPence = multiplyPence(trackUnitPence, quantity)
     accessories.push({
       type: 'track',
@@ -1346,7 +1470,6 @@ async function calculateLine(strapi: any, line: any, index: number) {
       unitPricePence: trackUnitPence,
       total: fromPence(trackTotalPence),
       totalPence: trackTotalPence,
-      baseMetres: trackBaseMetres,
     })
   }
 
@@ -1365,6 +1488,18 @@ async function calculateLine(strapi: any, line: any, index: number) {
   }
   if (dedicatedPinchPleatRule) {
     lineBreakdown.calculationBreakdown = buildPinchPleatCalculationBreakdown({
+      rule,
+      outputs: nonCushionRuleOutputs,
+      fabric,
+      selectedOptions: validated.selectedOptions,
+      widthCm,
+      heightCm,
+      quantity,
+      lineBreakdown,
+    })
+  }
+  if (dedicatedRomanBlindPricing) {
+    lineBreakdown.calculationBreakdown = buildRomanBlindCalculationBreakdown({
       rule,
       outputs: nonCushionRuleOutputs,
       fabric,

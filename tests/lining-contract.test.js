@@ -34,7 +34,7 @@ function catalogue({ liningColourKey = 'white', liningColourCompatible = 'lined'
     ],
     'api::mechanisation.mechanisation': [record('corded-left', { name: 'Corded Left', price: 20 })],
     'api::mechanism-finish.mechanism-finish': [record('chrome', { display_name: 'Chrome', compatible_mechanisations: [] })],
-    'api::pricing-rule.pricing-rule': [record('blind-rule', { product_type: 'blind', formula: { workmanshipFee: 85 } })],
+    'api::pricing-rule.pricing-rule': [record('blind-rule', { name: 'Roman Blind', product_type: 'blind', formula: { workmanshipFee: 85 } })],
   }
 }
 
