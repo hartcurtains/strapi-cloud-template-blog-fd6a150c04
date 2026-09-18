@@ -671,17 +671,37 @@ function splitLiningRuleAmounts(outputs: Record<string, any>, totalAmount: numbe
 }
 
 async function pricingRule(strapi: any, productType: string, headingName = '') {
-  const rules = await strapi.entityService.findMany('api::pricing-rule.pricing-rule', {
-    publicationState: 'live',
-    filters: { product_type: productType },
-    sort: ['id:desc'],
-    limit: 100,
-  })
+  const pricingRuleUid = 'api::pricing-rule.pricing-rule'
+  let rules: any[] = []
+
+  if (typeof strapi.documents === 'function') {
+    try {
+      const publishedRules = await strapi.documents(pricingRuleUid).findMany({
+        status: 'published',
+        filters: { product_type: productType },
+        limit: 100,
+      })
+      rules = Array.isArray(publishedRules) ? publishedRules : []
+    } catch {
+      // Do not fall back to an entity-service result that may contain drafts.
+      rules = []
+    }
+  } else {
+    // Keep lightweight legacy/unit-test doubles working while retaining the
+    // explicit published-record guard used by the old lookup path.
+    const legacyRules = await strapi.entityService.findMany(pricingRuleUid, {
+      publicationState: 'live',
+      filters: { product_type: productType },
+      sort: ['id:desc'],
+      limit: 100,
+    })
+    rules = Array.isArray(legacyRules) ? legacyRules : []
+  }
   if (!Array.isArray(rules)) return null
 
-  // The live publicationState query is authoritative in Strapi. The explicit
-  // null check also keeps unit-test doubles honest without treating fixtures
-  // that omit publication metadata as drafts.
+  // The published Document Service query is authoritative in Strapi. The
+  // explicit null check also keeps unit-test doubles honest without treating
+  // fixtures that omit publication metadata as drafts.
   const liveRules = rules.filter(rule => rule?.publishedAt !== null)
   if (productType !== 'curtain') return liveRules[0] || null
 

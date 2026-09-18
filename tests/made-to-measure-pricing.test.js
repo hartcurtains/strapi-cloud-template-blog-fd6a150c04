@@ -944,6 +944,86 @@ test('live-shaped Pinch Pleat selects the dedicated rule and returns the authori
   assert.equal(quote.breakdown.totalPence, 86100)
 })
 
+test('published Document Service pricing rule wins over a draft same-document variant', async () => {
+  const { records, fabric, standardLining } = pinchPleatFixtures({ dedicatedRule: false })
+  fabric.price_per_metre = 28
+  fabric.pattern_repeat_cm = 69.5
+  standardLining.price_per_metre = 9
+  const pricingRuleUid = 'api::pricing-rule.pricing-rule'
+  const draftRules = [
+    record('draft-pinch-rule', {
+      id: 21,
+      documentId: 'zsxtdr6jbe85u6qcy2x4jpcg',
+      name: 'Pinch Pleat',
+      product_type: 'curtain',
+      publishedAt: null,
+      formula: { workmanshipFee: 0 },
+    }),
+    record('draft-shared-rule', {
+      id: 3,
+      documentId: 'lopyfsvzyo8z5tfwqeoqyckm',
+      name: 'Curtain',
+      product_type: 'curtain',
+      publishedAt: null,
+      formula: { workmanshipFee: 0 },
+    }),
+  ]
+  const publishedRules = [
+    record('published-pinch-rule', {
+      id: 23,
+      documentId: 'zsxtdr6jbe85u6qcy2x4jpcg',
+      name: 'Pinch Pleat',
+      product_type: 'curtain',
+      publishedAt: '2026-09-17T00:00:00.000Z',
+      formula: pinchPleatPricingFormula,
+    }),
+    record('published-shared-rule', {
+      id: 7,
+      documentId: 'lopyfsvzyo8z5tfwqeoqyckm',
+      name: 'Curtain',
+      product_type: 'curtain',
+      publishedAt: '2026-09-17T00:00:00.000Z',
+      formula: { workmanshipFee: 17 },
+    }),
+  ]
+  records[pricingRuleUid] = draftRules
+  const baseStrapi = strapiForPinchPleat(records)
+  const entityServicePricingRuleCalls = []
+  const documentQueries = []
+  const strapi = {
+    ...baseStrapi,
+    entityService: {
+      findMany: async (uid, params) => {
+        if (uid === pricingRuleUid) entityServicePricingRuleCalls.push(params)
+        return baseStrapi.entityService.findMany(uid, params)
+      },
+    },
+    documents: uid => uid === pricingRuleUid
+      ? {
+        findMany: async params => {
+          documentQueries.push(params)
+          return publishedRules
+        },
+      }
+      : null,
+  }
+
+  const quote = await calculateMadeToMeasureQuote(strapi, {
+    items: [liveShapedPinchPleatItem()],
+    shipping: '0.00',
+  })
+
+  assert.deepEqual(documentQueries, [{
+    status: 'published',
+    filters: { product_type: 'curtain' },
+    limit: 100,
+  }])
+  assert.deepEqual(entityServicePricingRuleCalls, [])
+  assert.equal(quote.breakdown.calculationBreakdown.ruleName, 'Pinch Pleat')
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 38000)
+  assert.equal(quote.breakdown.totalPence, 86100)
+})
+
 test('live-shaped Pencil Pleat, Wave, and Eyelet remain on shared Curtain pricing', async () => {
   const { records } = pinchPleatFixtures({ dedicatedRule: true })
   const options = [
