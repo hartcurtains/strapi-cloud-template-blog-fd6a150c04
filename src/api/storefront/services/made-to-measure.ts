@@ -1411,4 +1411,76 @@ export async function calculateMadeToMeasureQuote(strapi: any, input: any) {
   }
 }
 
+export async function diagnoseMadeToMeasurePricing(strapi: any, line: any) {
+  const issues: ValidationIssue[] = []
+  const validated = await validateLineOptions(strapi, line, 'curtain', issues)
+  if (issues.length) throw new MadeToMeasureValidationError(issues)
+
+  const selectedCurtainType = validated.selectedOptions.curtainType || null
+  const rawHeading = optionLabel(selectedCurtainType)
+  const headingName = canonicalHeadingLabel(selectedCurtainType)
+  const canonicalHeading = headingIdentity(headingName)
+  const rule = await pricingRule(strapi, 'curtain', headingName)
+  const gate = {
+    productTypeCurtain: validated.productType === 'curtain',
+    headingIsPinchPleat: isPinchPleatHeading(headingName),
+    ruleIsPinchPleat: isPinchPleatHeading(rule?.name),
+    ruleProductTypeCurtain: rule?.product_type === 'curtain',
+  }
+  const dedicatedPinchPleatRule = gate.productTypeCurtain &&
+    gate.headingIsPinchPleat &&
+    gate.ruleIsPinchPleat &&
+    gate.ruleProductTypeCurtain
+  const calculatedLine = await calculateLine(strapi, line, 0)
+
+  return {
+    request: {
+      curtainTypeId: line?.curtainTypeId ?? null,
+      fabricId: line?.fabricId ?? null,
+      liningTypeKey: line?.liningTypeKey ?? null,
+      width: line?.measurements?.width ?? null,
+      height: line?.measurements?.height ?? null,
+      ...(line?.liningColourKey !== undefined ? { liningColourKey: line.liningColourKey } : {}),
+    },
+    curtainType: {
+      resolved: Boolean(selectedCurtainType),
+      id: selectedCurtainType?.id ?? null,
+      documentId: selectedCurtainType?.documentId ?? null,
+      numericId: selectedCurtainType?.numericId ?? null,
+      name: selectedCurtainType?.label || null,
+      label: selectedCurtainType?.label || null,
+      key: selectedCurtainType?.key ?? null,
+      fullnessMultiplier: selectedCurtainType?.fullnessMultiplier ?? null,
+    },
+    heading: {
+      raw: rawHeading,
+      canonical: canonicalHeading,
+      isPinchPleat: isPinchPleatHeading(headingName),
+    },
+    pricingRule: {
+      id: rule?.id ?? null,
+      documentId: rule?.documentId ?? null,
+      name: rule?.name ?? null,
+      productType: rule?.product_type ?? null,
+      published: Boolean(rule && rule.publishedAt !== null),
+      isPinchPleatRule: gate.ruleIsPinchPleat && gate.ruleProductTypeCurtain,
+    },
+    gate: {
+      ...gate,
+      dedicatedPinchPleatRule,
+    },
+    path: {
+      pricingPath: dedicatedPinchPleatRule ? 'dedicated-pinch-pleat' : 'shared-curtain',
+      breakdownExpected: dedicatedPinchPleatRule,
+    },
+    calculation: {
+      materialMetres: calculatedLine.calculatedQuantity.materialMetres,
+      billableLiningMetres: calculatedLine.calculatedQuantity.billableLiningMetres,
+      makingChargePence: calculatedLine.breakdown.makingCharge.totalPence,
+      totalPence: calculatedLine.breakdown.totalPence,
+      calculationBreakdownPresent: Boolean(calculatedLine.breakdown.calculationBreakdown),
+    },
+  }
+}
+
 export { fromPence, toPence }

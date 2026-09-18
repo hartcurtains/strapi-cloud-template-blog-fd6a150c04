@@ -1,5 +1,6 @@
 import {
   calculateMadeToMeasureQuote,
+  diagnoseMadeToMeasurePricing,
   calculateSampleQuote,
   MadeToMeasureValidationError,
 } from '../services/made-to-measure'
@@ -165,6 +166,31 @@ export default {
     ctx.body = {
       commit: 'd72180e80cc609e9b225aafd62f371173987c312',
       pricingRuntime: 'curtain-identity-resolver-v2',
+    }
+  },
+
+  async pricingDiagnostic(ctx: any) {
+    const query = ctx.query || {}
+    const value = (key: string) => Array.isArray(query[key]) ? query[key][0] : query[key]
+    const line = {
+      productType: 'curtain',
+      quantity: 1,
+      curtainTypeId: value('curtainTypeId'),
+      fabricId: value('fabricId'),
+      liningTypeKey: value('liningTypeKey'),
+      liningColourKey: value('liningColourKey'),
+      measurements: {
+        width: Number(value('width')),
+        height: Number(value('height')),
+      },
+    }
+
+    try {
+      ctx.set('Cache-Control', 'no-store')
+      ctx.body = await diagnoseMadeToMeasurePricing(strapi, line)
+    } catch (error: any) {
+      if (error instanceof MadeToMeasureValidationError) return ctx.badRequest({ error: error.message, details: error.issues })
+      return ctx.internalServerError('Pricing diagnostic failed')
     }
   },
 

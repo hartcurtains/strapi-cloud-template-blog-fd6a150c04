@@ -18,6 +18,14 @@ export default {
     },
     {
       method: 'GET',
+      path: '/storefront/pricing-diagnostic',
+      handler: 'storefront.pricingDiagnostic',
+      config: {
+        auth: false,
+      },
+    },
+    {
+      method: 'GET',
       path: '/storefront/catalogue-snapshot',
       handler: 'storefront.catalogueSnapshot',
       config: {
