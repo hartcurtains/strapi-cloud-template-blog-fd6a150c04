@@ -1411,6 +1411,68 @@ export async function calculateMadeToMeasureQuote(strapi: any, input: any) {
   }
 }
 
+const diagnosticRuleIdentity = (rule: any) => ({
+  id: rule?.id ?? null,
+  documentId: rule?.documentId ?? null,
+  name: rule?.name ?? null,
+  productType: rule?.product_type ?? rule?.productType ?? null,
+  published: Boolean(rule && rule.publishedAt !== null),
+})
+
+async function diagnosticPricingRuleLookups(strapi: any) {
+  const uid = 'api::pricing-rule.pricing-rule'
+  let currentRules: any[] = []
+  let currentQueryFailed = false
+  try {
+    const result = await strapi.entityService.findMany(uid, {
+      publicationState: 'live',
+      filters: { product_type: 'curtain' },
+      sort: ['id:desc'],
+      limit: 100,
+    })
+    currentRules = Array.isArray(result) ? result : []
+  } catch {
+    currentQueryFailed = true
+  }
+
+  let publishedRules: any[] = []
+  let publishedQueryFailed = false
+  const documentService = typeof strapi.documents === 'function' ? strapi.documents(uid) : null
+  if (documentService && typeof documentService.findMany === 'function') {
+    try {
+      const result = await documentService.findMany({
+        status: 'published',
+        filters: { product_type: 'curtain' },
+        limit: 100,
+      })
+      publishedRules = Array.isArray(result) ? result : []
+    } catch {
+      publishedQueryFailed = true
+    }
+  } else {
+    publishedQueryFailed = true
+  }
+
+  return {
+    currentQuery: {
+      api: 'entityService',
+      publicationState: 'live',
+      productTypeFilter: 'curtain',
+      failed: currentQueryFailed,
+    },
+    currentQueryCount: currentRules.length,
+    currentQueryCandidates: currentRules.map(diagnosticRuleIdentity),
+    publishedDocumentQuery: {
+      api: 'documents',
+      status: 'published',
+      productTypeFilter: 'curtain',
+      failed: publishedQueryFailed,
+    },
+    publishedDocumentQueryCount: publishedRules.length,
+    publishedDocumentCandidates: publishedRules.map(diagnosticRuleIdentity),
+  }
+}
+
 export async function diagnoseMadeToMeasurePricing(strapi: any, line: any) {
   const issues: ValidationIssue[] = []
   const validated = await validateLineOptions(strapi, line, 'curtain', issues)
@@ -1432,6 +1494,7 @@ export async function diagnoseMadeToMeasurePricing(strapi: any, line: any) {
     gate.ruleIsPinchPleat &&
     gate.ruleProductTypeCurtain
   const calculatedLine = await calculateLine(strapi, line, 0)
+  const ruleLookup = await diagnosticPricingRuleLookups(strapi)
 
   return {
     request: {
@@ -1473,6 +1536,7 @@ export async function diagnoseMadeToMeasurePricing(strapi: any, line: any) {
       pricingPath: dedicatedPinchPleatRule ? 'dedicated-pinch-pleat' : 'shared-curtain',
       breakdownExpected: dedicatedPinchPleatRule,
     },
+    ruleLookup,
     calculation: {
       materialMetres: calculatedLine.calculatedQuantity.materialMetres,
       billableLiningMetres: calculatedLine.calculatedQuantity.billableLiningMetres,
