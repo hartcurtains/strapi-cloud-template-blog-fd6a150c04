@@ -113,6 +113,14 @@ const selected = (line: any, names: string[]): any => {
   return null
 }
 
+const selectedValues = (line: any, names: string[]): any[] => names.flatMap(name => {
+  const values = []
+  if (line?.options?.[name] !== undefined) values.push(line.options[name])
+  if (line?.[name] !== undefined) values.push(line[name])
+  if (line?.configuration?.[name] !== undefined) values.push(line.configuration[name])
+  return values.filter(hasSelection)
+})
+
 const hasSelection = (value: any): boolean => value !== null && value !== undefined && value !== ''
 
 const issue = (issues: ValidationIssue[], field: string, message: string) => issues.push({ field, message })
@@ -193,6 +201,60 @@ async function activeOption(strapi: any, name: keyof typeof OPTION_UIDS, identif
   const record = await findByIdentifier(strapi, uid, identifier, populate, extra)
   if (isLegacyMechanism && record?.active === false) return null
   return record
+}
+
+const explicitCurtainTypeIdentifier = (value: any): any => {
+  if (value && typeof value === 'object') return value.key || value.documentId || (typeof value.id === 'string' ? value.id : null)
+  if (typeof value === 'string' && value.trim() && !/^\d+$/.test(value.trim())) return value
+  return null
+}
+
+const numericCurtainTypeIdentifier = (value: any): any => {
+  if (value && typeof value === 'object') {
+    if (value.numericId !== undefined && value.numericId !== null && value.numericId !== '') return value.numericId
+    if (typeof value.id === 'number') return value.id
+    return null
+  }
+  if (typeof value === 'number') return value
+  if (typeof value === 'string' && /^\d+$/.test(value.trim())) return value
+  return null
+}
+
+async function activeCurtainTypeByHeading(strapi: any, heading: string) {
+  const records = await strapi.entityService.findMany(OPTION_UIDS.curtainType, {
+    publicationState: 'live',
+    limit: 100,
+    sort: ['id:asc'],
+  })
+  if (!Array.isArray(records)) return null
+  return records.find(record =>
+    headingIdentity(record) === headingIdentity(heading) &&
+    record?.active !== false &&
+    record?.is_configurator_option !== false
+  ) || null
+}
+
+async function resolveActiveCurtainType(strapi: any, selections: any[]) {
+  for (const selection of selections) {
+    const identifier = explicitCurtainTypeIdentifier(selection)
+    if (!hasSelection(identifier)) continue
+    const record = await activeOption(strapi, 'curtainType', identifier)
+    if (record) return record
+  }
+
+  const headingSelection = selections.find(value => value && typeof value === 'object' && canonicalHeadingLabel(value))
+  if (headingSelection) {
+    const record = await activeCurtainTypeByHeading(strapi, canonicalHeadingLabel(headingSelection))
+    if (record) return record
+  }
+
+  for (const selection of selections) {
+    const identifier = numericCurtainTypeIdentifier(selection)
+    if (!hasSelection(identifier)) continue
+    const record = await activeOption(strapi, 'curtainType', identifier)
+    if (record) return record
+  }
+  return null
 }
 
 async function activeBlackoutOption(strapi: any) {
@@ -360,9 +422,9 @@ export async function validateLineOptions(strapi: any, line: any, productTypeInp
   }
 
   if (productType === 'curtain') {
-    const curtainTypeSelection = selected(line, ['curtainTypeKey', 'curtainTypeId', 'selectedCurtainType', 'curtainType'])
-    if (hasSelection(curtainTypeSelection)) {
-      const curtainType = await activeOption(strapi, 'curtainType', curtainTypeSelection)
+    const curtainTypeSelections = selectedValues(line, ['curtainTypeKey', 'selectedCurtainType', 'curtainType', 'curtainTypeId'])
+    if (curtainTypeSelections.length) {
+      const curtainType = await resolveActiveCurtainType(strapi, curtainTypeSelections)
       if (!curtainType) issue(issues, 'curtainType', 'The selected curtain type is unavailable or inactive.')
       else selectedOptions.curtainType = optionSnapshot(curtainType, { fullnessMultiplier: numberValue(curtainType.fullness_multiplier, 1) })
     }

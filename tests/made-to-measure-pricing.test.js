@@ -90,10 +90,11 @@ const pinchPleatFixtures = ({ dedicatedRule = null, draftDedicated = false } = {
   const records = {
     'api::fabric.fabric': [fabric],
     'api::curtain-type.curtain-type': [
-      record('pinch', { name: 'Pinch Pleat', fullness_multiplier: 2.5 }),
-      record('pencil', { name: 'Pencil Pleat', fullness_multiplier: 2 }),
-      record('wave', { name: 'Wave', fullness_multiplier: 2 }),
-      record('eyelet', { name: 'Eyelet', fullness_multiplier: 2 }),
+      record('pinch', { id: 16, documentId: 'mr45lu0oze75bk8xxxpzf6ck', name: 'Pinch Pleat', fullness_multiplier: 2.5 }),
+      record('numeric-nine-trap', { id: 9, name: 'Wave', fullness_multiplier: 2 }),
+      record('pencil', { id: 15, documentId: 'tka3oaa0l1zubhy8q6wae8xn', name: 'Pencil Pleat', fullness_multiplier: 2 }),
+      record('wave', { id: 14, documentId: 'rtraw2pd1pj1hfvs4kk67l1t', name: 'Wave', fullness_multiplier: 2 }),
+      record('eyelet', { id: 17, documentId: 'b8984zfsjjrljywhrpjfo2uw', name: 'Eyelet', fullness_multiplier: 2 }),
     ],
     'api::lining.lining': [standardLining, interlining],
     'api::lining-colour.lining-colour': [record('white', {
@@ -136,7 +137,15 @@ const liveShapedPinchPleatItem = (quantity = 1, interliningTypeKey = null) => ({
   fabricId: 'fabric-1',
   quantity,
   measurements: { width: 220, height: 220 },
-  curtainType: { numericId: 9, label: 'Pinch Pleat', fullnessMultiplier: 2.5 },
+  curtainTypeId: 9,
+  curtainType: {
+    id: 'mr45lu0oze75bk8xxxpzf6ck',
+    documentId: 'mr45lu0oze75bk8xxxpzf6ck',
+    numericId: 9,
+    key: null,
+    label: 'Pinch Pleat',
+    fullnessMultiplier: 2.5,
+  },
   liningTypeKey: 'lined',
   liningColourKey: 'white',
   ...(interliningTypeKey ? { interliningTypeKey } : {}),
@@ -893,11 +902,6 @@ test('live-shaped Pinch Pleat selects the dedicated rule and returns the authori
   fabric.price_per_metre = 28
   fabric.pattern_repeat_cm = 69.5
   standardLining.price_per_metre = 9
-  records['api::curtain-type.curtain-type'][0] = record('pinch', {
-    id: 9,
-    name: 'Pinch Pleat',
-    fullness_multiplier: 2.5,
-  })
 
   const quote = await calculateMadeToMeasureQuote(strapiForPinchPleat(records), {
     items: [liveShapedPinchPleatItem()],
@@ -906,8 +910,12 @@ test('live-shaped Pinch Pleat selects the dedicated rule and returns the authori
   const calculation = quote.breakdown.calculationBreakdown
   const lineCalculation = quote.breakdown.lines[0].calculationBreakdown
 
-  assert.equal(quote.items[0].selectedOptions.curtainType.numericId, 9)
+  assert.equal(quote.items[0].selectedOptions.curtainType.numericId, 16)
+  assert.equal(quote.items[0].selectedOptions.curtainType.documentId, 'mr45lu0oze75bk8xxxpzf6ck')
   assert.equal(quote.items[0].selectedOptions.curtainType.label, 'Pinch Pleat')
+  assert.equal(quote.items[0].calculatedQuantity.materialMetres, 13)
+  assert.notEqual(quote.items[0].calculatedQuantity.materialMetres, 11.12)
+  assert.equal(quote.breakdown.makingCharge[0].totalPence, 38000)
   assert.deepEqual(calculation, lineCalculation)
   assert.equal(calculation.ruleName, 'Pinch Pleat')
   assert.equal(calculation.heading, 'Pinch Pleat')
@@ -936,13 +944,39 @@ test('live-shaped Pinch Pleat selects the dedicated rule and returns the authori
   assert.equal(quote.breakdown.totalPence, 86100)
 })
 
+test('live-shaped Pencil Pleat, Wave, and Eyelet remain on shared Curtain pricing', async () => {
+  const { records } = pinchPleatFixtures({ dedicatedRule: true })
+  const options = [
+    { id: 'tka3oaa0l1zubhy8q6wae8xn', label: 'Pencil Pleat', fullnessMultiplier: 2 },
+    { id: 'rtraw2pd1pj1hfvs4kk67l1t', label: 'Wave', fullnessMultiplier: 2 },
+    { id: 'b8984zfsjjrljywhrpjfo2uw', label: 'Eyelet', fullnessMultiplier: 2 },
+  ]
+
+  for (const option of options) {
+    const quote = await calculateMadeToMeasureQuote(strapiForPinchPleat(records), {
+      items: [{
+        ...pinchPleatItem('pinch'),
+        curtainTypeId: 9,
+        curtainType: {
+          id: option.id,
+          documentId: option.id,
+          numericId: option.id === 'tka3oaa0l1zubhy8q6wae8xn' ? 15 : option.id === 'rtraw2pd1pj1hfvs4kk67l1t' ? 14 : 17,
+          key: null,
+          label: option.label,
+          fullnessMultiplier: option.fullnessMultiplier,
+        },
+      }],
+      shipping: '0.00',
+    })
+
+    assert.equal(quote.items[0].selectedOptions.curtainType.label, option.label)
+    assert.equal(quote.breakdown.makingCharge[0].totalPence, 1700, option.label)
+    assert.equal(quote.breakdown.calculationBreakdown, undefined, option.label)
+  }
+})
+
 test('live-shaped Pinch Pleat keeps the DB interlining rate and workmanship path', async () => {
   const { records } = pinchPleatFixtures({ dedicatedRule: true })
-  records['api::curtain-type.curtain-type'][0] = record('pinch', {
-    id: 9,
-    name: 'Pinch Pleat',
-    fullness_multiplier: 2.5,
-  })
 
   const quote = await calculateMadeToMeasureQuote(strapiForPinchPleat(records), {
     items: [liveShapedPinchPleatItem(1, 'interlined')],
