@@ -49,11 +49,11 @@ const integerValue = (value: any, fallback = 0): number => {
 }
 
 const identity = (record: any) => ({
-  id: record?.documentId || record?.id || null,
+  id: record?.documentId || record?.id || record?.numericId || null,
   documentId: record?.documentId || null,
-  numericId: record?.id || null,
+  numericId: record?.numericId || record?.id || null,
   key: record?.key || null,
-  label: record?.display_name || record?.name || record?.liningType || record?.colour || '',
+  label: record?.label || record?.display_name || record?.name || record?.liningType || record?.colour || '',
 })
 
 const toPence = (amount: any): number => {
@@ -85,9 +85,19 @@ const multiplyPence = (pence: number, quantity: number): number => {
 }
 
 const optionIdentifier = (value: any): any => {
-  if (value && typeof value === 'object') return value.key || value.documentId || value.id || null
+  if (value && typeof value === 'object') return value.key || value.documentId || value.id || value.numericId || null
   return value
 }
+
+const optionLabel = (value: any): string => {
+  if (value && typeof value === 'object') {
+    return String(value.label || value.name || value.display_name || value.liningType || value.colour || '')
+  }
+  return String(value ?? '')
+}
+
+const canonicalHeadingLabel = (value: any): string => optionLabel(value).trim().replace(/\s+/g, ' ')
+const headingIdentity = (value: any): string => canonicalHeadingLabel(value).toLowerCase()
 
 const optionMatches = (record: any, identifier: any): boolean => {
   const value = String(optionIdentifier(identifier) ?? '')
@@ -451,6 +461,7 @@ const PINCH_PLEAT_WIDTH_CM = 55
 const PINCH_PLEAT_HEM_ALLOWANCE_CM = 30
 const PINCH_PLEAT_BASE_WORKMANSHIP_PER_WIDTH = 95
 const PINCH_PLEAT_INTERLINING_WORKMANSHIP_PER_WIDTH = 25
+const isPinchPleatHeading = (value: any): boolean => headingIdentity(value) === headingIdentity(PINCH_PLEAT_HEADING)
 
 const ceilToHalfMetre = (value: number): number => Math.ceil((numberValue(value) * 2) - 1e-9) / 2
 
@@ -613,12 +624,12 @@ async function pricingRule(strapi: any, productType: string, headingName = '') {
   if (productType !== 'curtain') return liveRules[0] || null
 
   const sharedCurtainRule = liveRules.find(rule =>
-    rule?.name === 'Curtain' && rule?.product_type === 'curtain'
+    headingIdentity(rule?.name) === headingIdentity('Curtain') && rule?.product_type === 'curtain'
   ) || liveRules.find(rule => !rule?.name && rule?.product_type === 'curtain') || null
 
-  if (headingName === PINCH_PLEAT_HEADING) {
+  if (isPinchPleatHeading(headingName)) {
     const dedicatedPinchPleatRule = liveRules.find(rule =>
-      rule?.name === PINCH_PLEAT_HEADING && rule?.product_type === 'curtain'
+      isPinchPleatHeading(rule?.name) && rule?.product_type === 'curtain'
     )
     return dedicatedPinchPleatRule || sharedCurtainRule
   }
@@ -886,7 +897,7 @@ function buildPinchPleatCalculationBreakdown({
   return {
     ruleName: rule?.name || null,
     productType: 'curtain',
-    heading: selectedOptions?.curtainType?.label || selectedOptions?.curtainType?.name || null,
+    heading: canonicalHeadingLabel(selectedOptions?.curtainType) || null,
     widthCm,
     numberOfWidths: firstNumericOutput(outputs, ['numberOfWidths']),
     finishedDropCm: heightCm,
@@ -1029,11 +1040,11 @@ async function calculateLine(strapi: any, line: any, index: number) {
   if (heightCm <= 0) issue(issues, `items[${index}].height`, 'A positive height/drop is required.')
   if (issues.length) throw new MadeToMeasureValidationError(issues)
 
-  const headingName = validated.selectedOptions.curtainType?.label || validated.selectedOptions.curtainType?.name || ''
+  const headingName = canonicalHeadingLabel(validated.selectedOptions.curtainType)
   const rule = await pricingRule(strapi, productType, headingName)
   const dedicatedPinchPleatRule = productType === 'curtain' &&
-    headingName === PINCH_PLEAT_HEADING &&
-    rule?.name === PINCH_PLEAT_HEADING &&
+    isPinchPleatHeading(headingName) &&
+    isPinchPleatHeading(rule?.name) &&
     rule?.product_type === 'curtain'
   const fullnessMultiplier = numberValue(validated.selectedOptions.curtainType?.fullnessMultiplier, 1)
   let materialMetres = productType === 'cushion'
